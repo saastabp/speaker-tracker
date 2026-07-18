@@ -134,6 +134,18 @@ Cognito (Hosted UI) ── react-oidc-context in the SPA
     each reply's `In-Reply-To` / `References` to a stored outbound `Message-ID` → links it to the
     opportunity + logs an inbound touch. Fallback: `From` + normalized subject + time window.
     Polling the Sent folder also captures mail Donna sends straight from Outlook.
+  - **Scope — never the whole mailbox.** The Emails surface shows only *tracked* threads:
+    app-originated (matched by a stored outbound `Message-ID`) **plus** any mail whose `From`/`To`
+    matches a **tracked contact's address**. The poller filters the WorkMail mailbox down to
+    known-contact correspondence; personal / unrelated mail is never ingested. (Outlook is a peer
+    IMAP client on the same mailbox, not something the app reads *through*.)
+  - **Inbound-first threads / import.** A venue that emails Donna first has a standard `Message-ID`
+    like any message; the poller reads it via IMAP, creates an `email_messages` row
+    (`direction: in`), and associates it by `From`-address — or, for an unknown sender, offers an
+    **"Import / link to contact"** action (optionally creating the contact). Donna's app reply then
+    threads via `In-Reply-To` → that stored `Message-ID`. Threading uses **RFC 5322 headers only**
+    (`Message-ID` / `In-Reply-To` / `References`); Microsoft's proprietary `Thread-Index` isn't
+    needed (external senders don't set it).
   - **Credentials:** WorkMail IMAP creds in Secrets Manager (single-user → one credential).
   - **SES** also powers system notifications (follow-up reminders) — unchanged. **job-tracker's
     Gmail OAuth/compose cluster is not reusable here.**
