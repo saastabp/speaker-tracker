@@ -40,9 +40,16 @@ legacy-tracker, not tracked here.
 
 **Email**
 6. **Rich composer with attachments** — full formatting, attach one-sheet / speaking menu,
-   send *as Donna via Gmail* (deliverability + Sent-folder continuity), auto-logged as an
-   outreach touch.
-7. **Follow-up reminders** — no-reply-in-N-days nudges per opportunity.
+   send *as Donna* from her business address, with the sent copy kept in her Sent folder for
+   continuity; auto-logged as an outreach touch. Replies are threaded back to the opportunity
+   (see §3 Email — WorkMail / SES / IMAP, not Gmail). **Email history is readable:** an **Emails
+   inbox** (thread list with awaiting-reply / new-reply status) and a **thread view** (full
+   conversation + attachments) with an **inline reply** box; threads also surface on the contact
+   and its linked opportunity.
+7. **Follow-ups** — schedule a **calendar-dated** follow-up with a **free-form note** on a contact
+   or opportunity, standalone or as a rider when logging outreach / composing email; due reminders
+   surface on the Dashboard and by email, and can be marked done. (Not a relative "in N days"
+   selector — an explicit date.)
 
 **Goals & measurement** (the strategy doc's weakest-scored gap — the point of the app)
 8. **Targets** — per-cadence goals: new venues researched/month (doc says 3–5), outreaches/week,
@@ -76,7 +83,8 @@ legacy-tracker's look). **Light theme by default** (Donna dislikes dark themes).
 ## 3. Architecture
 
 Take **legacy-tracker as the structural baseline** (the newer, cleaner fork) and **port
-job-tracker's email / scheduler / targets subsystems** into it.
+job-tracker's scheduler + targets subsystems** into it. (Email is *not* ported from job-tracker —
+that app uses Gmail; this one uses WorkMail / SES / IMAP — see the Email decision below.)
 
 ```
 Route53 → CloudFront (one distribution)
@@ -85,8 +93,8 @@ Route53 → CloudFront (one distribution)
                           → Python 3.12 Lambdas (arm64, outside VPC)
                               → RDS MySQL 8 via IAM auth + TLS (new `speakertracker` schema)
                               → S3 (attachments, one-sheets — presigned PUT)
-                              → Gmail API (send-as-Donna) / SES (reminder notifications)
-              EventBridge Scheduler → followup_notify Lambda → SES
+                              → SES SendRawEmail (send-as-Donna) + IMAP (WorkMail: Sent-append)
+              EventBridge Scheduler → followup_notify → SES  ·  imap_poll → thread replies
 Cognito (Hosted UI) ── react-oidc-context in the SPA
 ```
 
@@ -108,8 +116,22 @@ Cognito (Hosted UI) ── react-oidc-context in the SPA
   date pickers, notifications, and the Tiptap rich-text editor for the email composer. TanStack
   Query fixes the hand-rolled-`fetch` wart both siblings flagged (needed for optimistic kanban
   drag mutations).
-- **Email: Gmail API for outreach** (port job-tracker's Gmail OAuth/compose cluster); **SES only
-  for system notifications** (follow-up reminders).
+- **Email: AWS WorkMail (on SES) + IMAP — not Gmail.** Donna's business mailbox is WorkMail backed
+  by SES (production access, out of sandbox), which she reads via **Outlook over IMAP**. The app
+  operates on the same WorkMail mailbox server-side, so its changes and her Outlook stay in sync.
+  - **Send** via SES `SendRawEmail` (IAM-authed — no email password needed to send). The app crafts
+    the raw MIME: `From: donna@<domain>`, attachments from S3, and a stable `Message-ID` it records;
+    on replies it sets `In-Reply-To` + `References`. SES signs with the domain DKIM (WorkMail's), so
+    deliverability matches her normal mail.
+  - **Sent-folder continuity:** IMAP-`APPEND` the sent MIME to her Sent folder (discovered via the
+    IMAP `\Sent` SPECIAL-USE flag, not a hard-coded name) so it appears in Outlook.
+  - **Reply threading:** an IMAP **poller Lambda** (EventBridge schedule) reads new mail and matches
+    each reply's `In-Reply-To` / `References` to a stored outbound `Message-ID` → links it to the
+    opportunity + logs an inbound touch. Fallback: `From` + normalized subject + time window.
+    Polling the Sent folder also captures mail Donna sends straight from Outlook.
+  - **Credentials:** WorkMail IMAP creds in Secrets Manager (single-user → one credential).
+  - **SES** also powers system notifications (follow-up reminders) — unchanged. **job-tracker's
+    Gmail OAuth/compose cluster is not reusable here.**
 - **Conventions from the siblings:** forward-only SQL migrations; `id` / `created_at` /
   `updated_at` / `deleted_at` on every entity table; **catalog tables over ENUMs**; `status_events`
   journal + denormalized `current_status_id`; server-owned funnel ordering.
@@ -149,7 +171,18 @@ Core entities (user-scoped via `user_id`; every entity table has `id` /
   `status_event` + a note capturing the reason — **Lost / Passed** pre-booking, **Cancelled**
   post-booking. (Advancing to Delivered is a normal drag to the Delivered column — not a button.)
 - **`outreaches`** — append-only touch journal (channel, note, optional `opportunity_id`),
-  decoupled from stage. Logged against the *contact*.
+  decoupled from stage. Logged against the *contact*. Email touches link to an `email_messages` row.
+- **`email_messages`** — sent/received emails backing the composer + reply threading: `message_id`
+  (RFC 5322), `in_reply_to`, `references`, `direction` (out/in), `subject`, `from_addr`, `to_addr`,
+  `opportunity_id`, `contact_id`, `s3_key` (raw MIME / attachments), `sent_at` / `received_at`.
+  Inbound replies match on `in_reply_to` / `references` → a stored outbound `message_id`. Messages
+  group into **threads** (by the `references` chain / normalized subject); a thread's status
+  (awaiting-reply / new-reply / replied) drives the Emails inbox and the Dashboard's Needs-attention.
+- **`follow_ups`** — a scheduled reminder: `due_date` (explicit calendar date), `note` (free-form),
+  `status` (pending / done), `contact_id`, optional `opportunity_id`, `remind` (dashboard + email),
+  `completed_at`. Created standalone (from a contact, opportunity, the composer, or a Next-follow-up
+  card) or as a rider on a logged outreach. Distinct from `outreaches` (past touches) and
+  `opportunity_notes` (dated commentary): follow-ups are *future*, actionable, and can be marked done.
 - **`message_templates`** — nullable `user_id` = shared seed (immutable); clone-on-edit.
 - **`targets`** — per-user, per-type, cadence (weekly/monthly/quarterly), `goal_count`.
 - **`talks`** + **materials** (S3 files) — the Guest Workshop menu.
@@ -187,16 +220,26 @@ the opportunity card, seeded from `how_to_approach`.
 3. Pipeline board + status journal
 4. Outreach log + templates
 5. Targets + dashboard
-6. Gmail composer + attachments
+6. Email: SES composer + attachments, IMAP Sent-append + reply-threading poller
 7. Follow-up reminders
 
-## 7. Open decisions
+## 7. Decisions
 
-- **Shared `jobtracker-db` instance** (recommended) vs. a dedicated RDS instance.
-- **Single-user** (Donna only, Brian admin) vs. real multi-user — affects whether Gmail OAuth is
-  a single stored credential or per-user.
-- Venue detail Contacts card: show affiliation info (title + primary-contact flag) vs. the current
-  mock which shows opportunity roles (Primary/Introducer) there.
+**Decided**
+- **Data store:** share the running `jobtracker-db` RDS instance (new `speakertracker` schema) — not
+  a dedicated instance.
+- **Scope:** single-user for now (Donna; Brian admin). Multi-user is a future expansion whose main
+  impact is the **email layer** (per-user mailbox connections — OAuth via Gmail/Graph for external
+  providers, generic IMAP/SMTP fallback, behind a provider-adapter abstraction); the rest of the
+  data model — including `email_messages` threading — is unaffected. Not designed now.
+- **Email send path:** SES `SendRawEmail` + IMAP-`APPEND` to Sent (IAM-authed send, full header
+  control) — not authenticated WorkMail SMTP.
+- **Venue Contacts card:** shows **affiliation info only** — title + primary-contact flag + warmth +
+  ★ power-partner. Opportunity roles (Introducer / Lead) are per-gig and live on the opportunity,
+  not the org's contact list.
+
+**Still open**
+- **Reply detection:** IMAP poll interval for the poller Lambda (latency vs. cost).
 
 ## 8. Mockup
 
@@ -225,10 +268,11 @@ needed files into this project when scaffolding. **Fonts: sans-serif for the app
 Playfair Display / Lato spec is for Donna's public website, not this internal tool — here color
 carries the brand, not type. Light theme is the default; a dark theme exists but is opt-in.
 
-## 9. Baselines surveyed
+## 10. Baselines surveyed
 
 - **`~/360-balanced-living/legacy-tracker`** — CDK(TS), same-origin CloudFront, Python Lambdas +
   RDS IAM auth, Vite/React + Tailwind, `react-oidc-context`. Structural baseline. (`DESIGN.md`
   there is stale — its live docs are `docs/ARCHITECTURE.md`, `docs/DATABASE.md`.)
 - **`~/projects/job-tracker`** — SAM + SSM, Python Lambdas + RDS IAM auth (MySQL), react-bootstrap.
-  Source for the Gmail composer, EventBridge-Scheduler+SES reminders, and `targets` subsystems.
+  Source for the EventBridge-Scheduler + SES reminders and `targets` subsystems. **Its Gmail
+  composer is not reusable** — this app uses WorkMail / SES / IMAP (see §3 Email).

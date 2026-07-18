@@ -31,7 +31,8 @@ Dashboard (targets + funnel + **Revenue & payments** card) · Pipeline (kanban, 
 **Opportunity detail** (fields, notes, lifecycle) · **History** (closed-gig table) ·
 **History detail** (closed-gig record) · Venues & Orgs (list) ·
 Venue detail (with Kindling research panel) · Contacts (list) · **Contact detail** (multi-org
-affiliations) · Compose (rich email + research context) · Templates · Targets · Talks & Materials.
+affiliations) · **Emails** (thread inbox) · **Email thread** (conversation + inline reply) ·
+Compose (rich email + research context) · Templates · Targets · Talks & Materials.
 
 ## Modals
 
@@ -43,6 +44,10 @@ affiliations) · Compose (rich email + research context) · Templates · Targets
   per-gig angle, **compensation** (Paid / Pro bono / Trade + fee), **payment status**, follow-up toggle.
 - **Close opportunity** — outcome (Cancelled / Lost, defaulted by stage) + reason + date; logs the
   reason to the opportunity's notes and moves it to History.
+- **Schedule follow-up** — **calendar-dated** reminder + **free-form note** on a contact/opportunity,
+  standalone (no outreach needed first); reminds on the Dashboard + email. Openable from the sidebar,
+  any "Next follow-up" card, the composer footer, and the Log-outreach / New-opportunity riders
+  (which now use a date picker + note, not an "in N days" selector).
 
 ## Money, payment & lifecycle
 
@@ -57,6 +62,14 @@ affiliations) · Compose (rich email + research context) · Templates · Targets
   funnel adds Booked → Delivered with the Cancelled leak shown; overdue/awaiting payments appear as
   rows in **Needs attention**.
 - **Show closed** toggle on the pipeline reveals a "Recently closed" column.
+
+## Email
+
+- **Emails inbox** (sidebar → Outreach → Emails) — all threads with awaiting-reply / new-reply /
+  replied status; rows open the thread.
+- **Email thread** — full conversation (sent + received, attachments, timestamps) with an **inline
+  reply box** that threads correctly, sends via WorkMail/SES, appends to Sent, and logs a touch.
+- Threads also surface on the **contact detail** (Emails card); new replies feed Needs-attention.
 
 ## Modeling made visible
 

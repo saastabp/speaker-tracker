@@ -245,6 +245,20 @@
   .ctx p{margin:0; font-size:13px; color:var(--ink)}
   .ctx .tip{font-size:12px; color:var(--muted); font-style:italic}
 
+  /* ---------- Email thread ---------- */
+  .thread{display:flex; flex-direction:column; gap:12px}
+  .emsg{background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); overflow:hidden}
+  .emsg.sent{border-left:3px solid var(--accent)}
+  .emsg.recv{border-left:3px solid var(--gold)}
+  .emsg-h{display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid var(--line)}
+  .emsg-h .who{font-weight:650; font-size:13.5px}
+  .emsg-h .addr{font-size:12px; color:var(--faint)}
+  .emsg-h .when{margin-left:auto; font-size:12px; color:var(--faint); white-space:nowrap}
+  .emsg-b{padding:14px; font-size:13.5px}
+  .emsg-b p{margin:0 0 10px; max-width:66ch}
+  .emsg-b p:last-child{margin-bottom:0}
+  .emsg-att{display:flex; gap:8px; padding:0 14px 12px; flex-wrap:wrap}
+
   /* ---------- Templates ---------- */
   .tpl-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px}
   .tpl .card-b p{margin:0; font-size:13px; color:var(--muted); max-width:58ch}
@@ -345,6 +359,8 @@
       <button data-page="contacts"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.7-4.5 6-4.5s6 1.5 6 4.5H2z"/></svg>Contacts</button>
       <button data-page="contact-detail" style="padding-left:34px; font-size:12.5px">↳ Pua Lindsey <span class="chip plain" style="margin-left:auto">detail</span></button>
       <div class="sect">Outreach</div>
+      <button data-page="emails"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 9.5V4A1.5 1.5 0 0 1 3 2.5h10A1.5 1.5 0 0 1 14.5 4v5.5M1.5 9.5h3.2l1 1.8h4.6l1-1.8h3.2M1.5 9.5V12A1.5 1.5 0 0 0 3 13.5h10a1.5 1.5 0 0 0 1.5-1.5V9.5" stroke-linejoin="round"/></svg>Emails</button>
+      <button data-page="email-thread" style="padding-left:34px; font-size:12.5px">↳ Marcy Tanaka <span class="chip plain" style="margin-left:auto">thread</span></button>
       <button data-page="composer"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h14v10H1V3zm1.5 1.5L8 9l5.5-4.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>Compose</button>
       <button data-page="templates"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h10v14H3V1zm2.5 3h5M5.5 6.5h5M5.5 9h3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>Templates</button>
       <div class="sect">Growth</div>
@@ -355,6 +371,7 @@
       <button data-modal="m-venue"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.4"/><path d="M8 5v6M5 8h6" stroke-linecap="round"/></svg>Add venue</button>
       <button data-modal="m-contact"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.4"/><path d="M8 5v6M5 8h6" stroke-linecap="round"/></svg>Add contact</button>
       <button data-modal="m-opportunity"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.4"/><path d="M8 5v6M5 8h6" stroke-linecap="round"/></svg>New opportunity</button>
+      <button data-modal="m-followup"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.6" y="3" width="12.8" height="11.4" rx="1.6"/><path d="M1.6 6.6h12.8M5 1.6v2.8M11 1.6v2.8" stroke-linecap="round"/></svg>Schedule follow-up</button>
     </nav>
     <div class="foot"><b>UI mockup</b> · sample data<br>Signed in as Donna King</div>
   </aside>
@@ -531,7 +548,7 @@
           </div>
         </div>
         <div class="card">
-          <div class="card-h"><h2>Next follow-up</h2></div>
+          <div class="card-h"><h2>Next follow-up</h2><button class="btn btn-ghost btn-sm" data-modal="m-followup">Edit</button></div>
           <div class="card-b" style="display:flex; align-items:center; gap:12px">
             <div class="datebox"><div class="m">Aug</div><div class="d num">15</div></div>
             <div><div class="cell-main">Send invoice after delivery</div><div class="cell-sub">$1,500 · net 30</div></div>
@@ -701,11 +718,11 @@
           <div class="card-h"><h2>Contacts</h2><button class="btn btn-ghost btn-sm">+ Add</button></div>
           <div class="card-b">
             <div class="contact-line"><div class="avatar">MT</div><div style="flex:1"><div class="cl-name">Marcy Tanaka</div><div class="cl-role">Events Chair · marcy@pwnhawaii.org</div></div><span class="chip teal">Primary</span><span class="chip warm">Warm</span></div>
-            <div class="contact-line"><div class="avatar w">PL</div><div style="flex:1"><div class="cl-name"><span class="star">★</span> Pua Lindsey</div><div class="cl-role">Member liaison · BNI colleague</div></div><span class="chip plain">Introducer</span><span class="chip warm">Warm</span></div>
+            <div class="contact-line"><div class="avatar w">PL</div><div style="flex:1"><div class="cl-name"><span class="star">★</span> Pua Lindsey</div><div class="cl-role">Member liaison · BNI colleague</div></div><span class="chip warm">Warm</span></div>
           </div>
         </div>
         <div class="card">
-          <div class="card-h"><h2>Next follow-up</h2></div>
+          <div class="card-h"><h2>Next follow-up</h2><button class="btn btn-ghost btn-sm" data-modal="m-followup">Edit</button></div>
           <div class="card-b" style="display:flex; align-items:center; gap:12px">
             <div class="datebox"><div class="m">Jul</div><div class="d num">18</div></div>
             <div><div class="cell-main">Check in on October slot</div><div class="cell-sub">Reminder email · Friday morning hour</div></div>
@@ -779,6 +796,12 @@
           </div>
         </div>
         <div class="card">
+          <div class="card-h"><h2>Emails</h2><button class="btn btn-ghost btn-sm" id="emailsCompose2">Compose</button></div>
+          <div class="card-b">
+            <div class="contact-line email-link" style="cursor:pointer"><div style="flex:1"><div class="cl-name">Re: Wilcox Expo intro</div><div class="cl-role">You: "Would you pass my name to the expo organizers?"</div></div><span class="chip warn">Awaiting them</span></div>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-h"><h2>Activity</h2><span class="hint">every touch, across all her orgs</span></div>
           <div class="card-b"><ul class="tl">
             <li class="dm"><div class="tw"><b>LinkedIn DM</b> — asked if she'd pass my name to the Wilcox Expo organizers</div><div class="tm">Jul 3 · 9:20 am</div></li>
@@ -805,7 +828,7 @@
           </div>
         </div>
         <div class="card">
-          <div class="card-h"><h2>Next follow-up</h2></div>
+          <div class="card-h"><h2>Next follow-up</h2><button class="btn btn-ghost btn-sm" data-modal="m-followup">Edit</button></div>
           <div class="card-b" style="display:flex; align-items:center; gap:12px">
             <div class="datebox"><div class="m">Jul</div><div class="d num">20</div></div>
             <div><div class="cell-main">Thank her + check Expo referral</div><div class="cell-sub">Reminder · Friday morning hour</div></div>
@@ -825,7 +848,7 @@
   <!-- ============ COMPOSER ============ -->
   <section class="page" id="composer">
     <div class="page-head">
-      <div><h1>Compose</h1><div class="sub">Sends as donna@360balancedliving.com via Gmail · logged to the outreach journal</div></div>
+      <div><h1>Compose</h1><div class="sub">Sends as donna@360balancedliving.com via WorkMail (SES) · logged to the outreach journal</div></div>
     </div>
     <div class="compose-grid">
       <div class="card">
@@ -857,7 +880,7 @@
         <div class="compose-foot">
           <button class="btn btn-primary">Send</button>
           <button class="btn btn-ghost">Save draft</button>
-          <span class="hint2">Follow-up reminder: 7 days after send ▾</span>
+          <button class="btn btn-ghost btn-sm" data-modal="m-followup" style="margin-left:auto">＋ Schedule follow-up</button>
         </div>
       </div>
       <div class="card ctx">
@@ -865,6 +888,99 @@
         <div class="kf2"><h3>Why it fits</h3><p>Their wellness programming explicitly includes coaching and personal growth. Guests are imported from around the world — exactly the women she serves.</p></div>
         <div class="kf2"><h3>How to approach</h3><p>Lead with "local Kauaʻi speaker" — resorts import guests but love local experts. Offer the Wellness Wheel as an interactive guest experience first.</p></div>
         <div class="kf2"><h3>Recent touches</h3><p class="tip">Jul 12 — Instagram comment on their retreat post<br>Jul 5 — followed venue on Instagram</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EMAILS (inbox) ============ -->
+  <section class="page" id="emails">
+    <div class="page-head">
+      <div><h1>Emails</h1><div class="sub">email threads · 2 need a reply</div></div>
+      <button class="btn btn-primary" id="emailsCompose">Compose</button>
+    </div>
+    <div class="toolbar">
+      <div class="search">Search email…</div>
+      <span class="fpill on">All</span><span class="fpill">Needs reply</span><span class="fpill">Awaiting them</span><span class="fpill">Sent</span>
+    </div>
+    <div class="card"><div class="tbl-wrap"><table>
+      <thead><tr><th>Conversation</th><th>Status</th><th>Last message</th><th>Date</th></tr></thead>
+      <tbody>
+        <tr><td><div class="cell-main">Marcy Tanaka · PWN Hawaii</div><div class="cell-sub">Speaker menu for the monthly luncheons</div></td><td><span class="chip crit">New reply</span></td><td><div class="cell-sub">"…can you do the October luncheon? What's your fee?"</div></td><td class="num">Jul 14</td></tr>
+        <tr><td><div class="cell-main">Susan Alvarez · WBEC-West</div><div class="cell-sub">Virtual guest workshop inquiry</div></td><td><span class="chip crit">New reply</span></td><td><div class="cell-sub">"We'd love to hear more about the Wellness Wheel…"</div></td><td class="num">Jul 13</td></tr>
+        <tr><td><div class="cell-main">Leilani Chow · Hanalei Bay Resort</div><div class="cell-sub">Local Kauaʻi speaker for your wellness programming</div></td><td><span class="chip warn">Awaiting them</span></td><td><div class="cell-sub">You sent the speaker menu + one-sheet</div></td><td class="num">Jul 12</td></tr>
+        <tr><td><div class="cell-main">Iris Kealoha · Kauai Beach Resort</div><div class="cell-sub">Wellness Wheel workshop — Aug 14 logistics</div></td><td><span class="chip good">Replied</span></td><td><div class="cell-sub">You confirmed the room + A/V needs</div></td><td class="num">Jul 15</td></tr>
+        <tr><td><div class="cell-main">Kai Wong · Midlife Rewired</div><div class="cell-sub">Podcast guest confirmation</div></td><td><span class="chip good">Replied</span></td><td><div class="cell-sub">Recording set for Jul 29, 10:00 HST</div></td><td class="num">Jul 6</td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+  <!-- ============ EMAIL THREAD ============ -->
+  <section class="page" id="email-thread">
+    <div class="crumb">Emails <b>› Marcy Tanaka — Speaker menu for the monthly luncheons</b></div>
+    <div class="page-head">
+      <div><h1>Speaker menu for the monthly luncheons</h1><div class="sub">with <b>Marcy Tanaka</b> · PWN Hawaii &nbsp;·&nbsp; <span class="chip crit">New reply — needs your response</span></div></div>
+      <div style="display:flex; gap:8px"><button class="btn btn-ghost">View contact</button><button class="btn btn-ghost">Log as touch</button></div>
+    </div>
+    <div class="detail-grid" style="grid-template-columns:1.7fr 1fr">
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="thread">
+          <div class="emsg sent">
+            <div class="emsg-h"><div class="avatar w">DK</div><div><div class="who">Donna King</div><div class="addr">to marcy@pwnhawaii.org</div></div><div class="when">Jul 10 · 2:14 pm</div></div>
+            <div class="emsg-b">
+              <p>Hi Marcy,</p>
+              <p>Thanks so much for the warm welcome at the June luncheon. As promised, here's my guest-speaker menu and one-sheet — I offer three talks for women's gatherings: <em>I'm Fine Is a Lie</em>, <em>Legacy in Motion</em>, and an interactive <em>Wellness Wheel for Women</em>.</p>
+              <p>If any of these feel like a fit for an upcoming luncheon, I'd love to talk dates.</p>
+              <p>Warmly,<br>Donna</p>
+            </div>
+            <div class="emsg-att"><span class="attach">📄 Donna-King-One-Sheet.pdf <small>1.2 MB</small></span><span class="attach">📄 Guest-Workshop-Menu.pdf <small>410 KB</small></span></div>
+          </div>
+          <div class="emsg recv">
+            <div class="emsg-h"><div class="avatar">MT</div><div><div class="who">Marcy Tanaka</div><div class="addr">to donna@360balancedliving.com</div></div><div class="when">Jul 14 · 9:02 am</div></div>
+            <div class="emsg-b">
+              <p>Hi Donna,</p>
+              <p>This looks wonderful — exactly what our members have been asking for. Our program committee meets next week, and I'd love to put you forward for the <b>October luncheon</b>.</p>
+              <p>Two quick questions: are you available October 15, and what's your fee for a 45-minute talk?</p>
+              <p>Mahalo,<br>Marcy</p>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Reply to Marcy Tanaka</h2><span class="hint">stays on this thread</span></div>
+          <div class="rt-bar" aria-label="Formatting">
+            <button class="on" style="font-weight:800">B</button><button style="font-style:italic">I</button><button style="text-decoration:underline">U</button>
+            <span class="sep"></span><button>“”</button><button>•</button><button>🔗</button><button>🖼</button>
+          </div>
+          <div class="body-area" style="min-height:150px">
+            <p>Hi Marcy,</p>
+            <p>Wonderful — October 15 works, and I'd be delighted. For a 45-minute talk my fee is $1,200, which includes the interactive Wellness Wheel handout for every attendee.</p>
+            <p>Shall I hold the date while your committee confirms?</p>
+            <p>Warmly,<br>Donna</p>
+          </div>
+          <div class="attach-row"><span class="attach">📄 Guest-Workshop-Menu.pdf <small>410 KB</small> <span class="x">✕</span></span><button class="btn btn-ghost btn-sm">+ Attach</button></div>
+          <div class="compose-foot"><button class="btn btn-primary">Send reply</button><button class="btn btn-ghost">Save draft</button><span class="hint2">Sends as donna@360balancedliving.com via WorkMail (SES) · keeps the thread &amp; logs a touch</span></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Contact</h2></div>
+          <div class="card-b">
+            <div class="contact-line"><div class="avatar">MT</div><div style="flex:1"><div class="cl-name">Marcy Tanaka</div><div class="cl-role">Events Chair · PWN Hawaii</div></div><span class="chip warm">Warm</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Linked opportunity</h2></div>
+          <div class="card-b">
+            <div style="display:flex; align-items:center; gap:10px"><div style="flex:1"><div class="cell-main">Monthly luncheon — guest speaker</div><div class="cell-sub">I'm Fine Is a Lie · Oct 2026</div></div><span class="chip teal">In conversation</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Thread</h2></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:6px 16px">
+            <span style="color:var(--faint)">Messages</span><span>2 (1 sent, 1 received)</span>
+            <span style="color:var(--faint)">Started</span><span class="num">Jul 10, 2026</span>
+            <span style="color:var(--faint)">Channel</span><span>WorkMail (SES) · IMAP</span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -998,9 +1114,11 @@
       </div>
       <div class="frm"><label>Note</label><textarea class="inp">Checked in on the October luncheon slot; Marcy said the committee meets next week.</textarea></div>
       <div class="switch-row">
-        <button class="switch on" role="switch" aria-checked="true" aria-label="Schedule follow-up reminder"></button>
-        <div><div class="sw-l">Schedule follow-up reminder</div><div class="sw-d">If no reply, remind me in <b>7 days ▾</b> — lands on the Dashboard and by email.</div></div>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Schedule a follow-up"></button>
+        <div><div class="sw-l">Schedule a follow-up</div><div class="sw-d">Pick a date on the calendar and add a note — surfaces on the Dashboard and by email.</div></div>
       </div>
+      <div class="frm"><label>Follow-up date</label><input class="inp" type="date" value="2026-07-23"></div>
+      <div class="frm"><label>Follow-up note</label><textarea class="inp" placeholder="What to do when this comes due…">Check whether the committee met about the October slot; if yes, ask to be confirmed.</textarea></div>
     </div>
     <div class="modal-f"><button class="btn btn-primary" data-close>Log touch</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Counts toward this week's 8-touch target</span></div>
   </div>
@@ -1102,9 +1220,11 @@
       </div>
       <div style="font-size:12px; color:var(--muted); font-style:italic">Pro bono still counts as a booking — it just carries no fee and shows a "Pro bono" chip instead of a dollar amount.</div>
       <div class="switch-row">
-        <button class="switch on" role="switch" aria-checked="true" aria-label="Set a follow-up reminder"></button>
-        <div><div class="sw-l">Set a follow-up reminder</div><div class="sw-d">Nudge me in <b>7 days ▾</b> if this hasn't advanced a stage.</div></div>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Set a follow-up"></button>
+        <div><div class="sw-l">Set a follow-up</div><div class="sw-d">Pick a date on the calendar and add a note — surfaces on the Dashboard and by email.</div></div>
       </div>
+      <div class="frm"><label>Follow-up date</label><input class="inp" type="date" value="2026-08-04"></div>
+      <div class="frm"><label>Follow-up note</label><textarea class="inp" placeholder="What to do when this comes due…">If Iris hasn't confirmed the workshop date, follow up on logistics + fee.</textarea></div>
     </div>
     <div class="modal-f"><button class="btn btn-primary" data-close>Create opportunity</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Starts in Researching — drag it across the board as it advances</span></div>
   </div>
@@ -1127,6 +1247,26 @@
       <div class="frm"><label>Note</label><textarea class="inp" placeholder="What happened? Logged to the opportunity's notes…"></textarea></div>
     </div>
     <div class="modal-f"><button class="btn btn-primary" data-close>Close opportunity</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Logs the reason &amp; moves the card to History</span></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: SCHEDULE FOLLOW-UP ============ -->
+<div class="overlay" id="m-followup" role="dialog" aria-modal="true" aria-labelledby="mf-t">
+  <div class="modal">
+    <div class="modal-h"><h2 id="mf-t">Schedule follow-up</h2><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-b">
+      <div class="frm"><label>Contact</label><div class="inp selbox">Pua Lindsey — PWN Hawaii <span>▾</span></div></div>
+      <div class="row2">
+        <div class="frm"><label>Due date</label><input class="inp" type="date" value="2026-07-20"></div>
+        <div class="frm"><label>Opportunity <span class="opt">optional</span></label><div class="inp selbox">— none — <span>▾</span></div></div>
+      </div>
+      <div class="frm"><label>Note</label><textarea class="inp" placeholder="What to do / say when this comes due…">Thank her for the intro; check whether she passed my name to the Wilcox Expo organizers.</textarea></div>
+      <div class="switch-row">
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Remind me"></button>
+        <div><div class="sw-l">Remind me</div><div class="sw-d">Surfaces on the Dashboard on the due date and sends an email nudge.</div></div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="btn btn-primary" data-close>Schedule follow-up</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Standalone — no outreach needs to be logged first</span></div>
   </div>
 </div>
 
@@ -1153,6 +1293,15 @@
   document.querySelectorAll('#history tbody tr').forEach(tr => tr.addEventListener('click', () => {
     nav.querySelector('[data-page="history-detail"]').click();
   }));
+  // emails inbox rows + contact-detail email links -> email thread
+  document.querySelectorAll('#emails tbody tr, .email-link').forEach(el => el.addEventListener('click', () => {
+    nav.querySelector('[data-page="email-thread"]').click();
+  }));
+  // "Compose" from the Emails inbox / contact Emails card -> composer page
+  ['emailsCompose', 'emailsCompose2'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener('click', () => nav.querySelector('[data-page="composer"]').click());
+  });
   // pipeline "Show closed" toggle -> reveal the Recently-closed column
   const showClosed = document.getElementById('showClosed');
   if (showClosed) showClosed.addEventListener('change', () => {
