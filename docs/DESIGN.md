@@ -34,9 +34,14 @@ legacy-tracker, not tracked here.
    Card holds talk offered, event date, format (workshop / keynote / podcast spot / expo table),
    outcome. Stage moves journaled (drag-and-drop).
 4. **Outreach journal** — append-only touch log per contact (email, DM, call, in-person),
-   decoupled from pipeline stage.
-5. **Message templates** — the three from the strategy doc (DM, formal email, power-partner DM);
-   shared-seed + clone-on-edit.
+   decoupled from pipeline stage. DMs are *logged*, not sent from the app (no practical
+   Instagram/LinkedIn send API): pick a template, it merges + copies to the clipboard, you paste it
+   in the DM, then log the touch. **Email is the only in-app send channel** (see §3 Email).
+5. **Message templates** — the three from the strategy doc (DM, formal email, power-partner DM).
+   Selectable when logging outreach or composing email; **merge fields** (e.g. `[Name]`) fill from
+   the contact, and a **Copy to clipboard** action supports the DM paste flow (à la Legacy Tracker).
+   Shared templates are **editable in place**; **Duplicate** keeps a personal variant. (Under
+   multi-user, editing shared templates becomes an admin role; single-user edits in place.)
 
 **Email**
 6. **Rich composer with attachments** — full formatting, attach one-sheet / speaking menu,
@@ -183,7 +188,9 @@ Core entities (user-scoped via `user_id`; every entity table has `id` /
   `completed_at`. Created standalone (from a contact, opportunity, the composer, or a Next-follow-up
   card) or as a rider on a logged outreach. Distinct from `outreaches` (past touches) and
   `opportunity_notes` (dated commentary): follow-ups are *future*, actionable, and can be marked done.
-- **`message_templates`** — nullable `user_id` = shared seed (immutable); clone-on-edit.
+- **`message_templates`** — `channel` (dm / email / power_partner), body with **merge fields**
+  (`[Name]`, …). `user_id` NULL = shared template (editable in place — admin-gated under
+  multi-user); **duplicate** a shared template into a personal copy (`user_id` set).
 - **`targets`** — per-user, per-type, cadence (weekly/monthly/quarterly), `goal_count`.
 - **`talks`** + **materials** (S3 files) — the Guest Workshop menu.
 - Catalog tables: `organization_types`, `contact_roles`, `opportunity_statuses`
@@ -237,6 +244,9 @@ the opportunity card, seeded from `how_to_approach`.
 - **Venue Contacts card:** shows **affiliation info only** — title + primary-contact flag + warmth +
   ★ power-partner. Opportunity roles (Introducer / Lead) are per-gig and live on the opportunity,
   not the org's contact list.
+- **Targets:** no revenue / money target for now — the `targets` model is generic, so a
+  paid-bookings / `$-booked` target is a trivial later add (a new `target_type`). Targets stay
+  activity-based while Donna is in visibility-building mode.
 
 **Still open**
 - **Reply detection:** IMAP poll interval for the poller Lambda (latency vs. cost).

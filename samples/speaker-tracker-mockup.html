@@ -988,32 +988,35 @@
   <!-- ============ TEMPLATES ============ -->
   <section class="page" id="templates">
     <div class="page-head">
-      <div><h1>Message Templates</h1><div class="sub">Shared seeds stay pristine — editing one clones it to your library</div></div>
+      <div><h1>Message Templates</h1><div class="sub">Edit shared templates in place, or duplicate to keep your own variant. Merge fields like [Name] fill in when you use one.</div></div>
       <button class="btn btn-primary">+ New template</button>
     </div>
     <div class="tpl-grid">
       <div class="card tpl">
-        <div class="card-h"><h2>Venue DM</h2><span class="chip plain">Shared seed</span></div>
+        <div class="card-h"><h2>Venue DM</h2><span class="chip plain">Shared</span></div>
         <div class="card-b">
           <p>Instagram / LinkedIn first touch for retreat venues, yoga studios, spas, and wellness properties.</p>
-          <div class="tpl-preview">"I've been following [your studio] and really love [specific thing]… If you ever bring in local speakers or wellness experts for guest experiences, I'd love to be on your radar."</div>
+          <div class="tpl-preview">"Hi [Name], I've been following [your studio] and really love [specific thing]… If you ever bring in local speakers or wellness experts for guest experiences, I'd love to be on your radar."</div>
           <div class="use num">Used 7 times · last Jul 12</div>
+          <div style="display:flex; gap:8px; margin-top:12px"><button class="btn btn-ghost btn-sm" data-modal="m-template">Edit</button><button class="btn btn-ghost btn-sm">Duplicate</button></div>
         </div>
       </div>
       <div class="card tpl">
-        <div class="card-h"><h2>Formal Outreach Email</h2><span class="chip teal">Customized</span></div>
+        <div class="card-h"><h2>Formal Outreach Email</h2><span class="chip teal">Your copy</span></div>
         <div class="card-b">
           <p>Event directors, retreat coordinators, and wellness program managers. Includes the three-talk menu.</p>
-          <div class="tpl-preview">"I work with women in the last third of their lives who are ready to stop saying 'I'm fine'… My three talks are: I'm Fine Is a Lie · Legacy in Motion · The Wellness Wheel for Women."</div>
+          <div class="tpl-preview">"Hi [Name], I work with women in the last third of their lives who are ready to stop saying 'I'm fine'… My three talks are: I'm Fine Is a Lie · Legacy in Motion · The Wellness Wheel for Women."</div>
           <div class="use num">Used 11 times · last Jul 12</div>
+          <div style="display:flex; gap:8px; margin-top:12px"><button class="btn btn-ghost btn-sm" data-modal="m-template">Edit</button><button class="btn btn-ghost btn-sm">Duplicate</button></div>
         </div>
       </div>
       <div class="card tpl">
-        <div class="card-h"><h2>Power Partner DM</h2><span class="chip plain">Shared seed</span></div>
+        <div class="card-h"><h2>Power Partner DM</h2><span class="chip plain">Shared</span></div>
         <div class="card-b">
           <p>BNI colleagues, estheticians, massage therapists, hairdressers, grief counselors — referral relationships.</p>
-          <div class="tpl-preview">"I think the women you work with may be feeling the same way… Would you be open to a 15-minute chat to see if there's a natural referral relationship?"</div>
+          <div class="tpl-preview">"Hi [Name], I think the women you work with may be feeling the same way… Would you be open to a 15-minute chat to see if there's a natural referral relationship?"</div>
           <div class="use num">Used 4 times · last Jul 9</div>
+          <div style="display:flex; gap:8px; margin-top:12px"><button class="btn btn-ghost btn-sm" data-modal="m-template">Edit</button><button class="btn btn-ghost btn-sm">Duplicate</button></div>
         </div>
       </div>
     </div>
@@ -1108,6 +1111,9 @@
       <div class="frm"><label>Channel</label>
         <div class="seg"><button>Email</button><button class="on">LinkedIn DM</button><button>Call</button><button>In person</button></div>
       </div>
+      <div class="frm"><label>Template <span class="opt">merges &amp; copies for a DM</span></label><div class="inp selbox">Venue DM <span>▾</span></div></div>
+      <div class="frm"><label>Message <span class="opt">merged — edit before you copy</span></label><textarea id="dm-merge" class="inp" style="min-height:88px">Hi Marcy, I've been following the PWN Hawaii luncheons and love how you spotlight women in their next chapter. I'm a Kauaʻi-based legacy &amp; wellness coach — I offer guest workshops for women's gatherings. If you ever bring in local speakers, I'd love to be on your radar. Worth a quick chat?</textarea></div>
+      <div style="display:flex; justify-content:flex-end; margin-top:-4px"><button class="btn btn-ghost btn-sm" id="dm-copy" type="button">📋 Copy to clipboard</button></div>
       <div class="row2">
         <div class="frm"><label>Date</label><input class="inp num" value="Jul 16, 2026"></div>
         <div class="frm"><label>Opportunity <span class="opt">optional</span></label><div class="inp selbox">Monthly luncheon — In conversation <span>▾</span></div></div>
@@ -1270,6 +1276,22 @@
   </div>
 </div>
 
+<!-- ============ MODAL: EDIT TEMPLATE ============ -->
+<div class="overlay" id="m-template" role="dialog" aria-modal="true" aria-labelledby="mt-t">
+  <div class="modal">
+    <div class="modal-h"><h2 id="mt-t">Edit template</h2><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-b">
+      <div class="row2">
+        <div class="frm"><label>Name</label><input class="inp" value="Venue DM"></div>
+        <div class="frm"><label>Use for</label><div class="inp selbox">Instagram / LinkedIn DM <span>▾</span></div></div>
+      </div>
+      <div class="frm"><label>Body <span class="opt">use [Name] and other merge fields</span></label><textarea class="inp" style="min-height:150px">Hi [Name], I've been following [your studio] and really love [specific thing]. I'm a local Kauaʻi legacy &amp; wellness coach — I offer guest workshops for women's gatherings. If you ever bring in local speakers or wellness experts, I'd love to be on your radar. Worth a quick chat?</textarea></div>
+      <div class="kind-hint">Merge field available now: <b>[Name]</b> (contact's first name), filled when you use the template. You're editing the <b>shared</b> template — the change applies everywhere (single-user for now; an admin task under multi-user). Prefer <b>Duplicate</b> to keep a personal variant.</div>
+    </div>
+    <div class="modal-f"><button class="btn btn-primary" data-close>Save template</button><button class="btn btn-ghost" data-close>Duplicate as my copy</button><span class="hint2">Shared template · editable in place</span></div>
+  </div>
+</div>
+
 <script>
   const nav = document.getElementById('nav');
   nav.addEventListener('click', (e) => {
@@ -1301,6 +1323,15 @@
   ['emailsCompose', 'emailsCompose2'].forEach(id => {
     const b = document.getElementById(id);
     if (b) b.addEventListener('click', () => nav.querySelector('[data-page="composer"]').click());
+  });
+  // Log-outreach: copy the merged template to the clipboard for pasting into a DM
+  const dmCopy = document.getElementById('dm-copy');
+  if (dmCopy) dmCopy.addEventListener('click', () => {
+    const t = document.getElementById('dm-merge');
+    if (t && navigator.clipboard) navigator.clipboard.writeText(t.value).then(() => {
+      const orig = dmCopy.textContent; dmCopy.textContent = '✓ Copied';
+      setTimeout(() => { dmCopy.textContent = orig; }, 1500);
+    }).catch(() => {});
   });
   // pipeline "Show closed" toggle -> reveal the Recently-closed column
   const showClosed = document.getElementById('showClosed');

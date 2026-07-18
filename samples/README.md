@@ -36,7 +36,8 @@ Compose (rich email + research context) · Templates · Targets · Talks & Mater
 
 ## Modals
 
-- **Log outreach** — contact, channel, date, opportunity link, note, follow-up toggle (default 7d).
+- **Log outreach** — contact, channel, a **template picker** (merges `[Name]` + **Copy to
+  clipboard** for pasting into a DM), date, opportunity link, note, and a calendar follow-up (date + note).
 - **Add venue** — basics + a distinct Kindling research section + readiness hint.
 - **Add contact** — dedupe search ("find existing person first") + new-person form; power-partner
   toggle with inline definition; role/title labeled "at this org".
@@ -48,6 +49,8 @@ Compose (rich email + research context) · Templates · Targets · Talks & Mater
   standalone (no outreach needed first); reminds on the Dashboard + email. Openable from the sidebar,
   any "Next follow-up" card, the composer footer, and the Log-outreach / New-opportunity riders
   (which now use a date picker + note, not an "in N days" selector).
+- **Edit template** — edit a shared template in place (or **Duplicate** to keep a personal copy);
+  the body uses merge fields like `[Name]` that fill on use. Openable from each Templates card.
 
 ## Money, payment & lifecycle
 
