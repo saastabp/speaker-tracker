@@ -1,0 +1,1213 @@
+<title>Speaker Tracker — UI Mockups</title>
+<style>
+  :root{
+    /* 360 Balanced Living brand palette — light is the default (Donna's preference) */
+    --bg:#FBF8F2; --surface:#FFFFFF; --surface-2:#F2EADE; --line:#E7DCC9;
+    --ink:#1F3B4D; --muted:#555555; --faint:#948B7D;
+    --accent:#C2483A; --accent-ink:#9E3528; --accent-soft:#F6E2DD;
+    --warm:#D9A02C; --warm-soft:#F8ECCF;
+    --good:#3F7A52; --good-soft:#E2EEE4; --warn:#B07D1E; --warn-soft:#F5E9CD; --crit:#B23A2E; --crit-soft:#F3DDD8;
+    --navy:#1F3B4D; --gold:#D9A02C;
+    --shadow:0 1px 2px rgba(31,59,77,.06),0 4px 16px rgba(31,59,77,.06);
+  }
+  /* Light is the default in every environment — Donna's preference. Dark only via explicit viewer toggle. */
+  :root[data-theme="dark"]{
+    --bg:#141F29; --surface:#1E2C38; --surface-2:#26343F; --line:#354652;
+    --ink:#F2ECE0; --muted:#B9C4CC; --faint:#82909A;
+    --accent:#D8654F; --accent-ink:#EC9E8C; --accent-soft:#3A241F;
+    --warm:#E0B24C; --warm-soft:#38301A;
+    --good:#5FB07E; --good-soft:#1D3327; --warn:#D6A84E; --warn-soft:#38311A; --crit:#DA8375; --crit-soft:#3A241F;
+    --navy:#16232E; --gold:#E0B24C;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 6px 18px rgba(0,0,0,.32);
+  }
+  :root[data-theme="light"]{
+    --bg:#FBF8F2; --surface:#FFFFFF; --surface-2:#F2EADE; --line:#E7DCC9;
+    --ink:#1F3B4D; --muted:#555555; --faint:#948B7D;
+    --accent:#C2483A; --accent-ink:#9E3528; --accent-soft:#F6E2DD;
+    --warm:#D9A02C; --warm-soft:#F8ECCF;
+    --good:#3F7A52; --good-soft:#E2EEE4; --warn:#B07D1E; --warn-soft:#F5E9CD; --crit:#B23A2E; --crit-soft:#F3DDD8;
+    --navy:#1F3B4D; --gold:#D9A02C;
+    --shadow:0 1px 2px rgba(31,59,77,.06),0 4px 16px rgba(31,59,77,.06);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:Seravek,"Gill Sans Nova",Ubuntu,Calibri,"DejaVu Sans",source-sans-pro,"Segoe UI",sans-serif;
+    font-size:14.5px; line-height:1.5;
+  }
+  .app{display:flex; min-height:100vh}
+
+  /* ---------- Sidebar (navy brand rail) ---------- */
+  .sidebar{
+    width:236px; flex:0 0 236px; background:var(--navy); border-right:1px solid rgba(0,0,0,.18);
+    display:flex; flex-direction:column; padding:18px 14px; position:sticky; top:0; height:100vh;
+  }
+  .wordmark{padding:2px 8px 16px}
+  .wordmark svg{width:100%; height:auto; display:block}
+  .wordmark .app-name{font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#8FA3B2; font-weight:700; margin-top:9px; padding-left:2px}
+  .nav{display:flex; flex-direction:column; gap:2px}
+  .nav button{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    background:none; border:0; border-radius:9px; padding:8px 10px; cursor:pointer;
+    color:#C2CFD8; font:inherit; font-weight:500;
+  }
+  .nav button:hover{background:rgba(255,255,255,.07); color:#fff}
+  .nav button:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  .nav button.active{background:rgba(255,255,255,.12); color:#fff; font-weight:650; box-shadow:inset 3px 0 0 var(--accent)}
+  .nav button svg{flex:0 0 16px; opacity:.8}
+  .nav .sect{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:#7E93A1; padding:14px 10px 4px}
+  .sidebar .foot{margin-top:auto; padding:10px; font-size:11.5px; color:#7E93A1; border-top:1px solid rgba(255,255,255,.10)}
+  .sidebar .foot b{color:#B9C6CF; font-weight:600}
+
+  /* ---------- Content shell ---------- */
+  .content{flex:1; min-width:0; padding:26px 32px 48px}
+  .page{display:none; max-width:1180px; margin:0 auto}
+  .page.active{display:block}
+  .page#pipeline{max-width:none}  /* full width for the 36" monitor */
+  .page-head{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:20px; flex-wrap:wrap}
+  .page-head h1{font-size:22px; font-weight:650; margin:0; letter-spacing:-.01em; text-wrap:balance}
+  .page-head .sub{color:var(--muted); font-size:13px; margin-top:3px}
+  .btn{
+    display:inline-flex; align-items:center; gap:7px; border-radius:9px; padding:8px 14px;
+    font:inherit; font-weight:600; font-size:13.5px; cursor:pointer; border:1px solid transparent;
+  }
+  .btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  .btn-primary{background:var(--accent); color:#fff}
+  .btn-primary:hover{background:var(--accent-ink)}
+  .btn-ghost{background:var(--surface); color:var(--ink); border-color:var(--line)}
+  .btn-sm{padding:5px 10px; font-size:12.5px; border-radius:7px}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow)}
+  .card-h{padding:13px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px}
+  .card-h h2{font-size:13px; font-weight:650; margin:0; letter-spacing:.02em}
+  .card-h .hint{font-size:12px; color:var(--faint)}
+  .card-b{padding:16px}
+
+  .num{font-variant-numeric:tabular-nums}
+
+  /* chips */
+  .chip{display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:2px 9px; font-size:11.5px; font-weight:600; white-space:nowrap}
+  .chip.teal{background:var(--accent-soft); color:var(--accent-ink)}
+  .chip.warm{background:var(--warm-soft); color:#8A6212}
+  :root[data-theme="dark"] .chip.warm{color:var(--warm)}
+  .chip.good{background:var(--good-soft); color:var(--good)}
+  .chip.warn{background:var(--warn-soft); color:var(--warn)}
+  .chip.crit{background:var(--crit-soft); color:var(--crit)}
+  .chip.plain{background:var(--surface-2); color:var(--muted)}
+  .dot{width:7px; height:7px; border-radius:50%; display:inline-block}
+
+  /* ---------- Dashboard ---------- */
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:14px; margin-bottom:16px}
+  .tile{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow)}
+  .tile .lbl{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:650}
+  .tile .val{font-size:26px; font-weight:650; margin-top:6px; letter-spacing:-.01em}
+  .tile .val small{font-size:14px; color:var(--faint); font-weight:500}
+  .meter{height:6px; background:var(--surface-2); border-radius:4px; margin-top:10px; overflow:hidden}
+  .meter i{display:block; height:100%; border-radius:4px; background:var(--accent)}
+  .meter i.warm{background:var(--warm)}
+  .tile .note{font-size:12px; color:var(--muted); margin-top:7px}
+  .grid-2{display:grid; grid-template-columns:1.4fr 1fr; gap:14px; align-items:start}
+  @media (max-width:900px){ .grid-2{grid-template-columns:1fr} }
+
+  .funnel{display:flex; flex-direction:column; gap:10px}
+  .fstep{display:grid; grid-template-columns:130px 1fr 84px; gap:12px; align-items:center}
+  .fstep .fl{font-size:12.5px; color:var(--muted); font-weight:600}
+  .fbar{height:22px; border-radius:6px; background:var(--accent); opacity:.92}
+  .fstep:nth-child(2) .fbar{opacity:.75}.fstep:nth-child(3) .fbar{opacity:.58}.fstep:nth-child(4) .fbar{opacity:.42}
+  .fstep .fv{font-size:13px; font-weight:650; text-align:right}
+  .fstep .fv small{color:var(--faint); font-weight:500}
+
+  .attn{list-style:none; margin:0; padding:0}
+  .attn li{display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--line)}
+  .attn li:first-child{border-top:0; padding-top:2px}
+  .attn .who{font-weight:650; font-size:13.5px}
+  .attn .why{font-size:12.5px; color:var(--muted)}
+  .attn .chip{margin-left:auto; flex:0 0 auto}
+
+  .sched{list-style:none; margin:0; padding:0}
+  .sched li{display:flex; gap:12px; align-items:center; padding:9px 0; border-top:1px solid var(--line)}
+  .sched li:first-child{border-top:0; padding-top:2px}
+  .datebox{flex:0 0 46px; text-align:center; background:var(--surface-2); border-radius:9px; padding:5px 0}
+  .datebox .m{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .datebox .d{font-size:17px; font-weight:650; line-height:1.1}
+  .sched .what{font-weight:600; font-size:13.5px}
+  .sched .meta{font-size:12px; color:var(--muted)}
+
+  .money-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px}
+  @media (max-width:560px){ .money-grid{grid-template-columns:repeat(2,1fr)} }
+  .ms-lbl{font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .ms-val{font-size:21px; font-weight:700; margin-top:4px; letter-spacing:-.01em}
+  .ms-sub{font-size:11.5px; color:var(--faint); margin-top:2px}
+  .funnel-leak{margin-top:10px; padding:7px 11px; border-left:3px solid var(--crit); background:var(--crit-soft); border-radius:0 6px 6px 0; font-size:12px; color:var(--muted)}
+
+  /* ---------- Pipeline ---------- */
+  .board-wrap{overflow-x:auto; padding-bottom:8px}
+  .board{display:flex; gap:12px; min-width:max-content; align-items:flex-start}
+  .col{width:262px; flex:0 0 262px; background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:10px}
+  .col-h{display:flex; align-items:center; gap:8px; padding:2px 4px 10px}
+  .col-h .cn{font-size:12px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted)}
+  .col-h .cc{margin-left:auto; font-size:11.5px; color:var(--faint); font-weight:650}
+  .kcard{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:11px 12px; box-shadow:var(--shadow); margin-bottom:9px; cursor:pointer; position:relative}
+  .kcard .org{font-weight:650; font-size:13.5px; line-height:1.3; padding-right:20px}
+  .kclose{position:absolute; top:6px; right:6px; width:22px; height:22px; border:0; border-radius:6px; background:transparent; color:var(--faint); font-size:15px; line-height:1; cursor:pointer; opacity:0; transition:opacity .12s; display:flex; align-items:center; justify-content:center}
+  .kcard:hover .kclose{opacity:1}
+  .kclose:hover{background:var(--crit-soft); color:var(--crit)}
+  .kclose:focus-visible{opacity:1; outline:2px solid var(--accent)}
+  @media (prefers-reduced-motion: reduce){ .kclose{transition:none} }
+  .kcard .talk{font-size:12.5px; color:var(--muted); margin-top:3px}
+  .kcard .krow{display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; align-items:center}
+  .kcard .due{margin-left:auto; font-size:11.5px; color:var(--faint)}
+  .kcard .due.over{color:var(--crit); font-weight:650}
+  .kcard .kmoney{display:flex; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); flex-wrap:wrap; align-items:center}
+  .chip.money{background:var(--surface-2); color:var(--ink); font-variant-numeric:tabular-nums}
+  .chip.gold{background:var(--warm-soft); color:#8A6212}
+  .kcard .kact{display:flex; gap:6px; margin-top:9px}
+  .kcard .kact button{flex:1; border:1px solid var(--line); background:var(--surface); border-radius:7px; padding:4px 8px; font:inherit; font-size:11.5px; font-weight:650; color:var(--muted); cursor:pointer}
+  .kcard .kact button:hover{background:var(--surface-2)}
+  .kcard .kact .deliver:hover{border-color:var(--good); color:var(--good)}
+  .kcard .kact .cancel:hover{border-color:var(--crit); color:var(--crit)}
+  .col.closed-col{display:none; background:transparent; border-style:dashed}
+  .board.reveal-closed .col.closed-col{display:block}
+  .kcard.closed{opacity:.66; filter:grayscale(.3)}
+  .show-closed{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); font-weight:600; cursor:pointer; user-select:none}
+  .show-closed input{accent-color:var(--accent); width:15px; height:15px}
+
+  /* ---------- Tables ---------- */
+  .tbl-wrap{overflow-x:auto}
+  table{border-collapse:collapse; width:100%; font-size:13.5px}
+  th{font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); text-align:left; font-weight:700; padding:10px 14px; border-bottom:1px solid var(--line); white-space:nowrap}
+  td{padding:11px 14px; border-bottom:1px solid var(--line); vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  tbody tr{cursor:pointer}
+  tbody tr:hover td{background:var(--surface-2)}
+  .cell-main{font-weight:650}
+  .cell-sub{font-size:12px; color:var(--muted); margin-top:1px; max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ready{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:650}
+  .ready .dot{background:var(--good)} .notready .dot{background:var(--warn)}
+  .ready.notready{color:var(--warn)} .ready:not(.notready){color:var(--good)}
+  .star{color:var(--warm); font-size:14px}
+
+  .toolbar{display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap}
+  .search{flex:1; min-width:200px; max-width:340px; background:var(--surface); border:1px solid var(--line); border-radius:9px; padding:7px 12px; color:var(--faint); font-size:13px}
+  .fpill{background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12.5px; color:var(--muted); font-weight:600}
+  .fpill.on{background:var(--accent-soft); border-color:transparent; color:var(--accent-ink)}
+
+  /* ---------- Venue detail ---------- */
+  .crumb{font-size:12.5px; color:var(--faint); margin-bottom:6px}
+  .crumb b{color:var(--muted); font-weight:600}
+  .detail-grid{display:grid; grid-template-columns:1.5fr 1fr; gap:14px; align-items:start}
+  @media (max-width:940px){ .detail-grid{grid-template-columns:1fr} }
+  .kindling .kf{padding:13px 16px; border-bottom:1px solid var(--line)}
+  .kindling .kf:last-child{border-bottom:0}
+  .kindling .kf h3{margin:0 0 5px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-ink); font-weight:700}
+  .kindling .kf p{margin:0; font-size:13.5px; max-width:62ch}
+  .contact-line{display:flex; gap:11px; align-items:center; padding:10px 0; border-top:1px solid var(--line)}
+  .contact-line:first-child{border-top:0; padding-top:0}
+  .avatar{flex:0 0 34px; width:34px; height:34px; border-radius:50%; background:var(--accent-soft); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12.5px}
+  .avatar.w{background:var(--warm-soft); color:var(--warm)}
+  .cl-name{font-weight:650; font-size:13.5px}
+  .cl-role{font-size:12px; color:var(--muted)}
+  .tl{list-style:none; margin:0; padding:0}
+  .tl li{position:relative; padding:0 0 16px 22px}
+  .tl li::before{content:""; position:absolute; left:5px; top:6px; width:8px; height:8px; border-radius:50%; background:var(--accent)}
+  .tl li::after{content:""; position:absolute; left:8px; top:18px; bottom:-2px; width:2px; background:var(--line)}
+  .tl li:last-child::after{display:none}
+  .tl li.dm::before{background:var(--warm)}
+  .tl .tw{font-size:13.5px}
+  .tl .tw b{font-weight:650}
+  .tl .tm{font-size:11.5px; color:var(--faint); margin-top:1px}
+
+  /* ---------- Composer ---------- */
+  .compose-grid{display:grid; grid-template-columns:1.7fr 1fr; gap:14px; align-items:start}
+  @media (max-width:940px){ .compose-grid{grid-template-columns:1fr} }
+  .field{display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--line); font-size:13.5px}
+  .field .fl2{flex:0 0 62px; color:var(--faint); font-size:12px; font-weight:700; letter-spacing:.05em; text-transform:uppercase}
+  .field .pill-to{background:var(--accent-soft); color:var(--accent-ink); border-radius:999px; padding:2px 10px; font-weight:600; font-size:12.5px}
+  .rt-bar{display:flex; gap:2px; padding:8px 12px; border-bottom:1px solid var(--line); flex-wrap:wrap}
+  .rt-bar button{border:0; background:none; border-radius:6px; width:28px; height:26px; font-size:13px; color:var(--muted); cursor:pointer; font-family:Georgia,serif}
+  .rt-bar button:hover{background:var(--surface-2); color:var(--ink)}
+  .rt-bar button:focus-visible{outline:2px solid var(--accent)}
+  .rt-bar .sep{width:1px; background:var(--line); margin:3px 6px}
+  .rt-bar .on{background:var(--accent-soft); color:var(--accent-ink)}
+  .body-area{padding:16px; font-size:14px; min-height:250px}
+  .body-area p{margin:0 0 12px; max-width:66ch}
+  .body-area ul{margin:0 0 12px 20px; padding:0; max-width:62ch}
+  .attach-row{display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); flex-wrap:wrap; align-items:center}
+  .attach{display:inline-flex; align-items:center; gap:7px; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; padding:5px 11px; font-size:12.5px; font-weight:600}
+  .attach small{color:var(--faint); font-weight:500}
+  .attach .x{color:var(--faint); cursor:pointer}
+  .compose-foot{display:flex; gap:10px; align-items:center; padding:12px 16px; border-top:1px solid var(--line)}
+  .compose-foot .hint2{margin-left:auto; font-size:12px; color:var(--faint)}
+  .ctx .kf2{padding:12px 16px; border-bottom:1px solid var(--line)}
+  .ctx .kf2:last-child{border-bottom:0}
+  .ctx h3{margin:0 0 4px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-ink); font-weight:700}
+  .ctx p{margin:0; font-size:13px; color:var(--ink)}
+  .ctx .tip{font-size:12px; color:var(--muted); font-style:italic}
+
+  /* ---------- Templates ---------- */
+  .tpl-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px}
+  .tpl .card-b p{margin:0; font-size:13px; color:var(--muted); max-width:58ch}
+  .tpl .use{font-size:12px; color:var(--faint); margin-top:10px}
+  .tpl-preview{background:var(--surface-2); border-radius:8px; padding:10px 12px; font-size:12.5px; color:var(--ink); margin-top:10px; font-style:italic}
+
+  /* ---------- Targets ---------- */
+  .trow{display:grid; grid-template-columns:1.3fr 110px 1fr 120px 70px; gap:14px; align-items:center; padding:13px 16px; border-bottom:1px solid var(--line)}
+  .trow:last-child{border-bottom:0}
+  .trow.hd{padding:9px 16px; border-bottom:1px solid var(--line)}
+  .trow.hd span{font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .trow .tn{font-weight:650; font-size:13.5px}
+  .trow .td2{font-size:12px; color:var(--muted)}
+  .trow .prog{font-size:13px; font-weight:650; text-align:right}
+  @media (max-width:800px){ .trow{grid-template-columns:1fr 90px 1fr; } .trow .hide-sm{display:none} }
+
+  /* ---------- Talks ---------- */
+  .talk-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:14px; margin-bottom:16px}
+  .talk .card-b h3{margin:0 0 4px; font-size:16px; font-weight:650; letter-spacing:-.01em}
+  .talk .card-b .tag{font-size:12px; color:var(--muted); margin-bottom:8px}
+  .talk .card-b p{margin:0; font-size:13px; color:var(--muted); max-width:52ch}
+  .mat{display:flex; align-items:center; gap:11px; padding:10px 16px; border-top:1px solid var(--line); font-size:13.5px}
+  .mat:first-of-type{border-top:0}
+  .ficon{flex:0 0 30px; width:30px; height:30px; border-radius:8px; background:var(--crit-soft); color:var(--crit); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; letter-spacing:.03em}
+  .mat .mn{font-weight:600}
+  .mat .ms{font-size:12px; color:var(--faint)}
+  .mat .btn{margin-left:auto}
+
+  /* ---------- Modals ---------- */
+  .overlay{position:fixed; inset:0; background:rgba(15,25,24,.48); display:none; align-items:flex-start; justify-content:center; padding:5vh 20px 40px; z-index:50; overflow-y:auto}
+  .overlay.open{display:flex}
+  .modal{background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 12px 40px rgba(15,25,24,.28); width:100%; max-width:560px}
+  .modal-h{display:flex; align-items:center; gap:10px; padding:15px 20px; border-bottom:1px solid var(--line)}
+  .modal-h h2{margin:0; font-size:15px; font-weight:650}
+  .modal-h .close{margin-left:auto; border:0; background:none; color:var(--faint); font-size:15px; cursor:pointer; border-radius:6px; width:28px; height:28px}
+  .modal-h .close:hover{background:var(--surface-2); color:var(--ink)}
+  .modal-h .close:focus-visible{outline:2px solid var(--accent)}
+  .modal-b{padding:18px 20px; display:flex; flex-direction:column; gap:14px}
+  .modal-f{display:flex; gap:10px; align-items:center; padding:14px 20px; border-top:1px solid var(--line)}
+  .modal-f .hint2{margin-left:auto; font-size:12px; color:var(--faint); text-align:right}
+  .frm{display:flex; flex-direction:column; gap:5px}
+  .frm > label{font-size:11.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .frm > label .opt{font-weight:500; text-transform:none; letter-spacing:0; color:var(--faint)}
+  .inp{border:1px solid var(--line); border-radius:9px; padding:8px 12px; background:var(--surface); color:var(--ink); font:inherit; font-size:13.5px; width:100%}
+  .inp:focus{outline:2px solid var(--accent); outline-offset:1px}
+  .inp::placeholder{color:var(--faint)}
+  textarea.inp{resize:vertical; min-height:60px}
+  .selbox{display:flex; justify-content:space-between; align-items:center; cursor:pointer; gap:10px}
+  .selbox span{color:var(--faint)}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  @media (max-width:560px){ .row2{grid-template-columns:1fr} }
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; width:fit-content}
+  .seg button{border:0; background:var(--surface); padding:7px 14px; font:inherit; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; border-left:1px solid var(--line)}
+  .seg button:first-child{border-left:0}
+  .seg button:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+  .seg button.on{background:var(--accent-soft); color:var(--accent-ink)}
+  .switch-row{display:flex; gap:12px; align-items:flex-start; background:var(--surface-2); border-radius:10px; padding:11px 14px}
+  .switch{flex:0 0 38px; width:38px; height:22px; border-radius:999px; background:var(--line); position:relative; cursor:pointer; border:0; margin-top:2px}
+  .switch.on{background:var(--accent)}
+  .switch::after{content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .15s}
+  .switch.on::after{left:19px}
+  .switch:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  @media (prefers-reduced-motion: reduce){ .switch::after{transition:none} }
+  .switch-row .sw-l{font-weight:650; font-size:13.5px}
+  .switch-row .sw-d{font-size:12px; color:var(--muted); max-width:52ch}
+  .kind-hint{font-size:12.5px; color:var(--accent-ink); background:var(--accent-soft); border-radius:8px; padding:8px 12px}
+  .frm-sect{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-ink); font-weight:700; border-bottom:1px solid var(--line); padding-bottom:6px; margin-top:4px}
+</style>
+
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="wordmark">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" role="img" aria-label="360 Balanced Living">
+        <g transform="translate(10,16) scale(0.45)">
+          <path d="M178.5029,159.8372,147.3746,128.709a69,69,0,0,1,0-97.5808L178.5029,0l31.1282,31.1282a69,69,0,0,1,0,97.5808Z" fill="#E5B544"/>
+          <path d="M139.9775,181.8486h-32.72a69,69,0,0,1-69-69v-32.72h32.72a69,69,0,0,1,69,69Z" fill="#D88A4F"/>
+          <path d="M129.4681,220.3739l-15.9437,15.9437a69,69,0,0,1-97.5807,0L0,220.3739,15.9437,204.43a69,69,0,0,1,97.5807,0Z" fill="#C7723D"/>
+          <path d="M147.2973,251.5794v13.393a69,69,0,0,1-69,69H64.9043v-13.393a69,69,0,0,1,69-69Z" fill="#B8826E"/>
+          <path d="M178.5029,260.0921l6.2387,6.2387a65.3306,65.3306,0,0,1,0,92.3916l-6.2387,6.2388-6.2388-6.2388a65.3306,65.3306,0,0,1,0-92.3916Z" fill="#9CA0AC"/>
+          <path d="M203.7793,245.65H211.72a58.7976,58.7976,0,0,1,58.7977,58.7976v7.9407H262.577a58.7977,58.7977,0,0,1-58.7977-58.7977Z" fill="#7C92AE"/>
+          <path d="M210.6746,220.3739l5.0534-5.0534a52.9179,52.9179,0,0,1,74.8372,0l5.0534,5.0534-5.0534,5.0534a52.9179,52.9179,0,0,1-74.8372,0Z" fill="#5C7DA8"/>
+          <path d="M198.9768,199.9v-6.432a47.6261,47.6261,0,0,1,47.6261-47.6261h6.432v6.4319A47.6262,47.6262,0,0,1,205.4087,199.9Z" fill="#DCEBF5"/>
+        </g>
+        <text x="190" y="118" font-family="Georgia,'Times New Roman',serif" font-size="54" font-weight="700" font-style="italic" fill="#F5F1E8">360<tspan font-weight="400" font-size="40" fill="#E0935C" dx="10">Balanced Living</tspan></text>
+      </svg>
+      <div class="app-name">Speaker Tracker</div>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-page="dashboard" class="active"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>Dashboard</button>
+      <button data-page="pipeline"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="4" height="12" rx="1.2"/><rect x="6" y="2" width="4" height="8" rx="1.2"/><rect x="11" y="2" width="4" height="5" rx="1.2"/></svg>Pipeline</button>
+      <button data-page="opportunity-detail" style="padding-left:34px; font-size:12.5px">↳ Wellness Wheel gig <span class="chip plain" style="margin-left:auto">detail</span></button>
+      <button data-page="history"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.3"/><path d="M8 4.3V8l2.6 1.6" stroke-linecap="round"/></svg>History</button>
+      <button data-page="history-detail" style="padding-left:34px; font-size:12.5px">↳ Poʻipū Brunch <span class="chip plain" style="margin-left:auto">detail</span></button>
+      <div class="sect">Relationships</div>
+      <button data-page="venues"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 15V6l7-4 7 4v9h-4v-5H5v5H1z"/></svg>Venues &amp; Orgs</button>
+      <button data-page="venue-detail" style="padding-left:34px; font-size:12.5px">↳ PWN Hawaii <span class="chip plain" style="margin-left:auto">detail</span></button>
+      <button data-page="contacts"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.7-4.5 6-4.5s6 1.5 6 4.5H2z"/></svg>Contacts</button>
+      <button data-page="contact-detail" style="padding-left:34px; font-size:12.5px">↳ Pua Lindsey <span class="chip plain" style="margin-left:auto">detail</span></button>
+      <div class="sect">Outreach</div>
+      <button data-page="composer"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h14v10H1V3zm1.5 1.5L8 9l5.5-4.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>Compose</button>
+      <button data-page="templates"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h10v14H3V1zm2.5 3h5M5.5 6.5h5M5.5 9h3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>Templates</button>
+      <div class="sect">Growth</div>
+      <button data-page="targets"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.2"/><circle cx="8" cy="8" r="3.2"/><circle cx="8" cy="8" r="0.8" fill="currentColor"/></svg>Targets</button>
+      <button data-page="talks"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="6" y="1" width="4" height="8" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v3M5.5 15h5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>Talks &amp; Materials</button>
+      <div class="sect">Modals</div>
+      <button data-modal="m-outreach"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.4"/><path d="M8 5v6M5 8h6" stroke-linecap="round"/></svg>Log outreach</button>
+      <button data-modal="m-venue"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.4"/><path d="M8 5v6M5 8h6" stroke-linecap="round"/></svg>Add venue</button>
+      <button data-modal="m-contact"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.4"/><path d="M8 5v6M5 8h6" stroke-linecap="round"/></svg>Add contact</button>
+      <button data-modal="m-opportunity"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.4"/><path d="M8 5v6M5 8h6" stroke-linecap="round"/></svg>New opportunity</button>
+    </nav>
+    <div class="foot"><b>UI mockup</b> · sample data<br>Signed in as Donna King</div>
+  </aside>
+
+  <main class="content">
+
+  <!-- ============ DASHBOARD ============ -->
+  <section class="page active" id="dashboard">
+    <div class="page-head">
+      <div><h1>Good morning, Donna</h1><div class="sub">Week of Jul 13 – 19 · Kauaʻi (HST)</div></div>
+      <button class="btn btn-primary">+ Log outreach</button>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="lbl">New venues researched</div><div class="val num">4 <small>/ 5 this month</small></div><div class="meter"><i style="width:80%"></i></div><div class="note">1 more to hit July's goal</div></div>
+      <div class="tile"><div class="lbl">Outreach touches</div><div class="val num">6 <small>/ 8 this week</small></div><div class="meter"><i style="width:75%"></i></div><div class="note">2 planned for Friday's hour</div></div>
+      <div class="tile"><div class="lbl">Pitches sent</div><div class="val num">2 <small>/ 3 this month</small></div><div class="meter"><i style="width:66%"></i></div><div class="note">Leadership Kauaʻi awaiting reply</div></div>
+      <div class="tile"><div class="lbl">Gigs booked</div><div class="val num">1 <small>/ 2 this quarter</small></div><div class="meter"><i class="warm" style="width:50%"></i></div><div class="note">Midlife Rewired · records Jul 29</div></div>
+    </div>
+    <div class="grid-2">
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Pipeline funnel — Q3 to date</h2><span class="hint">conversion between stages</span></div>
+          <div class="card-b funnel">
+            <div class="fstep"><span class="fl">Outreach sent</span><div class="fbar" style="width:100%"></div><span class="fv num">18</span></div>
+            <div class="fstep"><span class="fl">In conversation</span><div class="fbar" style="width:39%"></div><span class="fv num">7 <small>· 39%</small></span></div>
+            <div class="fstep"><span class="fl">Pitched</span><div class="fbar" style="width:22%"></div><span class="fv num">4 <small>· 57%</small></span></div>
+            <div class="fstep"><span class="fl">Booked</span><div class="fbar" style="width:17%"></div><span class="fv num">3 <small>· 75%</small></span></div>
+            <div class="fstep"><span class="fl">Delivered</span><div class="fbar" style="width:11%"></div><span class="fv num">2 <small>· 67%</small></span></div>
+            <div class="funnel-leak">1 booked gig cancelled — still counts as booked, but didn't deliver</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Revenue &amp; payments — Q3</h2><span class="hint">paid gigs only</span></div>
+          <div class="card-b money-grid">
+            <div><div class="ms-lbl">Booked</div><div class="ms-val num">$4,050</div><div class="ms-sub num">3 paid gigs</div></div>
+            <div><div class="ms-lbl">Received</div><div class="ms-val num" style="color:var(--good)">$1,700</div><div class="ms-sub num">2 collected</div></div>
+            <div><div class="ms-lbl">Outstanding</div><div class="ms-val num" style="color:var(--warn)">$2,350</div><div class="ms-sub num">2 invoiced</div></div>
+            <div><div class="ms-lbl">Pro bono</div><div class="ms-val num">5</div><div class="ms-sub">visibility gigs</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Needs attention</h2><span class="hint">outreach + payments</span></div>
+          <div class="card-b">
+            <ul class="attn">
+              <li><div><div class="who">Hanalei Wellness Week · $1,500</div><div class="why">Delivered Jun 6 — invoiced 34 days ago, still unpaid</div></div><span class="chip crit">Overdue pay</span></li>
+              <li><div><div class="who">Woman to Woman Hawaii</div><div class="why">No reply since Jul 8 — send warm follow-up</div></div><span class="chip crit">9 days</span></li>
+              <li><div><div class="who">Leadership Kauaʻi Symposium</div><div class="why">Pitch awaiting response</div></div><span class="chip warn">6 days</span></li>
+              <li><div><div class="who">Kapaʻa Women's Circle · $850</div><div class="why">Invoiced Jul 8 — payment due soon</div></div><span class="chip warn">Awaiting pay</span></li>
+              <li><div><div class="who">HLTA Women in Lodging</div><div class="why">Research incomplete — no contact identified</div></div><span class="chip plain">1 / 3</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Coming up</h2></div>
+          <div class="card-b">
+            <ul class="sched">
+              <li><div class="datebox"><div class="m">Jul</div><div class="d num">24</div></div><div><div class="what">BNI — make the specific ask</div><div class="meta">Intro to resort wellness directors on Kauaʻi</div></div></li>
+              <li><div class="datebox"><div class="m">Jul</div><div class="d num">29</div></div><div><div class="what">Midlife Rewired — podcast recording</div><div class="meta">10:00 HST · Zoom · talk: I'm Fine Is a Lie</div></div></li>
+              <li><div class="datebox"><div class="m">Aug</div><div class="d num">02</div></div><div><div class="what">Quarterly pipeline review</div><div class="meta">Pursued → booked → converted ratios</div></div></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PIPELINE ============ -->
+  <section class="page" id="pipeline">
+    <div class="page-head">
+      <div><h1>Pipeline</h1><div class="sub">10 open opportunities · drag cards between stages</div></div>
+      <div style="display:flex; align-items:center; gap:16px">
+        <label class="show-closed"><input type="checkbox" id="showClosed"> Show closed</label>
+        <button class="btn btn-primary">+ New opportunity</button>
+      </div>
+    </div>
+    <div class="board-wrap"><div class="board">
+      <div class="col">
+        <div class="col-h"><span class="dot" style="background:var(--faint)"></span><span class="cn">Researching</span><span class="cc num">2</span></div>
+        <div class="kcard"><div class="org">HLTA Women in Lodging — Kauaʻi</div><div class="talk">Guest wellness workshop · chapter events</div><div class="krow"><span class="chip plain">Association</span><span class="chip warn">Research 1/3</span></div></div>
+        <div class="kcard"><div class="org">Wilcox Health Sports &amp; Fitness Expo</div><div class="talk">Expo table + short talk · September</div><div class="krow"><span class="chip plain">Expo</span><span class="due">Sep 2026</span></div></div>
+      </div>
+      <div class="col">
+        <div class="col-h"><span class="dot" style="background:var(--accent)"></span><span class="cn">Outreach sent</span><span class="cc num">2</span></div>
+        <div class="kcard"><div class="org">Hanalei Bay Resort</div><div class="talk">Wellness Wheel for Women · guest workshop</div><div class="krow"><span class="chip teal">Resort</span><span class="due">follow up Jul 19</span></div></div>
+        <div class="kcard"><div class="org">Woman to Woman Hawaii</div><div class="talk">2027 speaker spot · annual retreat</div><div class="krow"><span class="chip teal">Retreat</span><span class="due over">no reply · 9d</span></div></div>
+      </div>
+      <div class="col">
+        <div class="col-h"><span class="dot" style="background:var(--accent)"></span><span class="cn">In conversation</span><span class="cc num">1</span></div>
+        <div class="kcard"><div class="org">Professional Women's Network Hawaii</div><div class="talk">I'm Fine Is a Lie · monthly luncheon</div><div class="krow"><span class="chip teal">Network</span><span class="chip warm">★ warm intro</span></div></div>
+      </div>
+      <div class="col">
+        <div class="col-h"><span class="dot" style="background:var(--warm)"></span><span class="cn">Pitched</span><span class="cc num">2</span></div>
+        <div class="kcard"><div class="org">Leadership Kauaʻi Women's Symposium</div><div class="talk">Legacy in Motion · annual event</div><div class="krow"><span class="chip plain">Event</span><span class="due over">awaiting · 6d</span></div><div class="kmoney"><span class="chip money">$1,200</span><span class="chip plain">quoted</span></div></div>
+        <div class="kcard"><div class="org">The Second Bloom</div><div class="talk">Podcast guest · midlife reinvention</div><div class="krow"><span class="chip plain">Podcast</span><span class="due">pitched Jul 14</span></div><div class="kmoney"><span class="chip gold">Pro bono</span></div></div>
+      </div>
+      <div class="col">
+        <div class="col-h"><span class="dot" style="background:var(--warm)"></span><span class="cn">Booked</span><span class="cc num">2</span></div>
+        <div class="kcard"><div class="org">Kauai Beach Resort &amp; Spa</div><div class="talk">Wellness Wheel · guest workshop</div><div class="krow"><span class="chip good">Aug 14</span></div><div class="kmoney"><span class="chip money">$1,500</span><span class="chip plain">Unbilled</span></div></div>
+        <div class="kcard"><div class="org">Midlife Rewired Podcast</div><div class="talk">I'm Fine Is a Lie · guest interview</div><div class="krow"><span class="chip good">Jul 29 · 10:00</span></div><div class="kmoney"><span class="chip gold">Pro bono</span></div></div>
+      </div>
+      <div class="col">
+        <div class="col-h"><span class="dot" style="background:var(--good)"></span><span class="cn">Delivered</span><span class="cc num">1</span></div>
+        <div class="kcard"><div class="org">Kapaʻa Women's Circle</div><div class="talk">I'm Fine Is a Lie · delivered Jul 8</div><div class="krow"><span class="chip plain">Wrapping up</span></div><div class="kmoney"><span class="chip money">$850</span><span class="chip warn">Invoiced · 9d</span></div></div>
+      </div>
+      <div class="col closed-col">
+        <div class="col-h"><span class="dot" style="background:var(--faint)"></span><span class="cn">Recently closed</span><span class="cc num">2</span></div>
+        <div class="kcard closed"><div class="org">Kauaʻi Mastermind Group</div><div class="talk">Wellness Wheel · presented Jun 15</div><div class="krow"><span class="chip good">Delivered</span><span class="chip gold">Pro bono</span></div></div>
+        <div class="kcard closed"><div class="org">Princeville Yoga Retreat</div><div class="talk">Wellness Wheel · workshop</div><div class="krow"><span class="chip crit">Cancelled</span><span class="due">was booked Jun 30</span></div></div>
+      </div>
+    </div></div>
+    <div class="sub" style="margin-top:12px; color:var(--faint)">Closed gigs (Delivered &amp; settled, Cancelled, Lost) leave the board and live in <b style="color:var(--muted)">History</b> — toggle <b style="color:var(--muted)">Show closed</b> to peek at recently-closed cards here.</div>
+  </section>
+
+  <!-- ============ OPPORTUNITY DETAIL ============ -->
+  <section class="page" id="opportunity-detail">
+    <div class="crumb">Pipeline <b>› Kauai Beach Resort &amp; Spa — Wellness Wheel</b></div>
+    <div class="page-head">
+      <div><h1>Wellness Wheel · guest workshop</h1><div class="sub">Kauai Beach Resort &amp; Spa &nbsp;·&nbsp; <span class="chip good">Booked</span> &nbsp;<span class="chip money">Paid · $1,500</span> &nbsp;<span class="chip plain">Unbilled</span> &nbsp;Aug 14, 2026</div></div>
+      <div style="display:flex; gap:8px">
+        <button class="btn btn-ghost" data-modal="m-close">Close…</button>
+        <button class="btn btn-primary" data-modal="m-opportunity">Edit</button>
+      </div>
+    </div>
+    <div class="detail-grid">
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Details</h2><button class="btn btn-ghost btn-sm" data-modal="m-opportunity">Edit</button></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:7px 16px">
+            <span style="color:var(--faint)">Talk</span><span>The Wellness Wheel for Women</span>
+            <span style="color:var(--faint)">Format</span><span>Interactive workshop · 60 min</span>
+            <span style="color:var(--faint)">Event date</span><span class="num">Aug 14, 2026 · 10:00 HST</span>
+            <span style="color:var(--faint)">Stage</span><span><span class="chip good">Booked</span></span>
+            <span style="color:var(--faint)">Compensation</span><span>Paid · <span class="num">$1,500</span></span>
+            <span style="color:var(--faint)">Payment</span><span><span class="chip plain">Unbilled</span> — invoice after delivery</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Notes</h2><span class="hint">dated log for this gig</span></div>
+          <div class="card-b">
+            <div><textarea class="inp" placeholder="Add a dated note — call outcome, scheduling change, prep detail…"></textarea>
+              <div style="display:flex; justify-content:flex-end; margin-top:8px"><button class="btn btn-primary btn-sm">Add note</button></div>
+            </div>
+            <ul class="tl" style="margin-top:16px">
+              <li><div class="tw">Iris confirmed Aug 14, 10am; room holds 30. Invoice goes out after delivery.</div><div class="tm">Jul 15 · Donna</div></li>
+              <li><div class="tw">Left voicemail about A/V for the wheel exercise (need a screen + 6 tables).</div><div class="tm">Jul 11 · Donna</div></li>
+              <li><div class="tw">Iris wants the 60-min interactive format, not the 45-min talk.</div><div class="tm">Jul 9 · Donna</div></li>
+            </ul>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Lifecycle</h2><span class="hint">stage history</span></div>
+          <div class="card-b"><ul class="tl">
+            <li><div class="tw"><b>Booked</b> — confirmed Aug 14 + $1,500 fee</div><div class="tm">Jul 8</div></li>
+            <li><div class="tw"><b>Pitched</b> — sent Wellness Wheel proposal + fee</div><div class="tm">Jun 28</div></li>
+            <li><div class="tw"><b>In conversation</b> — Iris replied, wants details</div><div class="tm">Jun 20</div></li>
+            <li><div class="tw"><b>Outreach sent</b> — intro email + one-sheet</div><div class="tm">Jun 12</div></li>
+            <li><div class="tw"><b>Researching</b> — added venue, Kindling complete</div><div class="tm">Jun 5</div></li>
+          </ul></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Venue</h2></div>
+          <div class="card-b">
+            <div class="contact-line"><div class="avatar">KB</div><div style="flex:1"><div class="cl-name">Kauai Beach Resort &amp; Spa</div><div class="cl-role">Resort · Līhuʻe, Kauaʻi</div></div><span class="chip plain" style="cursor:pointer">View</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>On this gig</h2><button class="btn btn-ghost btn-sm">+ Link contact</button></div>
+          <div class="card-b">
+            <div class="contact-line"><div class="avatar w">IK</div><div style="flex:1"><div class="cl-name">Iris Kealoha</div><div class="cl-role">Spa &amp; Wellness Manager</div></div><span class="chip teal">Lead on this gig</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Next follow-up</h2></div>
+          <div class="card-b" style="display:flex; align-items:center; gap:12px">
+            <div class="datebox"><div class="m">Aug</div><div class="d num">15</div></div>
+            <div><div class="cell-main">Send invoice after delivery</div><div class="cell-sub">$1,500 · net 30</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HISTORY ============ -->
+  <section class="page" id="history">
+    <div class="page-head">
+      <div><h1>History</h1><div class="sub">9 closed gigs · 6 delivered · 2 cancelled · 1 lost · $1,850 collected · 3 pro bono</div></div>
+      <button class="btn btn-ghost">Export CSV</button>
+    </div>
+    <div class="toolbar">
+      <div class="search">Search closed gigs…</div>
+      <span class="fpill on">All outcomes</span><span class="fpill">Delivered</span><span class="fpill">Cancelled</span><span class="fpill">Lost</span><span class="fpill">Paid</span><span class="fpill">Pro bono</span><span class="fpill">2026</span>
+    </div>
+    <div class="card"><div class="tbl-wrap"><table>
+      <thead><tr><th>Gig</th><th>Outcome</th><th>Date</th><th>Format</th><th>Comp</th><th>Amount</th><th>Paid</th></tr></thead>
+      <tbody>
+        <tr><td><div class="cell-main">Poʻipū Women's Brunch</div><div class="cell-sub">Legacy in Motion · keynote</div></td><td><span class="chip good">Delivered</span></td><td class="num">May 28</td><td>Keynote</td><td><span class="chip money">Paid</span></td><td class="num">$1,200</td><td><span class="chip good">✓ Paid</span></td></tr>
+        <tr><td><div class="cell-main">Kauaʻi Mastermind Group</div><div class="cell-sub">Wellness Wheel · workshop</div></td><td><span class="chip good">Delivered</span></td><td class="num">Jun 15</td><td>Workshop</td><td><span class="chip gold">Pro bono</span></td><td class="num">—</td><td>—</td></tr>
+        <tr><td><div class="cell-main">Kilauea Wellness Day</div><div class="cell-sub">I'm Fine Is a Lie · workshop</div></td><td><span class="chip good">Delivered</span></td><td class="num">Apr 12</td><td>Workshop</td><td><span class="chip money">Paid</span></td><td class="num">$650</td><td><span class="chip good">✓ Paid</span></td></tr>
+        <tr><td><div class="cell-main">Wailua Yoga Collective</div><div class="cell-sub">Wellness Wheel · workshop</div></td><td><span class="chip good">Delivered</span></td><td class="num">May 10</td><td>Workshop</td><td><span class="chip plain">Trade</span></td><td>Retreat stay</td><td>—</td></tr>
+        <tr><td><div class="cell-main">Kauaʻi Life Podcast</div><div class="cell-sub">Legacy in Motion · guest</div></td><td><span class="chip good">Delivered</span></td><td class="num">Apr 30</td><td>Podcast</td><td><span class="chip gold">Pro bono</span></td><td class="num">—</td><td>—</td></tr>
+        <tr><td><div class="cell-main">Hanalei Sunrise Circle</div><div class="cell-sub">I'm Fine Is a Lie · workshop</div></td><td><span class="chip good">Delivered</span></td><td class="num">Mar 22</td><td>Workshop</td><td><span class="chip gold">Pro bono</span></td><td class="num">—</td><td>—</td></tr>
+        <tr><td><div class="cell-main">Princeville Yoga Retreat</div><div class="cell-sub">Wellness Wheel · cancelled after booking</div></td><td><span class="chip crit">Cancelled</span></td><td class="num">Jun 30</td><td>Workshop</td><td><span class="chip money">Paid</span></td><td class="num">$900</td><td><span class="chip plain">n/a</span></td></tr>
+        <tr><td><div class="cell-main">Kōloa Women's Luncheon</div><div class="cell-sub">Legacy in Motion · cancelled after booking</div></td><td><span class="chip crit">Cancelled</span></td><td class="num">May 5</td><td>Keynote</td><td><span class="chip gold">Pro bono</span></td><td class="num">—</td><td>—</td></tr>
+        <tr><td><div class="cell-main">Garden Isle Women's Expo</div><div class="cell-sub">Pitched · passed on this cycle</div></td><td><span class="chip plain">Lost</span></td><td class="num">Mar 2</td><td>Expo</td><td class="num">—</td><td class="num">—</td><td>—</td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+  <!-- ============ HISTORY DETAIL ============ -->
+  <section class="page" id="history-detail">
+    <div class="crumb">History <b>› Poʻipū Women's Brunch</b></div>
+    <div class="page-head">
+      <div><h1>Poʻipū Women's Brunch</h1><div class="sub"><span class="chip good">Delivered</span> &nbsp;<span class="chip money">Paid · $1,200</span> &nbsp;<span class="chip good">✓ Paid Jun 12</span> &nbsp;Closed gig · read-only record</div></div>
+      <div style="display:flex; gap:8px"><button class="btn btn-ghost">Duplicate</button><button class="btn btn-ghost">Reopen</button></div>
+    </div>
+    <div class="detail-grid">
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Gig</h2></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:7px 16px">
+            <span style="color:var(--faint)">Talk</span><span>Legacy in Motion</span>
+            <span style="color:var(--faint)">Format</span><span>Keynote · 45 min</span>
+            <span style="color:var(--faint)">Venue</span><span>Poʻipū Women's Brunch (monthly gathering)</span>
+            <span style="color:var(--faint)">Event date</span><span class="num">May 28, 2026</span>
+            <span style="color:var(--faint)">Outcome</span><span>Delivered — ~40 attendees</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Compensation &amp; payment</h2></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:7px 16px">
+            <span style="color:var(--faint)">Type</span><span>Paid</span>
+            <span style="color:var(--faint)">Fee</span><span class="num">$1,200</span>
+            <span style="color:var(--faint)">Status</span><span><span class="chip good">Paid in full</span></span>
+            <span style="color:var(--faint)">Invoiced</span><span class="num">May 29, 2026 · inv #2026-014</span>
+            <span style="color:var(--faint)">Paid on</span><span class="num">Jun 12, 2026 · check</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Lifecycle</h2><span class="hint">how this gig closed</span></div>
+          <div class="card-b"><ul class="tl">
+            <li><div class="tw"><b>Paid</b> — $1,200 received; gig closed to History</div><div class="tm">Jun 12</div></li>
+            <li><div class="tw"><b>Invoiced</b> — sent invoice #2026-014</div><div class="tm">May 29</div></li>
+            <li><div class="tw"><b>Delivered</b> — keynote, ~40 women</div><div class="tm">May 28</div></li>
+            <li><div class="tw"><b>Booked</b> — confirmed date + fee</div><div class="tm">Apr 15</div></li>
+          </ul></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Venue &amp; contact</h2></div>
+          <div class="card-b">
+            <div class="contact-line"><div class="avatar">PB</div><div style="flex:1"><div class="cl-name">Poʻipū Women's Brunch</div><div class="cl-role">Monthly women's gathering · South Shore</div></div></div>
+            <div class="contact-line"><div class="avatar w">DL</div><div style="flex:1"><div class="cl-name">Dana Lopez</div><div class="cl-role">Organizer · Lead on this gig</div></div><span class="chip warm">Warm</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Outcome notes</h2></div>
+          <div class="card-b" style="font-size:13px; color:var(--muted)">
+            Strong response — Dana asked about a follow-up series. Testimonial received (filed in Talks &amp; Materials). Two attendees wanted Legacy Spark Chats → handed off to legacy-tracker.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Record</h2></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:6px 16px">
+            <span style="color:var(--faint)">Closed</span><span class="num">Jun 12, 2026</span>
+            <span style="color:var(--faint)">Source</span><span>Warm intro · BNI</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VENUES ============ -->
+  <section class="page" id="venues">
+    <div class="page-head">
+      <div><h1>Venues &amp; Organizations</h1><div class="sub">8 tracked · 5 outreach-ready</div></div>
+      <button class="btn btn-primary">+ Add venue</button>
+    </div>
+    <div class="toolbar">
+      <div class="search">Search venues…</div>
+      <span class="fpill on">All types</span><span class="fpill">Resorts</span><span class="fpill">Networks</span><span class="fpill">Podcasts</span><span class="fpill">Ready only</span>
+    </div>
+    <div class="card"><div class="tbl-wrap"><table>
+      <thead><tr><th>Organization</th><th>Type</th><th>Why it fits</th><th>Research</th><th>Contacts</th><th>Last touch</th></tr></thead>
+      <tbody>
+        <tr><td><div class="cell-main">Professional Women's Network Hawaii</div><div class="cell-sub">Statewide · est. 1978</div></td><td><span class="chip teal">Network</span></td><td><div class="cell-sub">Monthly guest speakers; midlife professional women</div></td><td><span class="ready"><span class="dot"></span>Ready</span></td><td class="num">1</td><td class="num">Jul 10</td></tr>
+        <tr><td><div class="cell-main">Hanalei Bay Resort</div><div class="cell-sub">Princeville, Kauaʻi</div></td><td><span class="chip teal">Resort</span></td><td><div class="cell-sub">Wellness programming includes coaching &amp; personal growth</div></td><td><span class="ready"><span class="dot"></span>Ready</span></td><td class="num">1</td><td class="num">Jul 12</td></tr>
+        <tr><td><div class="cell-main">Leadership Kauaʻi Women's Symposium</div><div class="cell-sub">Annual · Līhuʻe</div></td><td><span class="chip plain">Event</span></td><td><div class="cell-sub">Local stage; wellness coaches have presented before</div></td><td><span class="ready"><span class="dot"></span>Ready</span></td><td class="num">1</td><td class="num">Jul 11</td></tr>
+        <tr><td><div class="cell-main">Woman to Woman Hawaii</div><div class="cell-sub">35th annual retreat · Oʻahu</div></td><td><span class="chip plain">Retreat</span></td><td><div class="cell-sub">Spiritual renewal, speakers, workshops · Aug 2026</div></td><td><span class="ready"><span class="dot"></span>Ready</span></td><td class="num">1</td><td class="num">Jul 8</td></tr>
+        <tr><td><div class="cell-main">WBEC-West</div><div class="cell-sub">Nationwide · virtual</div></td><td><span class="chip teal">Network</span></td><td><div class="cell-sub">Women building their next chapter; virtual = no geo barrier</div></td><td><span class="ready notready"><span class="dot"></span>2 / 3</span></td><td class="num">1</td><td>—</td></tr>
+        <tr><td><div class="cell-main">HLTA Women in Lodging — Kauaʻi</div><div class="cell-sub">Chapter events TBD 2026</div></td><td><span class="chip plain">Association</span></td><td><div class="cell-sub">These women host the retreat guests she speaks to</div></td><td><span class="ready notready"><span class="dot"></span>1 / 3</span></td><td class="num">0</td><td>—</td></tr>
+        <tr><td><div class="cell-main">Midlife Rewired Podcast</div><div class="cell-sub">Weekly · 12k listeners</div></td><td><span class="chip warm">Podcast</span></td><td><div class="cell-sub">Midlife women's show — warm, already-listening audience</div></td><td><span class="ready"><span class="dot"></span>Ready</span></td><td class="num">1</td><td class="num">Jul 6</td></tr>
+        <tr><td><div class="cell-main">Wilcox Health Sports &amp; Fitness Expo</div><div class="cell-sub">Tied to Kauaʻi Marathon</div></td><td><span class="chip plain">Expo</span></td><td><div class="cell-sub">Strong contingent of women 40s–60s who prioritize themselves</div></td><td><span class="ready notready"><span class="dot"></span>2 / 3</span></td><td class="num">0</td><td>—</td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+  <!-- ============ VENUE DETAIL ============ -->
+  <section class="page" id="venue-detail">
+    <div class="crumb">Venues &amp; Orgs <b>› Professional Women's Network Hawaii</b></div>
+    <div class="page-head">
+      <div><h1>Professional Women's Network Hawaii</h1><div class="sub"><span class="chip teal">Network</span> &nbsp;Hawaii's oldest women's business network (1978) · pwnhawaii.org · <span class="ready"><span class="dot"></span>Outreach-ready</span></div></div>
+      <div style="display:flex; gap:8px"><button class="btn btn-ghost">Log touch</button><button class="btn btn-primary">Compose email</button></div>
+    </div>
+    <div class="detail-grid">
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card kindling">
+          <div class="card-h"><h2>Research — Kindling</h2><button class="btn btn-ghost btn-sm">Edit</button></div>
+          <div class="kf"><h3>What it is</h3><p>Hawaii's oldest women's business network, founded 1978. Monthly luncheons with guest speakers, statewide access, active Oʻahu and neighbor-island chapters.</p></div>
+          <div class="kf"><h3>Why it fits</h3><p>Monthly events feature guest speakers, and the room is midlife professional women — exactly the audience for "I'm Fine Is a Lie." Statewide reach extends beyond Kauaʻi without travel.</p></div>
+          <div class="kf"><h3>How to approach</h3><p>Attend a virtual event first, then ask about their speaker process. Marcy (events chair) came via a BNI warm intro — reference the June luncheon when following up.</p></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Opportunities</h2><button class="btn btn-ghost btn-sm">+ New</button></div>
+          <div class="card-b">
+            <div style="display:flex; align-items:center; gap:10px">
+              <div style="flex:1"><div class="cell-main">Monthly luncheon — guest speaker</div><div class="cell-sub">I'm Fine Is a Lie · targeting Oct 2026 slot</div></div>
+              <span class="chip teal">In conversation</span>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:11px; padding-top:11px; border-top:1px solid var(--line)">
+              <span style="font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--faint); font-weight:700">On this gig</span>
+              <span class="chip teal">Marcy Tanaka · Primary</span>
+              <span class="chip warm">★ Pua Lindsey · Introducer</span>
+              <span class="btn btn-ghost btn-sm" style="margin-left:auto">+ Link contact</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Activity</h2><span class="hint">outreach journal + stage changes</span></div>
+          <div class="card-b"><ul class="tl">
+            <li><div class="tw"><b>Email</b> — sent speaker menu + one-sheet to Marcy</div><div class="tm">Jul 10 · 2:14 pm · via Gmail</div></li>
+            <li><div class="tw"><b>Stage</b> — Outreach sent → In conversation</div><div class="tm">Jul 10</div></li>
+            <li class="dm"><div class="tw"><b>LinkedIn DM</b> — thanked Marcy for the intro, asked about speaker process</div><div class="tm">Jul 3 · 9:05 am</div></li>
+            <li><div class="tw"><b>Note</b> — Pua (PWN member liaison, BNI colleague) introduced me to Marcy; attended virtual luncheon Jun 26</div><div class="tm">Jun 26</div></li>
+          </ul></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Contacts</h2><button class="btn btn-ghost btn-sm">+ Add</button></div>
+          <div class="card-b">
+            <div class="contact-line"><div class="avatar">MT</div><div style="flex:1"><div class="cl-name">Marcy Tanaka</div><div class="cl-role">Events Chair · marcy@pwnhawaii.org</div></div><span class="chip teal">Primary</span><span class="chip warm">Warm</span></div>
+            <div class="contact-line"><div class="avatar w">PL</div><div style="flex:1"><div class="cl-name"><span class="star">★</span> Pua Lindsey</div><div class="cl-role">Member liaison · BNI colleague</div></div><span class="chip plain">Introducer</span><span class="chip warm">Warm</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Next follow-up</h2></div>
+          <div class="card-b" style="display:flex; align-items:center; gap:12px">
+            <div class="datebox"><div class="m">Jul</div><div class="d num">18</div></div>
+            <div><div class="cell-main">Check in on October slot</div><div class="cell-sub">Reminder email · Friday morning hour</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Details</h2></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:6px 16px">
+            <span style="color:var(--faint)">Type</span><span>Women's business network</span>
+            <span style="color:var(--faint)">Location</span><span>Statewide (HQ Honolulu)</span>
+            <span style="color:var(--faint)">Source</span><span>Kindling Report · BNI intro</span>
+            <span style="color:var(--faint)">Added</span><span class="num">Jun 20, 2026</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONTACTS ============ -->
+  <section class="page" id="contacts">
+    <div class="page-head">
+      <div><h1>Contacts</h1><div class="sub">7 people · 2 power partners</div></div>
+      <button class="btn btn-primary">+ Add contact</button>
+    </div>
+    <div class="toolbar">
+      <div class="search">Search contacts…</div>
+      <span class="fpill on">Everyone</span><span class="fpill">Power partners</span><span class="fpill">Needs follow-up</span>
+    </div>
+    <div class="card"><div class="tbl-wrap"><table>
+      <thead><tr><th>Name</th><th>Role · Organization</th><th>Warmth</th><th>Source</th><th>Last touch</th><th>Next follow-up</th></tr></thead>
+      <tbody>
+        <tr><td><div class="cell-main"><span class="star">★</span> Jay Nakamura</div><div class="cell-sub">Power partner</div></td><td><div>Massage therapist</div><div class="cell-sub">BNI Kauaʻi</div></td><td><span class="chip warm">Warm</span></td><td>BNI</td><td class="num">Jul 9</td><td class="num">Jul 23</td></tr>
+        <tr><td><div class="cell-main">Marcy Tanaka</div></td><td><div>Events Chair</div><div class="cell-sub">PWN Hawaii</div></td><td><span class="chip warm">Warm</span></td><td>Warm intro (Pua)</td><td class="num">Jul 10</td><td class="num">Jul 18</td></tr>
+        <tr><td><div class="cell-main"><span class="star">★</span> Pua Lindsey</div><div class="cell-sub">Power partner</div></td><td><div>Member Liaison</div><div class="cell-sub">PWN Hawaii <span class="chip plain" style="padding:0 6px; font-size:10px; vertical-align:1px">＋2 orgs</span></div></td><td><span class="chip warm">Warm</span></td><td>BNI</td><td class="num">Jul 3</td><td class="num">Jul 20</td></tr>
+        <tr><td><div class="cell-main">Leilani Chow</div></td><td><div>Wellness Director</div><div class="cell-sub">Hanalei Bay Resort</div></td><td><span class="chip plain">Warming</span></td><td>Cold outreach</td><td class="num">Jul 12</td><td class="num">Jul 19</td></tr>
+        <tr><td><div class="cell-main">Kai Wong</div></td><td><div>Host</div><div class="cell-sub">Midlife Rewired Podcast</div></td><td><span class="chip warm">Warm</span></td><td>Inbound invite</td><td class="num">Jul 6</td><td><span class="chip good">Booked</span></td></tr>
+        <tr><td><div class="cell-main">Susan Alvarez</div></td><td><div>Program Manager</div><div class="cell-sub">WBEC-West</div></td><td><span class="chip plain">Cold</span></td><td>Kindling Report</td><td>—</td><td class="num">Jul 25</td></tr>
+        <tr><td><div class="cell-main">Renee Kahale</div></td><td><div>Retreat Coordinator</div><div class="cell-sub">Woman to Woman Hawaii</div></td><td><span class="chip plain">Cold</span></td><td>Kindling Report</td><td class="num">Jul 8</td><td><span class="chip crit">Overdue</span></td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+  <!-- ============ CONTACT DETAIL ============ -->
+  <section class="page" id="contact-detail">
+    <div class="crumb">Contacts <b>› Pua Lindsey</b></div>
+    <div class="page-head">
+      <div><h1><span class="star">★</span> Pua Lindsey</h1><div class="sub"><span class="chip warm">Power partner</span> &nbsp;<span class="chip warm">Warm</span> &nbsp;Wears three hats across the Kauaʻi community</div></div>
+      <div style="display:flex; gap:8px"><button class="btn btn-ghost">Log touch</button><button class="btn btn-primary">Compose email</button></div>
+    </div>
+    <div class="detail-grid">
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Affiliations</h2><button class="btn btn-ghost btn-sm">+ Add affiliation</button></div>
+          <div class="card-b">
+            <div class="contact-line"><div class="avatar">PW</div><div style="flex:1"><div class="cl-name">Professional Women's Network Hawaii</div><div class="cl-role">Member Liaison · introduced Donna to the events chair</div></div><span class="chip teal">Primary contact</span></div>
+            <div class="contact-line"><div class="avatar w">BN</div><div style="flex:1"><div class="cl-name">BNI Kauaʻi</div><div class="cl-role">Chapter colleague · weekly referrals group</div></div><span class="chip plain">Member</span></div>
+            <div class="contact-line"><div class="avatar">WX</div><div style="flex:1"><div class="cl-name">Wilcox Health Sports &amp; Fitness Expo</div><div class="cl-role">Volunteer organizer · programs the wellness stage</div></div><span class="chip plain">Volunteer</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Opportunities across orgs</h2><span class="hint">her role on each gig</span></div>
+          <div class="card-b" style="display:flex; flex-direction:column; gap:11px">
+            <div style="display:flex; align-items:center; gap:10px">
+              <div style="flex:1"><div class="cell-main">PWN monthly luncheon — guest speaker</div><div class="cell-sub">Professional Women's Network Hawaii · Oct 2026 slot</div></div>
+              <span class="chip warm">★ Introducer</span><span class="chip teal">In conversation</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; border-top:1px solid var(--line); padding-top:11px">
+              <div style="flex:1"><div class="cell-main">Wilcox Expo — wellness-stage talk + table</div><div class="cell-sub">Wilcox Health Sports &amp; Fitness Expo · September</div></div>
+              <span class="chip teal">Primary</span><span class="chip plain">Researching</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Activity</h2><span class="hint">every touch, across all her orgs</span></div>
+          <div class="card-b"><ul class="tl">
+            <li class="dm"><div class="tw"><b>LinkedIn DM</b> — asked if she'd pass my name to the Wilcox Expo organizers</div><div class="tm">Jul 3 · 9:20 am</div></li>
+            <li><div class="tw"><b>Note</b> — introduced me to Marcy Tanaka (PWN events chair)</div><div class="tm">Jun 26</div></li>
+            <li><div class="tw"><b>In person</b> — BNI weekly meeting, floated a referral collaboration</div><div class="tm">Jun 24</div></li>
+          </ul></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Reach her</h2></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:7px 14px">
+            <span style="color:var(--faint)">Email</span><span>pua.lindsey@gmail.com</span>
+            <span style="color:var(--faint)">Phone</span><span class="num">(808) 555-0147</span>
+            <span style="color:var(--faint)">LinkedIn</span><span>in/pualindsey</span>
+            <span style="color:var(--faint)">Instagram</span><span>@pua.kauai</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Relationship</h2></div>
+          <div class="card-b" style="display:flex; flex-direction:column; gap:10px">
+            <div style="display:flex; align-items:center; gap:8px"><span class="chip warm">★ Power partner</span><span class="cell-sub" style="max-width:none">referral ally — nurture, don't pitch</span></div>
+            <div style="display:flex; align-items:center; gap:8px"><span class="chip warm">Warm</span><span class="cell-sub" style="max-width:none">warmth is the person, not any one org</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Next follow-up</h2></div>
+          <div class="card-b" style="display:flex; align-items:center; gap:12px">
+            <div class="datebox"><div class="m">Jul</div><div class="d num">20</div></div>
+            <div><div class="cell-main">Thank her + check Expo referral</div><div class="cell-sub">Reminder · Friday morning hour</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Details</h2></div>
+          <div class="card-b" style="font-size:13px; display:grid; grid-template-columns:auto 1fr; gap:6px 16px">
+            <span style="color:var(--faint)">Source</span><span>BNI Kauaʻi</span>
+            <span style="color:var(--faint)">Added</span><span class="num">Jun 22, 2026</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COMPOSER ============ -->
+  <section class="page" id="composer">
+    <div class="page-head">
+      <div><h1>Compose</h1><div class="sub">Sends as donna@360balancedliving.com via Gmail · logged to the outreach journal</div></div>
+    </div>
+    <div class="compose-grid">
+      <div class="card">
+        <div class="field"><span class="fl2">To</span><span class="pill-to">Leilani Chow — Hanalei Bay Resort</span></div>
+        <div class="field"><span class="fl2">Subject</span><span style="font-weight:650">Local Kauaʻi speaker for your women's wellness programming</span></div>
+        <div class="field"><span class="fl2">Template</span><span class="chip teal">Formal Outreach Email</span><span class="chip plain" style="cursor:pointer">change</span></div>
+        <div class="rt-bar" aria-label="Formatting">
+          <button class="on" style="font-weight:800">B</button><button style="font-style:italic">I</button><button style="text-decoration:underline">U</button>
+          <span class="sep"></span><button>H₂</button><button>¶</button><button>“”</button>
+          <span class="sep"></span><button>•</button><button>1.</button><button>🔗</button><button>🖼</button>
+        </div>
+        <div class="body-area">
+          <p>Hi Leilani,</p>
+          <p>My name is Donna King. I'm a legacy and wellness coach based right here on Kauaʻi, and I work with women in the last third of their lives who are ready to stop saying "I'm fine" and start living the life they've quietly been waiting for.</p>
+          <p>I offer guest wellness workshops designed for resort wellness programs and women's gatherings. My three talks are:</p>
+          <ul>
+            <li><b>I'm Fine Is a Lie</b> — permission to stop hiding and start living <i>(45–60 min)</i></li>
+            <li><b>Legacy in Motion</b> — what does your next chapter actually look like? <i>(45–60 min)</i></li>
+            <li><b>The Wellness Wheel for Women</b> — an interactive workshop for the whole self <i>(flexible)</i></li>
+          </ul>
+          <p>If you're ever looking for a local speaker to add a meaningful experience for your guests, I'd love to be considered. Happy to send a brief overview or hop on a 15-minute call.</p>
+          <p>Warmly,<br><b>Donna King</b> · Legacy &amp; Wellness Coach · 360 Balanced Living</p>
+        </div>
+        <div class="attach-row">
+          <span class="attach">📄 Donna-King-One-Sheet.pdf <small>1.2 MB</small> <span class="x">✕</span></span>
+          <span class="attach">📄 Guest-Workshop-Menu.pdf <small>410 KB</small> <span class="x">✕</span></span>
+          <button class="btn btn-ghost btn-sm">+ Attach</button>
+        </div>
+        <div class="compose-foot">
+          <button class="btn btn-primary">Send</button>
+          <button class="btn btn-ghost">Save draft</button>
+          <span class="hint2">Follow-up reminder: 7 days after send ▾</span>
+        </div>
+      </div>
+      <div class="card ctx">
+        <div class="card-h"><h2>Research context</h2><span class="hint">Hanalei Bay Resort</span></div>
+        <div class="kf2"><h3>Why it fits</h3><p>Their wellness programming explicitly includes coaching and personal growth. Guests are imported from around the world — exactly the women she serves.</p></div>
+        <div class="kf2"><h3>How to approach</h3><p>Lead with "local Kauaʻi speaker" — resorts import guests but love local experts. Offer the Wellness Wheel as an interactive guest experience first.</p></div>
+        <div class="kf2"><h3>Recent touches</h3><p class="tip">Jul 12 — Instagram comment on their retreat post<br>Jul 5 — followed venue on Instagram</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TEMPLATES ============ -->
+  <section class="page" id="templates">
+    <div class="page-head">
+      <div><h1>Message Templates</h1><div class="sub">Shared seeds stay pristine — editing one clones it to your library</div></div>
+      <button class="btn btn-primary">+ New template</button>
+    </div>
+    <div class="tpl-grid">
+      <div class="card tpl">
+        <div class="card-h"><h2>Venue DM</h2><span class="chip plain">Shared seed</span></div>
+        <div class="card-b">
+          <p>Instagram / LinkedIn first touch for retreat venues, yoga studios, spas, and wellness properties.</p>
+          <div class="tpl-preview">"I've been following [your studio] and really love [specific thing]… If you ever bring in local speakers or wellness experts for guest experiences, I'd love to be on your radar."</div>
+          <div class="use num">Used 7 times · last Jul 12</div>
+        </div>
+      </div>
+      <div class="card tpl">
+        <div class="card-h"><h2>Formal Outreach Email</h2><span class="chip teal">Customized</span></div>
+        <div class="card-b">
+          <p>Event directors, retreat coordinators, and wellness program managers. Includes the three-talk menu.</p>
+          <div class="tpl-preview">"I work with women in the last third of their lives who are ready to stop saying 'I'm fine'… My three talks are: I'm Fine Is a Lie · Legacy in Motion · The Wellness Wheel for Women."</div>
+          <div class="use num">Used 11 times · last Jul 12</div>
+        </div>
+      </div>
+      <div class="card tpl">
+        <div class="card-h"><h2>Power Partner DM</h2><span class="chip plain">Shared seed</span></div>
+        <div class="card-b">
+          <p>BNI colleagues, estheticians, massage therapists, hairdressers, grief counselors — referral relationships.</p>
+          <div class="tpl-preview">"I think the women you work with may be feeling the same way… Would you be open to a 15-minute chat to see if there's a natural referral relationship?"</div>
+          <div class="use num">Used 4 times · last Jul 9</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TARGETS ============ -->
+  <section class="page" id="targets">
+    <div class="page-head">
+      <div><h1>Targets</h1><div class="sub">Goals that fit two hours a week — one hour Monday, one hour Friday</div></div>
+      <button class="btn btn-primary">+ New target</button>
+    </div>
+    <div class="card">
+      <div class="trow hd"><span>Target</span><span>Cadence</span><span class="hide-sm">Progress</span><span>Actual / Goal</span><span></span></div>
+      <div class="trow">
+        <div><div class="tn">New venues researched</div><div class="td2">All 3 Kindling fields + 1 contact = counted</div></div>
+        <span class="chip plain">Monthly</span>
+        <div class="meter hide-sm"><i style="width:80%"></i></div>
+        <div class="prog num">4 / 5</div>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+      </div>
+      <div class="trow">
+        <div><div class="tn">Outreach touches</div><div class="td2">Emails, DMs, calls, in-person</div></div>
+        <span class="chip plain">Weekly</span>
+        <div class="meter hide-sm"><i style="width:75%"></i></div>
+        <div class="prog num">6 / 8</div>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+      </div>
+      <div class="trow">
+        <div><div class="tn">Follow-ups sent</div><div class="td2">Open threads nudged within 7 days</div></div>
+        <span class="chip plain">Weekly</span>
+        <div class="meter hide-sm"><i style="width:100%; background:var(--good)"></i></div>
+        <div class="prog num">3 / 3</div>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+      </div>
+      <div class="trow">
+        <div><div class="tn">Pitches sent</div><div class="td2">Formal speaker pitch or podcast pitch</div></div>
+        <span class="chip plain">Monthly</span>
+        <div class="meter hide-sm"><i style="width:66%"></i></div>
+        <div class="prog num">2 / 3</div>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+      </div>
+      <div class="trow">
+        <div><div class="tn">Gigs booked</div><div class="td2">Speaking or podcast, confirmed date</div></div>
+        <span class="chip plain">Quarterly</span>
+        <div class="meter hide-sm"><i class="warm" style="width:50%"></i></div>
+        <div class="prog num">1 / 2</div>
+        <button class="btn btn-ghost btn-sm">Edit</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TALKS ============ -->
+  <section class="page" id="talks">
+    <div class="page-head">
+      <div><h1>Talks &amp; Materials</h1><div class="sub">The Guest Workshop menu — attach these to any outreach</div></div>
+      <button class="btn btn-primary">+ Add talk</button>
+    </div>
+    <div class="talk-grid">
+      <div class="card talk"><div class="card-b">
+        <h3>I'm Fine Is a Lie</h3><div class="tag"><span class="chip teal">Keynote / workshop</span> · 45–60 min</div>
+        <p>Permission to stop hiding and start living. The signature talk — lands immediately with women 40s+ who've said "I'm fine" so long they believe it.</p>
+        <div class="use num" style="font-size:12px; color:var(--faint); margin-top:10px">Pitched 6× · delivered 2×</div>
+      </div></div>
+      <div class="card talk"><div class="card-b">
+        <h3>Legacy in Motion</h3><div class="tag"><span class="chip teal">Keynote / workshop</span> · 45–60 min</div>
+        <p>What does your next chapter actually look like? Vision work for the last third of life — pairs with the podcast of the same name.</p>
+        <div class="use num" style="font-size:12px; color:var(--faint); margin-top:10px">Pitched 3× · delivered 1×</div>
+      </div></div>
+      <div class="card talk"><div class="card-b">
+        <h3>The Wellness Wheel for Women</h3><div class="tag"><span class="chip warm">Interactive</span> · flexible length</div>
+        <p>A hands-on workshop for the whole self. The strongest fit for resort guest experiences and retreat breakouts.</p>
+        <div class="use num" style="font-size:12px; color:var(--faint); margin-top:10px">Pitched 4× · delivered 3×</div>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Materials</h2><button class="btn btn-ghost btn-sm">+ Upload</button></div>
+      <div class="mat"><div class="ficon">PDF</div><div style="flex:1"><div class="mn">Donna-King-One-Sheet.pdf</div><div class="ms num">1.2 MB · updated Jul 2 · attached 9×</div></div><button class="btn btn-ghost btn-sm">Download</button></div>
+      <div class="mat"><div class="ficon">PDF</div><div style="flex:1"><div class="mn">Guest-Workshop-Menu.pdf</div><div class="ms num">410 KB · updated Jun 28 · attached 7×</div></div><button class="btn btn-ghost btn-sm">Download</button></div>
+      <div class="mat"><div class="ficon">ZIP</div><div style="flex:1"><div class="mn">Speaker-Bio-and-Headshots.zip</div><div class="ms num">6.8 MB · updated May 30 · attached 3×</div></div><button class="btn btn-ghost btn-sm">Download</button></div>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<!-- ============ MODAL: LOG OUTREACH ============ -->
+<div class="overlay" id="m-outreach" role="dialog" aria-modal="true" aria-labelledby="mo-t">
+  <div class="modal">
+    <div class="modal-h"><h2 id="mo-t">Log outreach</h2><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-b">
+      <div class="frm"><label>Contact</label><div class="inp selbox">Marcy Tanaka — PWN Hawaii <span>▾</span></div></div>
+      <div class="frm"><label>Channel</label>
+        <div class="seg"><button>Email</button><button class="on">LinkedIn DM</button><button>Call</button><button>In person</button></div>
+      </div>
+      <div class="row2">
+        <div class="frm"><label>Date</label><input class="inp num" value="Jul 16, 2026"></div>
+        <div class="frm"><label>Opportunity <span class="opt">optional</span></label><div class="inp selbox">Monthly luncheon — In conversation <span>▾</span></div></div>
+      </div>
+      <div class="frm"><label>Note</label><textarea class="inp">Checked in on the October luncheon slot; Marcy said the committee meets next week.</textarea></div>
+      <div class="switch-row">
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Schedule follow-up reminder"></button>
+        <div><div class="sw-l">Schedule follow-up reminder</div><div class="sw-d">If no reply, remind me in <b>7 days ▾</b> — lands on the Dashboard and by email.</div></div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="btn btn-primary" data-close>Log touch</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Counts toward this week's 8-touch target</span></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: ADD VENUE ============ -->
+<div class="overlay" id="m-venue" role="dialog" aria-modal="true" aria-labelledby="mv-t">
+  <div class="modal">
+    <div class="modal-h"><h2 id="mv-t">Add venue</h2><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-b">
+      <div class="frm"><label>Organization name</label><input class="inp" value="Kauai Beach Resort &amp; Spa"></div>
+      <div class="row2">
+        <div class="frm"><label>Type</label><div class="inp selbox">Resort <span>▾</span></div></div>
+        <div class="frm"><label>Location</label><input class="inp" value="Līhuʻe, Kauaʻi"></div>
+      </div>
+      <div class="row2">
+        <div class="frm"><label>Website <span class="opt">optional</span></label><input class="inp" placeholder="https://…"></div>
+        <div class="frm"><label>Source</label><div class="inp selbox">Own research <span>▾</span></div></div>
+      </div>
+      <div class="frm-sect">Research — Kindling</div>
+      <div class="frm"><label>What it is</label><textarea class="inp">Full-service beachfront resort with a spa and an events program; hosts wellness weekends in the shoulder season.</textarea></div>
+      <div class="frm"><label>Why it fits</label><textarea class="inp">Spa clientele skews women 45+; the events calendar already includes guest practitioners.</textarea></div>
+      <div class="frm"><label>How to approach</label><textarea class="inp" placeholder="What's the play? (attend an event first, warm intro, who to ask for…)"></textarea></div>
+      <div class="kind-hint">Fill in all three research fields and add at least one contact to count this venue toward July's <b>new venues researched</b> target.</div>
+    </div>
+    <div class="modal-f"><button class="btn btn-primary" data-close>Add venue</button><button class="btn btn-ghost" data-close>Save, finish research later</button></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: ADD CONTACT ============ -->
+<div class="overlay" id="m-contact" role="dialog" aria-modal="true" aria-labelledby="mc-t">
+  <div class="modal">
+    <div class="modal-h"><h2 id="mc-t">Add contact</h2><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-b">
+      <div class="frm"><label>Find existing person first <span class="opt">avoid duplicates</span></label><div class="inp selbox"><span style="color:var(--faint)">Search contacts by name…</span> <span>🔍</span></div></div>
+      <div style="background:var(--warm-soft); border:1px solid var(--line); border-radius:10px; padding:10px 12px">
+        <div style="display:flex; align-items:center; gap:10px">
+          <div class="avatar w">PL</div>
+          <div style="flex:1"><div class="cl-name"><span class="star">★</span> Pua Lindsey</div><div class="cl-role">Already a contact · Member Liaison, PWN Hawaii ＋2 orgs</div></div>
+          <button class="btn btn-ghost btn-sm">Add this org to her</button>
+        </div>
+        <div style="font-size:12px; color:var(--muted); font-style:italic; margin-top:8px">Wears multiple hats? Attach this organization to the existing person — don't create a duplicate.</div>
+      </div>
+      <div class="frm-sect">…or create a new person</div>
+      <div class="row2">
+        <div class="frm"><label>Name</label><input id="mc-name" class="inp" value="Iris Kealoha"></div>
+        <div class="frm"><label>Role / title <span class="opt">at this org</span></label><input id="mc-role" class="inp" value="Spa &amp; Wellness Manager"></div>
+      </div>
+      <div class="frm"><label>Organization</label><div class="inp selbox"><span id="mc-org">Kauai Beach Resort &amp; Spa</span> <span>▾</span></div></div>
+      <div class="row2">
+        <div class="frm"><label>Email</label><input id="mc-email" class="inp" value="iris.k@kauaibeachresort.com"></div>
+        <div class="frm"><label>Phone <span class="opt">optional</span></label><input class="inp" placeholder="(808) …"></div>
+      </div>
+      <div class="row2">
+        <div class="frm"><label>LinkedIn <span class="opt">optional</span></label><input class="inp" placeholder="profile URL"></div>
+        <div class="frm"><label>Instagram <span class="opt">optional</span></label><input class="inp" placeholder="@handle"></div>
+      </div>
+      <div class="frm"><label>Warmth</label>
+        <div class="seg"><button class="on">Cold</button><button>Warming</button><button>Warm</button></div>
+      </div>
+      <div class="switch-row">
+        <button class="switch" role="switch" aria-checked="false" aria-label="Mark as power partner"></button>
+        <div><div class="sw-l">Power partner ★</div><div class="sw-d">A referral ally who serves the same women without competing — massage therapists, estheticians, grief counselors. Gets its own filter and DM template; follow-ups nurture the relationship rather than push a pitch.</div></div>
+      </div>
+      <div class="frm"><label>Warm intro / mutual connection <span class="opt">optional</span></label><input class="inp" placeholder="e.g. Jay Nakamura (BNI) offered an introduction"></div>
+      <div class="frm"><label>Notes <span class="opt">optional</span></label><textarea class="inp" placeholder="Anything worth remembering before the first touch…"></textarea></div>
+    </div>
+    <div class="modal-f"><button class="btn btn-primary" data-close>Add contact</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Completes research readiness for this venue</span></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: NEW OPPORTUNITY ============ -->
+<div class="overlay" id="m-opportunity" role="dialog" aria-modal="true" aria-labelledby="mop-t">
+  <div class="modal">
+    <div class="modal-h"><h2 id="mop-t">New opportunity</h2><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-b">
+      <div class="frm"><label>Venue / organization</label><div class="inp selbox"><span id="mop-org">Kauai Beach Resort &amp; Spa</span> <span>▾</span></div></div>
+      <div class="row2">
+        <div class="frm"><label>Talk / offer</label><div class="inp selbox">The Wellness Wheel for Women <span>▾</span></div></div>
+        <div class="frm"><label>Event date <span class="opt">optional</span></label><input class="inp" placeholder="e.g. Oct 2026"></div>
+      </div>
+      <div class="frm"><label>Format</label>
+        <div class="seg"><button class="on">Workshop</button><button>Keynote</button><button>Podcast spot</button><button>Expo table</button></div>
+      </div>
+      <div class="row2">
+        <div class="frm"><label>Starting stage</label><div class="inp selbox">Researching <span>▾</span></div></div>
+        <div class="frm"><label>Lead contact <span class="opt">optional</span></label><div class="inp selbox">Iris Kealoha <span>▾</span></div></div>
+      </div>
+      <div class="frm"><label>Angle for this gig <span class="opt">optional</span></label><textarea class="inp" placeholder="Seeded from the venue's research — the specific hook for this event…"></textarea></div>
+      <div class="frm-sect">Compensation</div>
+      <div class="row2">
+        <div class="frm"><label>Type</label>
+          <div class="seg"><button class="on">Paid</button><button>Pro bono</button><button>Trade</button></div>
+        </div>
+        <div class="frm"><label>Fee <span class="opt">if paid</span></label><input class="inp num" value="1,500"></div>
+      </div>
+      <div class="frm"><label>Payment status</label>
+        <div class="seg"><button class="on">Unbilled</button><button>Invoiced</button><button>Partial</button><button>Paid</button></div>
+      </div>
+      <div style="font-size:12px; color:var(--muted); font-style:italic">Pro bono still counts as a booking — it just carries no fee and shows a "Pro bono" chip instead of a dollar amount.</div>
+      <div class="switch-row">
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Set a follow-up reminder"></button>
+        <div><div class="sw-l">Set a follow-up reminder</div><div class="sw-d">Nudge me in <b>7 days ▾</b> if this hasn't advanced a stage.</div></div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="btn btn-primary" data-close>Create opportunity</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Starts in Researching — drag it across the board as it advances</span></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: CLOSE OPPORTUNITY ============ -->
+<div class="overlay" id="m-close" role="dialog" aria-modal="true" aria-labelledby="mcl-t">
+  <div class="modal">
+    <div class="modal-h"><h2 id="mcl-t">Close opportunity</h2><button class="close" data-close aria-label="Close">✕</button></div>
+    <div class="modal-b">
+      <div class="frm"><label>Opportunity</label><div class="inp selbox">Kauai Beach Resort &amp; Spa — Wellness Wheel <span>▾</span></div></div>
+      <div class="frm"><label>Outcome</label>
+        <div class="seg"><button class="on">Cancelled</button><button>Lost / Passed</button></div>
+      </div>
+      <div style="font-size:12px; color:var(--muted); font-style:italic">Defaults by stage — <b>Cancelled</b> for a booked gig that fell through (still counts as booked), <b>Lost / Passed</b> for one that never reached booking. Either way it closes to History with the reason.</div>
+      <div class="row2">
+        <div class="frm"><label>Date</label><input class="inp num" value="Jul 17, 2026"></div>
+        <div class="frm"><label>Reason <span class="opt">catalog</span></label><div class="inp selbox">Venue cancelled the event <span>▾</span></div></div>
+      </div>
+      <div class="frm"><label>Note</label><textarea class="inp" placeholder="What happened? Logged to the opportunity's notes…"></textarea></div>
+    </div>
+    <div class="modal-f"><button class="btn btn-primary" data-close>Close opportunity</button><button class="btn btn-ghost" data-close>Cancel</button><span class="hint2">Logs the reason &amp; moves the card to History</span></div>
+  </div>
+</div>
+
+<script>
+  const nav = document.getElementById('nav');
+  nav.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-page]');
+    if (!btn) return;
+    nav.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(btn.dataset.page).classList.add('active');
+    window.scrollTo({top:0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+  });
+  // venue table rows -> detail page
+  document.querySelectorAll('#venues tbody tr').forEach(tr => tr.addEventListener('click', () => {
+    nav.querySelector('[data-page="venue-detail"]').click();
+  }));
+  // contact table rows -> contact detail page
+  document.querySelectorAll('#contacts tbody tr').forEach(tr => tr.addEventListener('click', () => {
+    nav.querySelector('[data-page="contact-detail"]').click();
+  }));
+  // history table rows -> history detail page
+  document.querySelectorAll('#history tbody tr').forEach(tr => tr.addEventListener('click', () => {
+    nav.querySelector('[data-page="history-detail"]').click();
+  }));
+  // pipeline "Show closed" toggle -> reveal the Recently-closed column
+  const showClosed = document.getElementById('showClosed');
+  if (showClosed) showClosed.addEventListener('change', () => {
+    document.querySelector('#pipeline .board').classList.toggle('reveal-closed', showClosed.checked);
+  });
+  // pipeline cards: click -> opportunity detail; injected × -> close-opportunity modal
+  document.querySelectorAll('#pipeline .board .kcard:not(.closed)').forEach(card => {
+    const x = document.createElement('button');
+    x.className = 'kclose'; x.type = 'button'; x.textContent = '✕'; x.setAttribute('aria-label', 'Close opportunity');
+    x.addEventListener('click', e => { e.stopPropagation(); document.getElementById('m-close').classList.add('open'); });
+    card.appendChild(x);
+    card.addEventListener('click', () => nav.querySelector('[data-page="opportunity-detail"]').click());
+  });
+
+  // ---------- modals ----------
+  document.querySelectorAll('[data-modal]').forEach(el => el.addEventListener('click', () => {
+    document.getElementById(el.dataset.modal).classList.add('open');
+  }));
+  document.querySelectorAll('.overlay').forEach(o => {
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+    o.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => o.classList.remove('open')));
+  });
+  addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open'));
+  });
+  // wire page action buttons to their modals, with context-aware prefill
+  const PWN = "Professional Women's Network Hawaii";
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const setVal  = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  function openContact(fromVenue){
+    if (fromVenue){
+      setText('mc-org', PWN);
+      setVal('mc-name', ''); setVal('mc-role', ''); setVal('mc-email', '');
+    } else {
+      setText('mc-org', 'Kauai Beach Resort & Spa');
+      setVal('mc-name', 'Iris Kealoha'); setVal('mc-role', 'Spa & Wellness Manager'); setVal('mc-email', 'iris.k@kauaibeachresort.com');
+    }
+    document.getElementById('m-contact').classList.add('open');
+  }
+  function openOpportunity(fromVenue){
+    setText('mop-org', fromVenue ? PWN : 'Kauai Beach Resort & Spa');
+    document.getElementById('m-opportunity').classList.add('open');
+  }
+  document.querySelectorAll('.page .btn').forEach(b => {
+    const t = b.textContent.trim();
+    if (b.closest('.overlay')) return;
+    const fromVenue = !!b.closest('#venue-detail');
+    if (t === '+ Log outreach' || t === 'Log touch') b.addEventListener('click', () => document.getElementById('m-outreach').classList.add('open'));
+    else if (t === '+ Add venue') b.addEventListener('click', () => document.getElementById('m-venue').classList.add('open'));
+    else if (t === '+ Add contact' || t === '+ Add') b.addEventListener('click', () => openContact(fromVenue));
+    else if (t === '+ New opportunity' || t === '+ New') b.addEventListener('click', () => openOpportunity(fromVenue));
+  });
+  // toggle mock switches
+  document.querySelectorAll('.switch').forEach(s => s.addEventListener('click', () => {
+    s.classList.toggle('on');
+    s.setAttribute('aria-checked', s.classList.contains('on'));
+  }));
+</script>
