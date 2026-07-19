@@ -46,15 +46,20 @@ legacy-tracker, not tracked here.
 **Email**
 6. **Rich composer with attachments** — full formatting, attach one-sheet / speaking menu,
    send *as Donna* from her business address, with the sent copy kept in her Sent folder for
-   continuity; auto-logged as an outreach touch. Replies are threaded back to the opportunity
-   (see §3 Email — WorkMail / SES / IMAP, not Gmail). **Email history is readable:** an **Emails
-   inbox** (thread list with awaiting-reply / new-reply status) and a **thread view** (full
-   conversation + attachments) with an **inline reply** box; threads also surface on the contact
-   and its linked opportunity.
+   continuity; logged as an **outbound** touch whose *kind* is inferred (`initial` if it is the
+   first outbound touch to that contact, otherwise `correspondence`) and shown as an **editable
+   chip** in the composer — only prospecting kinds count toward targets (see §4 `outreaches`).
+   Replies are threaded back to the opportunity (see §3 Email — WorkMail / SES / IMAP, not Gmail).
+   **Email history is readable:** an **Emails inbox** (thread list surfacing open threads awaiting
+   a reply and unread inbound mail) and a **thread view** (full conversation + attachments) with an
+   **inline reply** box; threads also surface on the contact and its linked opportunity. A thread
+   is **explicitly closed** ("no reply needed") — nothing infers that a sent message is owed an
+   answer, so terminal mail never nags.
 7. **Follow-ups** — schedule a **calendar-dated** follow-up with a **free-form note** on a contact
    or opportunity, standalone or as a rider when logging outreach / composing email; due reminders
    surface on the Dashboard and by email, and can be marked done. (Not a relative "in N days"
-   selector — an explicit date.)
+   selector — an explicit date.) The composer/outreach rider is **opt-in, default off** — sending
+   an email never silently schedules a follow-up, or the Dashboard fills with noise.
 
 **Goals & measurement** (the strategy doc's weakest-scored gap — the point of the app)
 8. **Targets** — per-cadence goals: new venues researched/month (doc says 3–5), outreaches/week,
@@ -99,7 +104,8 @@ Route53 → CloudFront (one distribution)
                               → RDS MySQL 8 via IAM auth + TLS (new `speakertracker` schema)
                               → S3 (attachments, one-sheets — presigned PUT)
                               → SES SendRawEmail (send-as-Donna) + IMAP (WorkMail: Sent-append)
-              EventBridge Scheduler → followup_notify → SES  ·  imap_poll → thread replies
+              EventBridge Scheduler → followup_notify → SES
+                                    · imap_poll → thread replies + drop-folder imports
 Cognito (Hosted UI) ── react-oidc-context in the SPA
 ```
 
@@ -121,6 +127,19 @@ Cognito (Hosted UI) ── react-oidc-context in the SPA
   date pickers, notifications, and the Tiptap rich-text editor for the email composer. TanStack
   Query fixes the hand-rolled-`fetch` wart both siblings flagged (needed for optimistic kanban
   drag mutations).
+- **Auth UX & session — no splash gate.** Both siblings gate the whole app behind a full-screen
+  "Login with Cognito" interstitial. This app instead **lands on the normal page** (branded shell,
+  nav rail, logo) with a **Sign In** link in the header, like an ordinary web app; the content area
+  prompts to sign in rather than a modal blocking the route. A deep link followed while signed out
+  is remembered and restored after login. **Session persists:** Cognito
+  `refreshTokenValidity: Duration.days(90)`, `automaticSilentRenew` in `react-oidc-context` rolling
+  the ≤24h access token over via the **refresh-token grant** (no hidden iframe), tokens in
+  `localStorage` so a browser restart stays signed in. Donna signs in about quarterly.
+  Accepted tradeoff: a 90-day token at rest grants standing access to anyone at the machine —
+  acceptable because she works from a **fixed office desktop**, not a travelling laptop. Revisit if
+  this ever goes multi-user or mobile. Also fix two gaps inherited from legacy-tracker: the API
+  client must **handle 401** (trigger re-auth rather than returning the raw `Response` to callers),
+  and `UserNotFoundError` must map to **404, not 500**.
 - **Email: AWS WorkMail (on SES) + IMAP — not Gmail.** Donna's business mailbox is WorkMail backed
   by SES (production access, out of sandbox), which she reads via **Outlook over IMAP**. The app
   operates on the same WorkMail mailbox server-side, so its changes and her Outlook stay in sync.
@@ -134,19 +153,41 @@ Cognito (Hosted UI) ── react-oidc-context in the SPA
     each reply's `In-Reply-To` / `References` to a stored outbound `Message-ID` → links it to the
     opportunity + logs an inbound touch. Fallback: `From` + normalized subject + time window.
     Polling the Sent folder also captures mail Donna sends straight from Outlook.
-  - **Scope — never the whole mailbox.** The Emails surface shows only *tracked* threads:
-    app-originated (matched by a stored outbound `Message-ID`) **plus** any mail whose `From`/`To`
-    matches a **tracked contact's address**. The poller filters the WorkMail mailbox down to
-    known-contact correspondence; personal / unrelated mail is never ingested. (Outlook is a peer
+  - **Scope — never the whole mailbox.** The app reads exactly **two consented surfaces**:
+    (a) correspondence with a **tracked contact** (mail whose `From`/`To` matches a contact address,
+    or that matches a stored outbound `Message-ID`), and (b) messages Donna **explicitly dragged**
+    into the import folder below. Personal / unrelated mail is never ingested. (Outlook is a peer
     IMAP client on the same mailbox, not something the app reads *through*.)
-  - **Inbound-first threads / import.** A venue that emails Donna first has a standard `Message-ID`
-    like any message; the poller reads it via IMAP, creates an `email_messages` row
-    (`direction: in`), and associates it by `From`-address — or, for an unknown sender, offers an
-    **"Import / link to contact"** action (optionally creating the contact). Donna's app reply then
-    threads via `In-Reply-To` → that stored `Message-ID`. Threading uses **RFC 5322 headers only**
-    (`Message-ID` / `In-Reply-To` / `References`); Microsoft's proprietary `Thread-Index` isn't
-    needed (external senders don't set it).
-  - **Credentials:** WorkMail IMAP creds in Secrets Manager (single-user → one credential).
+  - **Inbound-first threads.** A venue that emails Donna first has a standard `Message-ID` like any
+    message; the poller reads it via IMAP, creates an `email_messages` row (`direction: in`), and
+    associates it by `From`-address. Donna's app reply then threads via `In-Reply-To` → that stored
+    `Message-ID`. Threading uses **RFC 5322 headers only** (`Message-ID` / `In-Reply-To` /
+    `References`); Microsoft's proprietary `Thread-Index` isn't needed (external senders don't set
+    it).
+  - **Import of an unknown sender — the IMAP drop folder.** Mail from someone who isn't a tracked
+    contact is out of scope for the poller, so it needs an explicit hand-off. In Outlook, Donna
+    **drags the email into `Speaker Tracker/Import`**; the poller watches that folder, stores the
+    message with `contact_id` / `opportunity_id` **NULL**, moves it to `Speaker Tracker/Processed`
+    so it is never re-ingested (idempotency keyed on `Message-ID`), and badges the app — *"1 email
+    awaiting import."* Clicking it opens **Add Contact pre-filled from the `From` header** (display
+    name, address, and the sender domain used to suggest an existing org or seed a new one), routed
+    through the §4 dedupe search so a second mail from a known person offers *attach* rather than
+    *create*. On save the contact + thread link up and the full thread appears on the contact.
+    - **Why a folder move, not forward-to-import:** an IMAP move transfers the original RFC822
+      message byte-for-byte, so the **`Message-ID` is preserved** and replies thread correctly at
+      the venue's end. Forwarding rewrites the `Message-ID` and wraps the original, forcing
+      quoted-text or `.eml`-attachment parsing and mis-threading the reply.
+    - **Folders are auto-created, never typed.** On first connect — and defensively on every poll —
+      the poller `LIST`s and, if missing, `CREATE`s **and `SUBSCRIBE`s** `Speaker Tracker/Import`
+      and `Speaker Tracker/Processed`. (`SUBSCRIBE` matters: an unsubscribed folder may not appear
+      in Outlook's tree, which looks identical to the folder never being created.) Donna never
+      types the name, so it cannot be misnamed; deleting it is self-healing. The **`\Sent`** folder
+      is still *discovered* via the SPECIAL-USE flag — it is WorkMail's, not ours.
+    - The poller's folder set is therefore **configuration, not a constant**: `INBOX`, `\Sent`,
+      `Import`, `Processed`.
+  - **Credentials:** WorkMail IMAP creds in Secrets Manager (single-user → one credential). This is
+    the **first runtime secret read** in the family — both siblings resolve all config to env vars
+    at deploy time — so `common/secrets.py` (cached fetch) is new code, not a port.
   - **SES** also powers system notifications (follow-up reminders) — unchanged. **job-tracker's
     Gmail OAuth/compose cluster is not reusable here.**
 - **Conventions from the siblings:** forward-only SQL migrations; `id` / `created_at` /
@@ -187,14 +228,38 @@ Core entities (user-scoped via `user_id`; every entity table has `id` /
   pre-filled). **Closing** it (a close × on any card, or the detail page) writes a terminal
   `status_event` + a note capturing the reason — **Lost / Passed** pre-booking, **Cancelled**
   post-booking. (Advancing to Delivered is a normal drag to the Delivered column — not a button.)
-- **`outreaches`** — append-only touch journal (channel, note, optional `opportunity_id`),
-  decoupled from stage. Logged against the *contact*. Email touches link to an `email_messages` row.
-- **`email_messages`** — sent/received emails backing the composer + reply threading: `message_id`
-  (RFC 5322), `in_reply_to`, `references`, `direction` (out/in), `subject`, `from_addr`, `to_addr`,
-  `opportunity_id`, `contact_id`, `s3_key` (raw MIME / attachments), `sent_at` / `received_at`.
-  Inbound replies match on `in_reply_to` / `references` → a stored outbound `message_id`. Messages
-  group into **threads** (by the `references` chain / normalized subject); a thread's status
-  (awaiting-reply / new-reply / replied) drives the Emails inbox and the Dashboard's Needs-attention.
+- **`outreaches`** — append-only journal of **outbound** touches only (channel, note, `kind`,
+  optional `opportunity_id`), decoupled from stage. Logged against the *contact*. Email touches link
+  to an `email_messages` row.
+  - **Outbound only — this is load-bearing for metrics.** It is *out*reach: mail Donna **received**
+    never creates a row here. Inbound is visible in history via `email_messages` (see the timeline
+    note below), so nothing is lost from the record while the journal that feeds targets stays
+    clean.
+  - **`outreach_kinds` carries `counts_toward_target`** (catalog-driven, so metric SQL never
+    hardcodes kind names): `initial` ✓, `follow_up` ✓, `correspondence` ✗. Without this, a
+    four-message thread about parking logistics with an already-booked venue scores as four
+    "outreaches" and the *outreaches/week* target measures email volume instead of prospecting
+    effort.
+- **Contact timeline is a read-time union view** over `outreaches` + `email_messages` +
+  `opportunity_notes` + `status_events` — not a table. This is what lets `outreaches` stay
+  outbound-only without losing a unified history on the contact page.
+- **`email_threads`** — thread identity, assigned **once at ingest** by the poller (which already
+  holds the header chain) rather than re-derived on every read: `subject_normalized`, `contact_id`,
+  `opportunity_id`, `last_message_at`, `last_direction`, `closed_at`. **`contact_id` and
+  `opportunity_id` are both NULLABLE** — three legitimate states: unknown sender awaiting import
+  (both NULL), side-channel mail with a known contact tied to no gig (`contact_id` only), and gig
+  correspondence (both set).
+  - **Threads close explicitly, never by inference.** `closed_at` is set by Donna ("no reply
+    needed") or automatically when the linked opportunity closes. Needs-attention surfaces a thread
+    only when it is *open*, `last_direction = 'out'`, and aged past a threshold — so a terminal
+    message that never wanted an answer produces no nag. There is no "awaiting reply" status
+    derived from direction alone.
+- **`email_messages`** — sent/received emails backing the composer + reply threading: `thread_id`
+  (FK → `email_threads`), `message_id` (RFC 5322), `in_reply_to`, `references`, `direction` (out/in),
+  `subject`, `from_addr`, `to_addr`, `opportunity_id`, `contact_id`, `s3_key` (raw MIME /
+  attachments), `sent_at` / `received_at`. **`contact_id` / `opportunity_id` are nullable** for the
+  same three states as the thread. Inbound replies match on `in_reply_to` / `references` → a stored
+  outbound `message_id`.
 - **`follow_ups`** — a scheduled reminder: `due_date` (explicit calendar date), `note` (free-form),
   `status` (pending / done), `contact_id`, optional `opportunity_id`, `remind` (dashboard + email),
   `completed_at`. Created standalone (from a contact, opportunity, the composer, or a Next-follow-up
@@ -207,7 +272,13 @@ Core entities (user-scoped via `user_id`; every entity table has `id` /
 - **`talks`** + **materials** (S3 files) — the Guest Workshop menu.
 - Catalog tables: `organization_types`, `contact_roles`, `opportunity_statuses`
   (`is_terminal`, `sort_order`; includes terminal **Delivered**, **Cancelled**, **Lost/Passed**),
+  `outreach_kinds` (**`counts_toward_target`** — see `outreaches` above), `outreach_channels`,
   `comp_types`, `payment_statuses`, `warmth_tiers`, `target_types`, etc.
+
+**Write invariant — one transaction per send.** Sending an email writes an `email_messages` row,
+its `email_threads` row (created or touched), an `outreaches` row, and *optionally* a `follow_ups`
+row **atomically**. A partial write would either lose the touch from the journal or leave a thread
+with no messages.
 
 **Two scoped meanings of "primary" (labeled distinctly in the UI):**
 `contact_organizations.is_primary` = default contact for an org ("Primary contact");
@@ -259,9 +330,47 @@ the opportunity card, seeded from `how_to_approach`.
 - **Targets:** no revenue / money target for now — the `targets` model is generic, so a
   paid-bookings / `$-booked` target is a trivial later add (a new `target_type`). Targets stay
   activity-based while Donna is in visibility-building mode.
+- **`outreaches` is outbound-only**, and `outreach_kinds.counts_toward_target` gates the metric.
+  Inbound mail never enters the journal; the contact timeline is a read-time union view. Rationale:
+  email correspondence must not inflate activity stats (§4).
+- **Composer outreach kind is inferred, not asked** — `initial` on first outbound touch to a
+  contact, else `correspondence` — surfaced as an editable chip. Right by default, always
+  correctable, no friction tax on one-line replies.
+- **Unknown-sender import = IMAP drop folder** (`Speaker Tracker/Import`), auto-created +
+  subscribed by the poller. Chosen over forward-to-import because a folder move preserves the
+  original `Message-ID` (so replies thread correctly) and over a Gmail-style thread-ID handle
+  because IMAP has no such addressable handle — job-tracker's import mechanism does not transfer.
+- **Threads close explicitly** (`email_threads.closed_at`), never inferred from `last_direction`;
+  an opportunity closing auto-closes its threads. Follow-up riders are **opt-in, default off**.
+- **No splash gate; 90-day session.** Land on the normal page with a header **Sign In**;
+  `refreshTokenValidity` 90 days + `automaticSilentRenew` + `localStorage`. Justified by Donna
+  working from a **fixed office desktop**, not a travelling laptop — revisit for multi-user/mobile.
+- **API envelope matches the siblings** — bare JSON, `{"error": "<message>"}`, 400/404/405 mapped
+  at the handler top level. **But** unhandled exceptions get a catch-all → `{"error": "internal
+  error"}` + 500 (the siblings re-raise and leak API Gateway's `{"message": ...}` shape), and
+  `UserNotFoundError` maps to 404 rather than falling into the 500 branch.
+- **Cognito is invite-only:** `selfSignUpEnabled: false`, admin-created users,
+  `removalPolicy: RETAIN` (legacy-tracker uses `true` / `DESTROY` — not appropriate for Donna's
+  CRM, where a stack teardown must not silently delete the user pool).
+- **CI from slice 1:** GitHub Actions on PR/push running `ruff`, `pytest`, and `tsc --noEmit`.
+  **No deploy step** — deploys stay manual. Neither sibling has any CI, and legacy-tracker carries
+  2 tests total; speaker-tracker is where CODING-GUIDELINES §7 stops being aspirational.
+
+- **IMAP poll interval: flat 1 minute.** ~43,800 invocations/month ≈ **$1.50/month** — cost is not
+  the constraint. Required from the start, because retrofitting the cursor means a backfill:
+  **reserved concurrency = 1** (a poll running past 60s must never overlap the next); a per-folder
+  **`UIDNEXT` cursor** so each poll is an incremental UID-range fetch above the watermark, not a
+  rescan (most polls touch zero messages); the Secrets Manager fetch **cached at module scope**;
+  and `LOGOUT` in a `finally` on every path. **Verify WorkMail's simultaneous-IMAP-connection
+  quota** before deploying — Outlook already holds connections on the same mailbox.
+  - *Documented fallback if WorkMail throttles:* two-tier polling — `Import` every 1 min (near-always
+    empty, and the only **interactive** path: Donna drags in Outlook, then switches to the app
+    expecting the badge), `INBOX`/`Sent` every 5 min (she sees replies in Outlook instantly anyway;
+    the app is the CRM record, not her mail client). The folder set is already configuration, so
+    this is a config change, not a rewrite.
 
 **Still open**
-- **Reply detection:** IMAP poll interval for the poller Lambda (latency vs. cost).
+- *(nothing — see Decided above.)*
 
 ## 8. Mockup
 
