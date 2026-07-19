@@ -1,9 +1,16 @@
 # Speaker Tracker — Database Schema
 
-MySQL 8 (`ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`), schema
-`speakertracker` on the shared `jobtracker-db` instance. Migrations live in
-`backend/src/migrations/*.sql`, applied forward-only in lexical filename order by
-`handlers/migrate.py`, tracked in `schema_migrations`. IAM DB user: `speakertracker_app`.
+**MySQL 8.4.8** (`ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`), schema
+`speakertracker` on the shared `jobtracker-db` instance —
+`db.t4g.micro`, 20 GB, publicly accessible with IAM auth enabled, in **us-west-2**, account
+**381492047863**. Migrations live in `backend/src/migrations/*.sql`, applied forward-only in lexical
+filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB user:
+`speakertracker_app`.
+
+> **`db.t4g.micro` / 20 GB is shared with `jobtracker` and `legacytracker`.** This schema's volume is
+> trivial (hundreds of opportunities, thousands of emails) — except `email_messages`, whose raw MIME
+> is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
+> message would exhaust 20 GB far faster than any other table here.
 
 > **Status: pre-implementation.** No migration has been written yet. This document is the
 > *target* schema — the contract migration `0001` onward must satisfy. It is derived from

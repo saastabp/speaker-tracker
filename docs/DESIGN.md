@@ -140,13 +140,40 @@ Cognito (Hosted UI) ── react-oidc-context in the SPA
   this ever goes multi-user or mobile. Also fix two gaps inherited from legacy-tracker: the API
   client must **handle 401** (trigger re-auth rather than returning the raw `Response` to callers),
   and `UserNotFoundError` must map to **404, not 500**.
-- **Email: AWS WorkMail (on SES) + IMAP — not Gmail.** Donna's business mailbox is WorkMail backed
-  by SES (production access, out of sandbox), which she reads via **Outlook over IMAP**. The app
-  operates on the same WorkMail mailbox server-side, so its changes and her Outlook stay in sync.
-  - **Send** via SES `SendRawEmail` (IAM-authed — no email password needed to send). The app crafts
-    the raw MIME: `From: donna@<domain>`, attachments from S3, and a stable `Message-ID` it records;
-    on replies it sets `In-Reply-To` + `References`. SES signs with the domain DKIM (WorkMail's), so
-    deliverability matches her normal mail.
+- **Email: AWS WorkMail + SES + IMAP — not Gmail.** Donna's business mailbox is WorkMail, which she
+  reads via **Outlook over IMAP**. The app operates on the same WorkMail mailbox server-side, so its
+  changes and her Outlook stay in sync.
+  - **Account / region topology — the app and the mailbox live in different accounts.**
+
+    | Piece | Account | Region |
+    |---|---|---|
+    | App (Lambdas, RDS, S3, Cognito, CloudFront) | **381492047863** (Brian) | us-west-2 |
+    | ACM cert for the SPA | 381492047863 | us-east-1 (CloudFront requirement) |
+    | Route53 zone `360balancedliving.com` | 381492047863 | global |
+    | **SES sending identity** `360balancedliving.com` | **381492047863** | **us-east-1** |
+    | **WorkMail mailbox** (`m-aa419e28e9c44881a91c711910d9b1b5`) | **730335513412** (Donna) | us-east-1 |
+
+  - **No cross-account IAM is required**, which is the whole reason this topology works:
+    - **Sending** uses the `360balancedliving.com` **domain identity already verified in Brian's
+      account** (us-east-1, DKIM `SUCCESS`, signing enabled). Domain verification covers every
+      address beneath it, so `From: donna@360balancedliving.com` needs no per-address identity and
+      no role assumption into Donna's account. *Rejected alternative:* cross-account sending
+      authorization on the identity in her account — more moving parts, and it is unclear whether
+      production access/quota is evaluated against the sending or the identity-owning account.
+    - **IMAP is username/password, not IAM**, so reaching her WorkMail mailbox from Brian's account
+      is not a cross-account problem at all. Endpoint is **us-east-1**.
+  - **Send** via SES `SendRawEmail` against the **us-east-1** endpoint (IAM-authed — no email
+    password needed to send). The app crafts the raw MIME: `From: donna@360balancedliving.com`,
+    attachments from S3, and a stable `Message-ID` it records; on replies it sets `In-Reply-To` +
+    `References`. SES signs with that account's domain DKIM. Domain auth is already in place:
+    SPF includes `amazonses.com`, DMARC is `p=none` (nothing quarantines while alignment settles).
+    - **SES production access: granted** (us-east-1, 2026-07-18) — 50,000/day, 14 msg/s,
+      enforcement `HEALTHY`. Production access is **per-region**; this covers us-east-1, where both
+      the identity and the WorkMail mailbox live. The quota is irrelevant at this volume — what
+      mattered was escaping the sandbox's verified-recipients-only restriction.
+    - *Optional later:* a custom **MAIL FROM** subdomain for stricter DMARC alignment.
+      `bounce.360balancedliving.com` already exists in DNS with the right SPF and feedback MX, but
+      is **not** configured on the identity. Not a blocker at `p=none`.
   - **Sent-folder continuity:** IMAP-`APPEND` the sent MIME to her Sent folder (discovered via the
     IMAP `\Sent` SPECIAL-USE flag, not a hard-coded name) so it appears in Outlook.
   - **Reply threading:** an IMAP **poller Lambda** (EventBridge schedule) reads new mail and matches
@@ -185,9 +212,40 @@ Cognito (Hosted UI) ── react-oidc-context in the SPA
       is still *discovered* via the SPECIAL-USE flag — it is WorkMail's, not ours.
     - The poller's folder set is therefore **configuration, not a constant**: `INBOX`, `\Sent`,
       `Import`, `Processed`.
-  - **Credentials:** WorkMail IMAP creds in Secrets Manager (single-user → one credential). This is
-    the **first runtime secret read** in the family — both siblings resolve all config to env vars
-    at deploy time — so `common/secrets.py` (cached fetch) is new code, not a port.
+  - **Mailbox facts.** Address **`donna.king@360balancedliving.com`**; WorkMail org alias
+    `360-balanced-living` (`m-aa419e28e9c44881a91c711910d9b1b5`), us-east-1; webmail at
+    `https://webmail.mail.us-east-1.awsapps.com/workmail/?organization=360-balanced-living`.
+    IMAP endpoint **`imap.mail.us-east-1.awsapps.com:993`** over SSL — confirm at first connect
+    rather than trusting the documented pattern. **No MFA is configured**, so plain
+    username/password IMAP authenticates; no app-specific-password mechanism is needed.
+  - **Credentials:** WorkMail IMAP creds in Secrets Manager **in Brian's account** (single-user →
+    one credential). This is the **first runtime secret read** in the family — both siblings resolve
+    all config to env vars at deploy time — so `common/secrets.py` (cached fetch) is new code, not a
+    port.
+    - **CDK creates the `Secret` resource; the value is set out of band.** CDK owns the resource
+      (tags, `removalPolicy: RETAIN`, `grantRead` to the poller) but never sees the password:
+      ```
+      aws secretsmanager put-secret-value --secret-id speakertracker/imap \
+        --secret-string '{"username":"donna.king@360balancedliving.com","password":"..."}' \
+        --profile brian-admin --region us-west-2
+      ```
+    - *Rejected:* a gitignored config file read at synth time. That forces
+      `SecretValue.unsafePlainText()`, which bakes the password into the synthesized template — so
+      it lands unencrypted in `cdk.out/`, in the CDK staging bucket, and in CloudFormation, readable
+      by anyone with `cloudformation:GetTemplate`. The gitignore protects the source file and none
+      of the four places the value actually ends up. Rotation also becomes a stack deploy instead of
+      one CLI call.
+  - **IMAP auth failure is an alarm condition, never a swallowed error.** Brian is the sole admin of
+    Donna's account, which makes accidental breakage *more* likely, not less: he may rotate the
+    mailbox password for an unrelated reason with nothing connecting that act to "inbound threading
+    stopped." The failure is otherwise invisible — the poller keeps running on schedule, finds
+    nothing, and replies silently stop appearing.
+  - **Inbound mail flow (resolved).** The apex `MX` points at `inbound-smtp.us-east-1.amazonaws.com`,
+    which is the **standard MX for a WorkMail-managed domain** — WorkMail runs on SES infrastructure.
+    Brian's account has **no SES receipt rule sets at all** in us-east-1, so nothing of his touches
+    her inbound mail. Worth a one-off confirm that her account's active rule set is WorkMail's
+    default and nothing extra copies mail to S3 or a Lambda — this matters because the
+    never-the-whole-mailbox guarantee must hold *below* the app, not only inside it.
   - **SES** also powers system notifications (follow-up reminders) — unchanged. **job-tracker's
     Gmail OAuth/compose cluster is not reusable here.**
 - **Conventions from the siblings:** forward-only SQL migrations; `id` / `created_at` /
@@ -361,8 +419,11 @@ the opportunity card, seeded from `how_to_approach`.
   **reserved concurrency = 1** (a poll running past 60s must never overlap the next); a per-folder
   **`UIDNEXT` cursor** so each poll is an incremental UID-range fetch above the watermark, not a
   rescan (most polls touch zero messages); the Secrets Manager fetch **cached at module scope**;
-  and `LOGOUT` in a `finally` on every path. **Verify WorkMail's simultaneous-IMAP-connection
-  quota** before deploying — Outlook already holds connections on the same mailbox.
+  and `LOGOUT` in a `finally` on every path.
+  - **The WorkMail connection quota is resolved and non-binding: 10 concurrent per user+IP pair.**
+    Lambda outside a VPC draws from rotating source IPs, and reserved concurrency 1 means the poller
+    holds at most one connection at a time — so it cannot contend with Donna's Outlook, which is a
+    different IP. The 1-minute interval is safe.
   - *Documented fallback if WorkMail throttles:* two-tier polling — `Import` every 1 min (near-always
     empty, and the only **interactive** path: Donna drags in Outlook, then switches to the app
     expecting the badge), `INBOX`/`Sent` every 5 min (she sees replies in Outlook instantly anyway;

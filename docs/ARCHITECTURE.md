@@ -208,6 +208,31 @@ parallel `history.py` would duplicate the same SQL against the same rows.
 The most involved part of the app, and the one that least resembles either sibling — job-tracker's
 Gmail OAuth cluster is **not reusable**.
 
+**The mailbox is in a different AWS account from the app, and this costs nothing.**
+
+| Piece | Account | Region |
+|---|---|---|
+| App — Lambdas, RDS, S3, Cognito, CloudFront | **381492047863** (Brian) | us-west-2 |
+| SES sending identity `360balancedliving.com` | **381492047863** | **us-east-1** |
+| WorkMail mailbox `m-aa419e28e9c44881a91c711910d9b1b5` | **730335513412** (Donna) | us-east-1 |
+
+**No cross-account IAM, no `sts:AssumeRole`, no SES sending-authorization policy.** Two independent
+reasons:
+
+- **Sending** uses the `360balancedliving.com` domain identity **already verified in Brian's
+  account** (DKIM `SUCCESS`). Domain verification covers every address beneath it, so
+  `From: donna@…` needs neither a per-address identity nor a role in Donna's account. The SES client
+  is simply constructed with `region_name="us-east-1"` while the Lambda runs in us-west-2 — a client
+  argument, not an architectural seam.
+- **IMAP is username/password**, not IAM. Reaching her WorkMail mailbox is a credential concern, not
+  an account-boundary concern. Endpoint is us-east-1.
+
+> **SES production access: granted** (us-east-1, 2026-07-18) — **50,000/day, 14 msg/s**,
+> enforcement `HEALTHY`. Slice 6a is unblocked. Note production access is **per-region**; this grant
+> covers us-east-1 only, which is the region the identity and the WorkMail mailbox both live in.
+> Real volume here is a handful of messages a day, so the quota is irrelevant — what mattered was
+> escaping the sandbox's verified-recipients-only restriction.
+
 ```mermaid
 flowchart TB
     subgraph Out["Outbound — composer"]
@@ -267,6 +292,19 @@ mis-threading the reply.
   mailbox and Outlook already holds some; leaked connections exhaust the quota.
   *Verify that quota before deploying.*
 
+**The IMAP secret: CDK owns the resource, never the value.** The `Secret` construct carries tags,
+`removalPolicy: RETAIN`, and `grantRead` to the poller; the password is written once with
+`aws secretsmanager put-secret-value`. Reading a gitignored config at synth time would require
+`SecretValue.unsafePlainText()`, which embeds the password in the synthesized template — landing it
+in `cdk.out/`, the CDK staging bucket, and CloudFormation. Mailbox is
+`donna.king@360balancedliving.com` at `imap.mail.us-east-1.awsapps.com:993`; no MFA, so plain
+username/password authenticates.
+
+**IMAP auth failure must alarm.** A wrong or rotated password produces a *silent* failure mode: the
+poller runs on schedule, authenticates nothing, finds nothing, and inbound threading stops with no
+error surface. Treat auth errors as an alarm, distinct from the transient network errors the poller
+retries.
+
 **Write invariant:** a send writes `email_messages` + `email_threads` + `outreaches` (+ optionally
 `follow_ups`) in **one transaction**. A partial write loses the touch or orphans the thread.
 
@@ -325,9 +363,27 @@ directly and `followup_notify` reads only its payload.
 |---|---|---|---|
 | `<env>-Auth` | us-west-2 | Cognito pool, client, Hosted UI, post-confirmation trigger | prod |
 | `<env>-Cert` | **us-east-1** | ACM cert for the SPA domain | prod |
-| `<env>-Messaging` | us-west-2 | SES identity, Scheduler group + exec role, `followup_notify`, `imap_poll` + its 1-min rule, IMAP secret | prod + sandbox |
+| `<env>-Messaging` | us-west-2 | Scheduler group + exec role, `followup_notify`, `imap_poll` + its 1-min rule, IMAP secret. **SES clients target us-east-1**; the identity is pre-existing and *referenced*, never created | prod + sandbox |
 | `<env>-Api` | us-west-2 | HTTP API, route Lambdas, migrate Trigger, conditional JWT authorizer | prod + sandbox |
 | `<env>-Frontend` | us-west-2 | S3 SPA bucket, CloudFront (S3 + `/api/*` origins), Route53 alias | prod + sandbox |
+
+**DNS and certificate — all in account 381492047863:**
+
+| Fact | Value |
+|---|---|
+| Hostname | **`speaker-tracker.360balancedliving.com`** |
+| Hosted zone | `Z08490251WV9146J97IRG` (`360balancedliving.com`) |
+| Record status | **Does not exist yet** — created by the Frontend stack |
+| Cert | New ACM cert in **us-east-1**, DNS-validated (CloudFront requires us-east-1) |
+
+The zone is same-account, so DNS validation and the Route53 alias need no cross-account delegation.
+Sibling subdomains already in the zone (`legacy.`, `portal.`, `admin.`, `podcasts.`) confirm the
+pattern.
+
+> **The SES identity is *not* a CDK-owned resource.** `360balancedliving.com` was verified out of
+> band and is shared with other senders on this domain; a CDK `EmailIdentity` construct would try to
+> own it, and a stack teardown could delete a verification that other systems depend on. Reference
+> it by ARN, exactly as `shared-db.ts` references the RDS instance.
 
 **Sandbox** deploys the same routes with an **open gateway** and `ENV_TYPE=sandbox` /
 `AUTH_MODE=dev`. Port `common/auth.py`'s import-time assertion **verbatim**:
