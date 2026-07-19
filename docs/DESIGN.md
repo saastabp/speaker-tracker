@@ -100,7 +100,8 @@ that app uses Gmail; this one uses WorkMail / SES / IMAP — see the Email decis
 Route53 → CloudFront (one distribution)
             ├─ default behavior → S3 (private, OAC) — Vite/React SPA
             └─ /api/* → API Gateway HTTP API (JWT authorizer in prod)
-                          → Python 3.12 Lambdas (arm64, outside VPC)
+                          → ONE Python 3.12 API Lambda (arm64, outside VPC)
+                            (Powertools resolver; handlers/ = Router modules)
                               → RDS MySQL 8 via IAM auth + TLS (new `speakertracker` schema)
                               → S3 (attachments, one-sheets — presigned PUT)
                               → SES SendRawEmail (send-as-Donna) + IMAP (WorkMail: Sent-append)
@@ -413,6 +414,26 @@ the opportunity card, seeded from `how_to_approach`.
 - **CI from slice 1:** GitHub Actions on PR/push running `ruff`, `pytest`, and `tsc --noEmit`.
   **No deploy step** — deploys stay manual. Neither sibling has any CI, and legacy-tracker carries
   2 tests total; speaker-tracker is where CODING-GUIDELINES §7 stops being aspirational.
+- **One API Lambda, not one per route-group.** Powertools `APIGatewayHttpResolver` + a `Router` per
+  route-group; `migrate` / `imap_poll` / `followup_notify` stay separate. ~20 functions would each
+  cold-start independently and each pay the 2–6s RDS TLS handshake, which a sporadic single user
+  would hit on nearly every distinct action. The layered architecture is unaffected.
+- **DB connection reused at module scope** (only possible because of the single Lambda), with the
+  per-request `SET time_zone` as the liveness probe and a single reconnect on a lost connection.
+  `ping(reconnect=True)` is **banned** — it reconnects with the expired IAM token stored on the
+  connection, failing intermittently on any container older than 15 minutes.
+- **Cognito Managed Login**, not the classic Hosted UI (in maintenance; no passkeys, no real
+  branding). Requires the Essentials feature plan plus an explicit branding resource.
+- **The SPA sends the ID token**, not the access token — Cognito ID tokens carry `aud = clientId`,
+  which is what `HttpJwtAuthorizer` validates. Access-token behaviour is unverified; test before
+  relying on it.
+- **The API owns `users`-row creation**, not the Cognito trigger. `post_confirmation` has a hard 5s
+  timeout against a 2–6s cold TLS handshake, and `AdminCreateUser` creates users already-confirmed
+  so the trigger may never fire at all. A lazy idempotent upsert on the first authenticated request
+  runs on a warm path and cannot break sign-in; the trigger stays best-effort.
+- **Packaging: `uv`** with `--python-platform aarch64-manylinux2014` and `--only-binary=:all:`,
+  bundled per function rather than via a layer. `pydantic-core` ships compiled wheels, and without
+  the binary-only flag a host-platform sdist build silently ships x86 objects to an arm64 function.
 
 - **IMAP poll interval: flat 1 minute.** ~43,800 invocations/month ≈ **$1.50/month** — cost is not
   the constraint. Required from the start, because retrofitting the cursor means a backfill:

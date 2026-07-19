@@ -45,8 +45,28 @@ backend/src/
   autogeneration.
 - **Catalog tables over ENUMs** (see `DESIGN.md`); resolve `short_name` ↔ `id` at the repository
   boundary so callers pass `short_name`.
-- **Connections** are per-invocation, closed in `finally` via the `common/db.py` context manager.
-  No hand-rolled pooling.
+- **Connections are reused at module scope**, not opened per invocation. Because a *single* Lambda
+  serves every API route (see `ARCHITECTURE.md` §2), a container handles many requests, and a cold
+  TLS handshake to RDS costs 2–6s — paying that per request is the difference between a snappy CRM
+  and an unusable one. It also keeps connection count low on a `db.t4g.micro` shared with two
+  sibling apps.
+  - **Liveness is probed by the per-request `SET time_zone`** — needed anyway, so it costs no extra
+    round trip. On `OperationalError` 2003/2006/2013/2055 or `InterfaceError`: close, reconnect
+    **once** with a *fresh* IAM token, re-probe. A second failure is a real outage, not a stale
+    socket — never loop.
+  - 🚫 **Never `ping(reconnect=True)`.** It reconnects using credentials stored on the connection —
+    the **expired IAM token** — so it fails on any container older than 15 minutes, intermittently
+    and unreproducibly. It also silently discards session state and any open transaction. Enforced
+    by a ruff `banned-api` rule, not by review.
+  - Connect with `autocommit=True` and wrap multi-statement writes in a
+    `@contextmanager transaction(conn)`. **Reuse introduces a hazard per-invocation connections did
+    not have:** a handler raising mid-transaction otherwise leaves InnoDB locks held into the *next*
+    invocation.
+  - **Never connect at import time** — a DB outage should fail `/catalogs`, not take `/health` down
+    with an init error.
+  - TLS: ship the RDS global CA bundle and set `ssl_verify_cert=True` **and
+    `ssl_verify_identity=True`. Over a public endpoint, omitting the latter leaves you
+    encrypted-but-MITM-able**, which defeats the point.
 
 ## 3. Functions & modules
 
@@ -64,11 +84,18 @@ backend/src/
 
 - **Use maintained packages; don't reinvent.** Before writing a utility, check stdlib and PyPI. A
   hand-rolled helper that duplicates a package's job needs a one-line justification in the code.
-- Go-to packages for this stack: **aws-lambda-powertools** (structured logging, correlation IDs),
-  **boto3** (AWS/SES/Secrets Manager), **pydantic** v2 (validation/models), **pymysql** (DB),
-  **tenacity** (retries/backoff), stdlib **`email` / `email.mime`** (build MIME), **imapclient**
-  (IMAP), stdlib **`zoneinfo`** / **python-dateutil** (timezones — Kauaʻi is UTC-10).
+- Go-to packages for this stack: **aws-lambda-powertools** (structured logging, correlation IDs, and
+  the `APIGatewayHttpResolver` + `Router` that route the single API Lambda), **boto3** (AWS/SES/
+  Secrets Manager), **pydantic** v2 (validation/models), **pymysql** (DB), **sqlparse** (splitting
+  migration files — see below), **tenacity** (retries/backoff), stdlib **`email` / `email.mime`**
+  (build MIME), **imapclient** (IMAP), stdlib **`zoneinfo`** / **python-dateutil** (timezones —
+  Kauaʻi is UTC-10).
+- **`uv`** manages dependencies and builds the Lambda bundles (`uv.lock` for reproducibility,
+  `--python-platform aarch64-manylinux2014` so compiled wheels match arm64).
 - Don't reimplement retries, JSON envelopes, date parsing, MIME assembly, or connection handling.
+- **Don't hand-roll SQL statement splitting.** Naive `split(";")` breaks on semicolons inside string
+  literals and comments — which catalog `description` seeds will eventually contain. Use
+  `sqlparse.split()`.
 
 ## 5. Documentation
 

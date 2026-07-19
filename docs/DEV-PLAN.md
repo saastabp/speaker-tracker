@@ -29,6 +29,22 @@ Verified 2026-07-18 against account **381492047863** (Brian). ✅ = resolved, no
 **Nothing blocks slice 1.** All pre-flight items are resolved; the only outstanding action is
 writing the IMAP secret value, which belongs to slice 6a.
 
+**DB bootstrap: done** (2026-07-18). Schemas `speakertracker` and `speakertracker_sandbox` created,
+user `speakertracker_app` created with `AWSAuthenticationPlugin`, `GRANT ALL` on both. Note the
+`CREATE DATABASE` step is **undocumented in legacy-tracker's runbook** — its `db.py` passes
+`database=DB_NAME` on connect, so the schema must exist before the first migration runs. Recorded
+here so the gap isn't re-inherited.
+
+### Verify before writing dependent code
+
+| # | Check | If it fails |
+|---|---|---|
+| V1 | `SELECT COUNT(*) FROM mysql.time_zone_name` on `jobtracker-db` | If empty, `SET time_zone = 'Pacific/Honolulu'` errors and `tz.py` needs a numeric offset via `zoneinfo`. Safe for Honolulu (no DST); a real gap for any other zone |
+| V2 | Cognito **Essentials** feature-plan MAU allowance | Managed Login branding requires Essentials, not Lite. Trivial at one user — confirm rather than assume $0 |
+| V3 | Free memory on `db.t4g.micro` | RDS IAM auth wants 300–1000 MiB DB-side; the instance has 1 GiB shared with two other apps |
+| V4 | PyMySQL TLS parameter names for the pinned version | `ssl_ca`/`ssl_verify_*` vs the legacy `ssl={...}` dict varies by version |
+| V5 | `--only-binary=:all:` present in the uv bundle command | Without it uv silently builds an sdist for the *host* platform and ships x86 objects to an arm64 function — a runtime `invalid ELF header` instead of a build-time error |
+
 **No cross-account IAM is needed anywhere.** Sending uses the domain identity already verified in
 Brian's account (domain verification covers `donna@…`), and IMAP is username/password rather than
 IAM. See `ARCHITECTURE.md` §4.
@@ -64,9 +80,12 @@ infra/cdk/{lib,bin}
 .github/workflows/ci.yml
 ```
 
-**Migration `0001_initial.sql`** — `schema_migrations`, `users`, **all catalog tables + seed rows**
-(including catalogs whose entity tables arrive in later slices; seeding is idempotent via
+**Migration `0001_initial.sql`** — `users` + **all catalog tables and seed rows** (including catalogs
+whose entity tables arrive in later slices; seeding is idempotent via
 `INSERT … ON DUPLICATE KEY UPDATE` on `short_name`, and keeps vocabulary in one place).
+**Not `schema_migrations`** — the runner bootstraps that table, because it must query it to decide
+whether `0001` has already run. Every statement idempotent (`CREATE TABLE IF NOT EXISTS`), since
+MySQL cannot roll back a partially-applied file. See `DATABASE.md` §6.
 
 > **Seeding policy, in force for every slice.** **Reference data ships** — catalog vocabularies, and
 > the three strategy-doc message templates in slice 4. **Workflow data never does** — no venues, no
@@ -74,10 +93,17 @@ infra/cdk/{lib,bin}
 > part of doing the work, she enters. There is no import path and no demo dataset.
 
 **Backend**
-- `common/`: `db.py` (RDS IAM token, TLS, per-invocation connection, `finally` close), `http.py`
-  (bare-JSON envelope **+ the catch-all 500 mapper**), `auth.py` (**with the import-time
-  `AUTH_MODE=dev` ⇒ `ENV_TYPE=sandbox` assertion, ported verbatim**), `tz.py`, `logger.py`,
-  `users.py` (`get_user_id`; `UserNotFoundError` → **404, not 500**).
+- `common/`: `db.py` (RDS IAM token, TLS with `ssl_verify_identity`, **module-scope connection reuse**
+  with the `SET time_zone` liveness probe and a single reconnect; `ping(reconnect=True)` banned),
+  `http.py` (bare-JSON envelope **+ the catch-all 500 mapper**), `auth.py` (**with the import-time
+  `AUTH_MODE=dev` ⇒ `ENV_TYPE=sandbox` assertion**), `tz.py`, `logger.py`,
+  `users.py` (`get_or_create_user_id` — idempotent upsert; `UserNotFoundError` → **404, not 500**).
+- `app.py` + `api_handler.py`: one Powertools resolver, `handlers/` as `Router` modules, exception
+  handlers registered on `app`, entry/exit logging in a single middleware.
+- `migrations/runner.py`: `GET_LOCK` advisory lock, checksum integrity gate, `sqlparse.split()`,
+  one statement at a time. Takes `(connection, migrations_dir)` as parameters so tests drive it.
+- **Packaging:** `uv` with `--python-platform aarch64-manylinux2014 --only-binary=:all:`, bundled
+  per function (no layer — layers earn their keep at 10+ functions; there are 3).
 - `handlers/`: `health.py`, `migrate.py`, `catalogs.py`, `post_confirmation.py`,
   `seed_sandbox_user.py` — creates an unauthenticated **`dev`** user for sandbox (a `users` row and
   nothing else), mirroring legacy-tracker's `DEV_USER_SUB` pattern. **No owned records.**
@@ -91,12 +117,19 @@ infra/cdk/{lib,bin}
 - Copy logo assets from `~/360-balanced-living/ghl/assets/images/logos/`.
 
 **Infra — prod and sandbox stood up together**
-- CDK app: `<env>-Auth` (invite-only: `selfSignUpEnabled: false`, `removalPolicy: RETAIN`),
-  `<env>-Cert` (us-east-1), `<env>-Api` (`ROUTES` table + migrate `Trigger`), `<env>-Frontend`
-  (Route53 alias for `speaker-tracker.360balancedliving.com` in zone `Z08490251WV9146J97IRG`).
+- CDK app: `Prod-Auth` (invite-only: `selfSignUpEnabled: false`, `removalPolicy: RETAIN`, **Managed
+  Login + Essentials + `CfnManagedLoginBranding`**), `Prod-Cert` (us-east-1, `crossRegionReferences`
+  and explicit `env` on both stacks), `<env>-Api` (explicit routes → authorizer table + migrate
+  `Trigger`), `<env>-Frontend` (Route53 alias via `fromHostedZoneAttributes`, **not `fromLookup`**,
+  so `cdk synth` needs no credentials in CI).
+- **Sandbox gets no Cert/Auth/Route53** — default `*.cloudfront.net`, open gateway, `AUTH_MODE=dev`.
+- CloudFront: OAC for S3, `/api/*` with `ALL_VIEWER_EXCEPT_HOST_HEADER` + `CACHING_DISABLED`,
+  **no `errorResponses`** — SPA fallback is a per-behavior CloudFront Function, because
+  `errorResponses` is distribution-wide and would rewrite API 401s into HTML with status 200.
 - `shared-db.ts` referencing `/jobtracker/data/*`; `rds-db:connect` scoped by `DbiResourceId`.
-- Sandbox with open gateway + `AUTH_MODE=dev`.
-- CI: ruff, pytest, `tsc --noEmit` on PR/push. **No deploy step.**
+- CI: `ruff check`, `ruff format --check`, pytest (`mysql:8.4` service container), `tsc --noEmit`,
+  `cdk synth`. **No deploy step.** `core/.ruff.toml` bans `boto3`/`pymysql`/`os.environ` so layer
+  purity is a CI failure, not a review argument.
 
 > **Both environments ship in slice 1, deliberately.** Deploying them side by side surfaces
 > environment-specific conflicts — the conditional JWT authorizer, the cross-region cert reference,
@@ -110,8 +143,10 @@ infra/cdk/{lib,bin}
 3. `GET /api/catalogs` returns every seeded vocabulary with `short_name`, `description`,
    `sort_order`, plus `counts_toward_target` on `outreach_kinds` and `is_settled` on
    `payment_statuses`.
-4. Signing in through the Hosted UI creates a `users` row via `post_confirmation`; signing in again
-   does **not** duplicate it.
+4. Signing in results in **exactly one** `users` row; signing in again does not duplicate it.
+   *(Stated as an outcome, not a mechanism: `post_confirmation` has a hard 5s timeout against a
+   2–6s cold TLS handshake, and `AdminCreateUser` creates users already-confirmed, so the trigger
+   may never fire. The API's lazy idempotent upsert is the source of truth.)*
 5. Self-registration through the Hosted UI is **rejected**.
 6. Deploying an `AUTH_MODE=dev` Lambda with `ENV_TYPE=prod` **fails at cold start**.
 7. Closing the browser and reopening it leaves the user signed in.

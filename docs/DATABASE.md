@@ -582,9 +582,40 @@ the separate, genuine channel vocabulary on `outreaches`.
 
 Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is deployable on its own:
 
+> **`schema_migrations` is created by the runner, not by a migration.** Putting it in `0001` is
+> circular — the runner must query that table to decide whether `0001` has already run. The runner
+> bootstraps it with `CREATE TABLE IF NOT EXISTS` before consulting it:
+>
+> ```sql
+> CREATE TABLE IF NOT EXISTS schema_migrations (
+>   version          VARCHAR(20)  NOT NULL,
+>   name             VARCHAR(255) NOT NULL,
+>   checksum         CHAR(64)     NOT NULL,
+>   status           ENUM('running','applied','failed') NOT NULL,
+>   statements_total INT UNSIGNED NOT NULL,
+>   statements_ok    INT UNSIGNED NOT NULL DEFAULT 0,
+>   started_at       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+>   finished_at      TIMESTAMP(3) NULL,
+>   execution_ms     INT UNSIGNED NULL,
+>   error            TEXT NULL,
+>   PRIMARY KEY (version)
+> ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+> ```
+>
+> `checksum` (sha256 over the file, CRLF normalised to LF) is what detects a migration **edited
+> after it was applied** — otherwise schema drift is completely silent. `status` plus the statement
+> counters make a partially-applied file diagnosable: **MySQL 8 gives atomic DDL per statement, so
+> no half-created table, but a half-applied *file* is possible and there is no rollback.** Wrapping
+> a file in `BEGIN`/`COMMIT` is worse than useless — each DDL statement issues an implicit commit.
+> Recovery is forward-only, which is why **every migration statement must be idempotent**
+> (`CREATE TABLE IF NOT EXISTS`, `INSERT … ON DUPLICATE KEY UPDATE`): fix the SQL,
+> `DELETE FROM schema_migrations WHERE version='NNNN'`, redeploy. A `failed` row is a deliberate
+> hard stop requiring a human — auto-retrying from statement 1 against a partially-mutated schema is
+> how databases get corrupted.
+
 | Migration | Contents | Slice |
 |---|---|---|
-| `0001_initial.sql` | `schema_migrations`, `users`, all catalog tables + seed rows | 1 |
+| `0001_initial.sql` | `users`, all catalog tables + seed rows (**not** `schema_migrations`) | 1 |
 | `0002_orgs_contacts.sql` | `organizations`, `contacts`, `contact_organizations` | 2 |
 | `0003_pipeline.sql` | `opportunities`, `opportunity_contacts`, `opportunity_notes`, `status_events` | 3 |
 | `0004_outreach.sql` | `outreaches`, `message_templates` + seed of the three strategy-doc templates | 4 |

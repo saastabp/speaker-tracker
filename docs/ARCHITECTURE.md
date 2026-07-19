@@ -36,8 +36,8 @@ flowchart TB
 
     APIGW["HTTP API Gateway v2<br/>conditional Cognito JWT authorizer<br/>prod = on, sandbox = open"]
 
-    subgraph Lambdas["Route Lambdas — Python 3.12, arm64, OUTSIDE the VPC"]
-        LH["handlers/*.py<br/>one module per route-group"]
+    subgraph Lambdas["ONE API Lambda — Python 3.12, arm64, OUTSIDE the VPC"]
+        LH["app.py — APIGatewayHttpResolver<br/>handlers/*.py = Router modules<br/>(migrate · imap_poll · followup_notify<br/>are separate functions)"]
     end
 
     subgraph Backend["Layered backend — see section 2"]
@@ -70,7 +70,16 @@ flowchart TB
 - **Lambdas run outside any VPC** and reach RDS over the public internet with a short-lived **RDS
   IAM auth token** regenerated per invocation. No password in transit, no ENI cold-start penalty;
   the accepted cost is a 2–6s TLS handshake on a cold start.
-- **No connection pooling** — one `pymysql` connection per invocation, closed in `finally`.
+- **One Lambda serves every API route**, via Powertools' `APIGatewayHttpResolver` with a `Router`
+  per route-group. ~20 separate functions would each cold-start independently and each pay the
+  2–6s RDS TLS handshake; a sporadic single user would hit that on nearly every distinct action.
+  The layering is unchanged — `handlers/` modules become routers. Background work
+  (`migrate`, `imap_poll`, `followup_notify`) stays in its own functions: different triggers,
+  schedules, concurrency, and IAM.
+- **The DB connection is reused at module scope**, which is only possible *because* of the single
+  Lambda. The per-request `SET time_zone` doubles as the liveness probe; on a lost-connection error
+  the code reconnects **once** with a fresh IAM token. `ping(reconnect=True)` is **banned** — it
+  reuses the expired token stored on the connection. See `CODING-GUIDELINES.md` §2.
 - Every data handler calls `apply_session_timezone(conn, event)` immediately after connecting, so
   `CURDATE()` and friends evaluate in the caller's local time. **Kauaʻi is UTC-10**, so "today"
   rollover is ten hours off UTC and every date-bucketed metric depends on this.
@@ -151,29 +160,50 @@ headers plus candidate rows and *returns a decision*; `common/imap.py` does the 
 
 ```
 backend/src/
-  handlers/       presentation — one module per route-group
-  core/           business logic — pure
+  app.py          resolver + include_router + exception handlers (HTTP composition root)
+  api_handler.py  lambda_handler for the one API function
+  handlers/       presentation — one Router module per route-group
+  core/           business logic — pure (purity enforced by ruff, see §8)
   repositories/   data access — raw SQL, one module per aggregate
   models/         pydantic models — API contracts + typed rows
-  migrations/     forward-only .sql
+  migrations/     runner.py + forward-only .sql
   common/         shared infra
 ```
 
 **Response envelope** matches the siblings: bare JSON on success (each handler names its own
 top-level keys — no `{"data": ...}` wrapper), `{"error": "<message>"}` on failure, with
-400 / 404 / 405 / 500 mapped centrally.
+400 / 404 / 500 mapped centrally.
+
+**Exception handlers register on `app`, never on a `Router`** — router-level propagation through
+`include_router` has been version-dependent, and centralizing them is what guarantees the single
+error shape §1.1 promises. Powertools resolves a handler by walking `type(exc).__mro__`, so a
+specific `NotFound` handler beats the `Exception` catch-all — **but that ordering is an assumption a
+test must pin**: if it were "first registered wins" instead, every 404 would silently become a 500
+and nothing outside would reveal it.
+
+**Entry/exit logging lives in one `@app.middleware`**, not repeated per handler.
+`@logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_HTTP)` supplies the
+correlation id. Never set `log_event=True` — it logs the raw event, which carries the JWT.
 
 ---
 
-## 3. Endpoint → handler map
+## 3. Endpoint → router map
 
-Routes are wired in `infra/cdk/lib/api-stack.ts` via a `ROUTES` table (ported from legacy-tracker).
+Every row below except the three marked *(separate function)* is a **`Router` module inside the one
+API Lambda**, registered in `app.py` via `include_router`. The `ROUTES` table in
+`infra/cdk/lib/api-stack.ts` therefore maps **route → authorizer**, not route → function: it
+declares each path/method on the HTTP API and decides whether the JWT authorizer applies.
 
-| Handler | Routes |
+**Routes are declared explicitly, not as `ANY /{proxy+}`.** Two reasons: `/health` can stay
+unauthenticated for uptime checks while everything else carries the authorizer, and the gateway
+rejects unknown paths itself — so a 405 never has to be synthesized from Powertools' private route
+table.
+
+| Router module | Routes |
 |---|---|
-| `health.py` | GET `/health` |
-| `migrate.py` | *(no route — in-deploy `Trigger`)* |
-| `post_confirmation.py` | *(Cognito trigger; prod only, lives in the Auth stack)* |
+| `health.py` | GET `/health` — **no authorizer** |
+| `migrate.py` | *(separate function — in-deploy `Trigger`)* |
+| `post_confirmation.py` | *(separate function — Cognito trigger; prod only, in the Auth stack)* |
 | `catalogs.py` | GET `/catalogs` |
 | `organizations.py` | GET/POST `/organizations`, GET/PUT/DELETE `/organizations/{id}` |
 | `contacts.py` | GET/POST `/contacts`, GET/PUT/DELETE `/contacts/{id}`, GET `/contacts/{id}/timeline` |
@@ -190,8 +220,8 @@ Routes are wired in `infra/cdk/lib/api-stack.ts` via a `ROUTES` table (ported fr
 | `email_imports.py` | GET `/emails/pending-import`, POST `/emails/pending-import/{id}/link` |
 | `talks.py` | GET/POST `/talks`, PUT/DELETE `/talks/{id}` |
 | `materials.py` | GET/POST `/materials`, POST `/materials/presign`, DELETE `/materials/{id}` |
-| `imap_poll.py` | *(no route — EventBridge, 1-minute)* |
-| `followup_notify.py` | *(no route — EventBridge Scheduler target)* |
+| `imap_poll.py` | *(separate function — EventBridge, 1-minute)* |
+| `followup_notify.py` | *(separate function — EventBridge Scheduler target)* |
 | `seed_sandbox_user.py` | *(no route — sandbox seeding)* |
 
 **History has no handler of its own.** It is closed opportunities:
@@ -385,8 +415,54 @@ pattern.
 > own it, and a stack teardown could delete a verification that other systems depend on. Reference
 > it by ARN, exactly as `shared-db.ts` references the RDS instance.
 
-**Sandbox** deploys the same routes with an **open gateway** and `ENV_TYPE=sandbox` /
-`AUTH_MODE=dev`. Port `common/auth.py`'s import-time assertion **verbatim**:
+**Sandbox deploys no Cert, Auth, or Route53 stack** — it serves from the default
+`*.cloudfront.net` domain behind an **open gateway** with `ENV_TYPE=sandbox` / `AUTH_MODE=dev`.
+That halves the sandbox surface and avoids a second ACM validation.
+
+### 6.1 Three CDK details that are easy to get wrong
+
+**🚫 Do not use `Distribution.errorResponses` for the SPA fallback.** It is **distribution-wide, not
+per-behavior**, so the usual `403 → /index.html (200)` mapping also rewrites genuine 401/403 from the
+Cognito authorizer and 404s from `@app.not_found` into an HTML page with status 200. `useApi()`'s
+401 handling would then never fire — reintroducing precisely the bug class §1.1 says we are not
+inheriting. Instead attach a **second CloudFront Function to the default behavior only**, rewriting
+extension-less paths to `/index.html`. `/api/*` stays untouched.
+
+**Host header.** `/api/*` uses the managed `OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER` — it
+forwards `Authorization` and `X-User-Timezone` while suppressing `Host`, so API Gateway sees its own
+execute-api hostname and routes correctly. Pair with `CACHING_DISABLED`; CloudFront refuses to
+forward `Authorization` in an origin request policy when caching is enabled.
+
+**Zone lookup.** Use `HostedZone.fromHostedZoneAttributes` (id `Z08490251WV9146J97IRG`), **not
+`fromLookup`** — no context cache means `cdk synth` needs no AWS credentials, which is what lets the
+infra CI job run. The first `fromLookup` added anywhere breaks that job.
+
+**Cognito uses Managed Login**, not the classic Hosted UI, which is in maintenance and supports
+neither passkeys nor real branding. Managed Login requires the **Essentials** feature plan and an
+explicit branding resource — with `NEWER_MANAGED_LOGIN` and no branding configured the sign-in page
+can render unstyled. There is no L2 construct; use `CfnManagedLoginBranding` with
+`useCognitoProvidedValues: true`.
+
+**Send the ID token, not the access token.** `HttpJwtAuthorizer` validates `aud`; Cognito ID tokens
+carry `aud = clientId` while access tokens carry `client_id` and no `aud`. Whether API Gateway
+special-cases the latter is unverified — ship with the ID token and test the alternative
+empirically. The failure mode is a blanket 401 with nothing in the Lambda logs.
+
+### 6.2 Function sizing
+
+| Function | Memory | Timeout | Reserved concurrency |
+|---|---|---|---|
+| API | 1024 MB | 15s | 5 |
+| `migrate` | 512 MB | 300s | 1 |
+| `post_confirmation` | 512 MB | **5s** (Cognito's hard cap) | 2 |
+
+1024 MB on arm64 is the sweet spot — CPU scales with memory, so Python + pydantic import is roughly
+twice as fast as at 512 MB for near-identical cost, since duration halves. Reserved concurrency 5
+bounds connections against the shared `db.t4g.micro`, and a 15s timeout stays under API Gateway's
+30s integration cap so you see your own timeout rather than the gateway's. **No provisioned
+concurrency** — roughly $5/month per unit to save 2–6s for one user who signs in quarterly.
+
+Port `common/auth.py`'s import-time assertion **verbatim**:
 
 ```python
 if _AUTH_MODE == "dev" and _ENV_TYPE != "sandbox":
@@ -445,6 +521,23 @@ power-partner ★, cream `#FBF8F2` page background.
 no database and no mocking — that is the entire point of the layering. Repository tests exercise
 real SQL against a test schema with transaction rollback; handler tests cover validation, the happy
 path, and error mapping.
+
+**`core/` purity is enforced by ruff, not by review.** A `backend/src/core/.ruff.toml` inherits the
+root config and adds `flake8-tidy-imports.banned-api` entries for `boto3`, `pymysql`,
+`aws_lambda_powertools.event_handler`, and `os.environ`. Ruff's hierarchical config turns a layering
+violation into a CI failure instead of a code-review argument. The root config also bans
+`pymysql.connections.Connection.ping` (§1).
+
+**The test schema is built by running the real migration runner** against an empty database, not by
+a hand-maintained fixture. Two payoffs: the test schema cannot drift from production, and the
+riskiest new code in slice 1 gets exercised on every push for free. This imposes one design
+constraint worth honouring from the start — `runner.run()` must take a connection and a directory as
+**parameters**, never read env vars at import.
+
+CI runs DB-backed tests against a **`mysql:8.4`** service container, pinned to match RDS 8.4.8:
+`mysql:8.0` differs on `utf8mb4` collation defaults, which is exactly the drift that makes CI green
+and production red. Those tests **skip** when `TEST_DATABASE_URL` is unset, so `pytest` still runs on
+a machine without Docker — otherwise developers quietly stop running tests locally.
 
 **GitHub Actions from slice 1** — `ruff`, `pytest`, `tsc --noEmit` on PR and push. **No deploy
 step**; deploys stay manual.
