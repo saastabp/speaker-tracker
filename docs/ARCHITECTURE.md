@@ -176,12 +176,17 @@ top-level keys — no `{"data": ...}` wrapper), `{"error": "<message>"}` on fail
 
 **Exception handlers register on `app`, never on a `Router`** — router-level propagation through
 `include_router` has been version-dependent, and centralizing them is what guarantees the single
-error shape §1.1 promises. Powertools resolves a handler by walking `type(exc).__mro__`, so a
-specific `NotFound` handler beats the `Exception` catch-all — **but that ordering is an assumption a
-test must pin**: if it were "first registered wins" instead, every 404 would silently become a 500
-and nothing outside would reveal it.
+error shape §1.1 promises. A **single `@app.exception_handler(Exception)` catch-all** delegates to
+`common/http.py`'s `response_for_exception`, whose ordered `isinstance` map decides the status — and
+which honours Powertools' own `ServiceError.status_code`, so an unmatched route returns 404 rather
+than a false 500. This removes any dependence on Powertools' exception-handler MRO precedence: the
+mapping is deterministic Python we own and unit-test.
 
-**Entry/exit logging lives in one `@app.middleware`**, not repeated per handler.
+**Entry/exit logging wraps `app.resolve` in `api_handler.lambda_handler`, not a middleware.**
+Powertools runs exception handlers *outside* the global middleware chain, so a middleware never
+observes the mapped error status (or unmatched routes at all); `app.resolve` returns the final
+response dict for every outcome, so wrapping it logs the true status, at a level that mirrors it
+(5xx → ERROR, 4xx → WARNING, else INFO).
 `@logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_HTTP)` supplies the
 correlation id. Never set `log_event=True` — it logs the raw event, which carries the JWT.
 
@@ -471,6 +476,16 @@ if _AUTH_MODE == "dev" and _ENV_TYPE != "sandbox":
 
 A misconfigured prod Lambda then fails at cold start rather than silently accepting anonymous
 traffic against Donna's CRM.
+
+**Observability — Powertools Logger + Metrics on, Tracer off by default.** Structured JSON logging
+(§2) is always on. **Metrics** (CloudWatch EMF) are active on the API handler with
+`capture_cold_start_metric=True`: EMF emits metrics as log lines, so there is **no added latency and
+no `PutMetricData` call**, and the app's known cold-start cost becomes measurable for free
+(namespace `SpeakerTracker`). **Tracer** (X-Ray) is wired on the handler but **disabled by default**
+via `POWERTOOLS_TRACE_DISABLED=true` (set per-env in CDK) — the `aws-xray-sdk` import adds cold-start
+weight the quarterly-sign-in user shouldn't pay to trace one request; flip it on per-env when
+investigating (it earns its keep on the SES/IMAP subsegments in slice 6). Metrics needs no extra
+dependency; the Tracer is pulled in by the `aws-lambda-powertools[tracer]` extra.
 
 **Config vs secrets.** Everything except the IMAP credential is an env var resolved from SSM at
 *deploy* time — matching both siblings, which perform no runtime parameter reads. The WorkMail IMAP

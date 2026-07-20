@@ -96,10 +96,11 @@ MySQL cannot roll back a partially-applied file. See `DATABASE.md` §6.
 - `common/`: `db.py` (RDS IAM token, TLS with `ssl_verify_identity`, **module-scope connection reuse**
   with the `SET time_zone` liveness probe and a single reconnect; `ping(reconnect=True)` banned),
   `http.py` (bare-JSON envelope **+ the catch-all 500 mapper**), `auth.py` (**with the import-time
-  `AUTH_MODE=dev` ⇒ `ENV_TYPE=sandbox` assertion**), `tz.py`, `logger.py`,
-  `users.py` (`get_or_create_user_id` — idempotent upsert; `UserNotFoundError` → **404, not 500**).
-- `app.py` + `api_handler.py`: one Powertools resolver, `handlers/` as `Router` modules, exception
-  handlers registered on `app`, entry/exit logging in a single middleware.
+  `AUTH_MODE=dev` ⇒ `ENV_TYPE=sandbox` assertion**), `tz.py`, `logger.py`, `errors.py`.
+- `repositories/users.py`: `upsert_user_id` — idempotent, race-safe upsert (the source of truth for
+  a user row, **not** `post_confirmation`); `UserNotFoundError` maps **404, not 500** in `http.py`.
+- `app.py` + `api_handler.py`: one Powertools resolver, `handlers/` as `Router` modules, a single
+  catch-all exception handler on `app`, and entry/exit logging wrapping `app.resolve` in the handler.
 - `migrations/runner.py`: `GET_LOCK` advisory lock, checksum integrity gate, `sqlparse.split()`,
   one statement at a time. Takes `(connection, migrations_dir)` as parameters so tests drive it.
 - **Packaging:** `uv` with `--python-platform aarch64-manylinux2014 --only-binary=:all:`, bundled
