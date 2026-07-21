@@ -2,6 +2,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { ApiStack } from '../lib/api-stack';
+import { FrontendStack } from '../lib/frontend-stack';
 
 /**
  * Speaker Tracker CDK app entrypoint. Stacks are added in this order (see
@@ -18,12 +19,20 @@ const PRIMARY_REGION = 'us-west-2';
 const app = new cdk.App();
 
 // ── Sandbox: open gateway, dev auth, default *.cloudfront.net (no Cert/Auth) ──
-new ApiStack(app, 'sandbox-Api', {
-  env: { account: ACCOUNT, region: PRIMARY_REGION },
+const sandboxEnv = { account: ACCOUNT, region: PRIMARY_REGION };
+
+const sandboxApi = new ApiStack(app, 'sandbox-Api', {
+  env: sandboxEnv,
   envType: 'sandbox',
   authMode: 'dev',
   dbName: 'speakertracker_sandbox',
   logRetention: logs.RetentionDays.ONE_MONTH,
+});
+
+new FrontendStack(app, 'sandbox-Frontend', {
+  env: sandboxEnv,
+  envType: 'sandbox',
+  httpApi: sandboxApi.httpApi,
 });
 
 app.synth();
