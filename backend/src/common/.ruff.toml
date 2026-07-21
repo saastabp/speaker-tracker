@@ -1,0 +1,18 @@
+# Layer-purity enforcement for common/ (the shared infrastructure layer).
+#
+# common/ must stay a set of leaves: it may import stdlib, third-party libraries, and other
+# common/ modules — never the app layers above it. This is the CI-enforced version of the
+# "common is a leaf" invariant; without it a future edit could reintroduce a
+# common -> repositories import (as authenticate() briefly did) and only review would catch it.
+# Cross-layer wiring belongs at the handler edge (e.g. handlers/context.py).
+#
+# Inherits the base ruleset (select, line-length, target-version); adds banned-api for the
+# upward app packages. banned-api (TID251) matches submodules by prefix, so banning
+# "repositories" also bans "repositories.users".
+extend = "../../pyproject.toml"
+
+[lint.flake8-tidy-imports.banned-api]
+"repositories".msg = "common/ is a leaf layer; do not import the data layer. Wire cross-layer at the handler edge (handlers/context.py)."
+"handlers".msg = "common/ is a leaf layer; do not import the presentation layer (handlers/)."
+"models".msg = "common/ is a leaf layer; do not import models/."
+"migrations".msg = "common/ is a leaf layer; do not import migrations/."

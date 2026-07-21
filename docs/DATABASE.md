@@ -215,7 +215,8 @@ erDiagram
     message_templates {
         bigint id PK
         bigint user_id FK "NULL = shared"
-        bigint message_template_kind_id FK
+        bigint message_template_kind_id FK "purpose"
+        bigint channel_id FK "outreach_channels - how it is sent"
         varchar name
         varchar subject
         mediumtext body "merge fields"
@@ -282,8 +283,10 @@ erDiagram
 ## 2. Entity tables
 
 ### `users`
-Tenant root. `cognito_sub` UNIQUE — populated by the `post_confirmation` Lambda
-(`INSERT … ON DUPLICATE KEY UPDATE`, idempotent). `timezone` defaults to `Pacific/Honolulu`;
+Tenant root. `cognito_sub` UNIQUE — populated by the API's first-authenticated-request upsert
+(`handlers/context.py` → `repositories/users.upsert_user_id`, idempotent), the **source of truth**
+for the row. The Cognito `post_confirmation` Lambda is only best-effort — an `AdminCreateUser` user
+is pre-confirmed so it may never fire (see `DEV-PLAN.md` acceptance #4). `timezone` defaults to `Pacific/Honolulu`;
 the `X-User-Timezone` header still governs per-request `SET time_zone` (Kauaʻi is UTC-10, so
 "today" rollover is 10 hours off UTC and every date-bucketed metric depends on it).
 
@@ -422,6 +425,11 @@ Indexes: `(user_id, due_date, completed_at)` — the Dashboard's due list.
 writes a personal copy with `user_id` set. `body` holds merge fields (`[Name]`, …) resolved
 client-side for the copy-to-clipboard DM flow.
 
+Two orthogonal axes, deliberately separate columns (see §5): `message_template_kind_id` is the
+template's **purpose/audience** (`message_template_kinds` — e.g. a power-partner intro vs. a cold
+pitch), while `channel_id → outreach_channels` is **how it is sent** (`dm` / `email`). Both this
+table and its `message_template_kinds` catalog arrive in `0004`, not `0001`.
+
 ### `targets`
 `UNIQUE(user_id, target_type_id, cadence)` — the key the `PUT /targets` upsert
 (`ON DUPLICATE KEY UPDATE`) depends on.
@@ -454,7 +462,7 @@ Per-folder poll watermark, `UNIQUE(user_id, folder_name)`. Each poll fetches onl
 | `payment_statuses` | unbilled, invoiced, partial, paid, n_a | `is_settled` |
 | `outreach_kinds` | initial, follow_up, correspondence | **`counts_toward_target`** |
 | `outreach_channels` | email, dm, call, in_person, text | — |
-| `message_template_kinds` | dm, email, power_partner | — |
+| `message_template_kinds` | *purpose vocabulary — values defined in slice 4 (§5); seeded in `0004`, not `0001`* | — |
 | `target_types` | venues_researched, outreaches, pitches, bookings | — |
 
 ### `opportunity_statuses` — `sort_order` drives the funnel
@@ -570,11 +578,15 @@ Two places where this schema departs from a convention or from `DESIGN.md`, with
    `DESIGN.md` §4 lists both `status` and `completed_at`; storing one fact in two columns
    guarantees they eventually disagree.
 
-Also worth flagging for review rather than silently absorbing: `DESIGN.md` §4 calls
-`message_templates.channel` a *channel*, but its values are `dm / email / power_partner` — and
-`power_partner` is an audience, not a channel. Modelled here as
-**`message_template_kinds`** (matching legacy-tracker's naming) with `outreach_channels` kept as
-the separate, genuine channel vocabulary on `outreaches`.
+A resolved modelling decision worth recording: `DESIGN.md` §4 calls `message_templates.channel`
+a *channel*, but its proposed values `dm / email / power_partner` conflated two axes — `dm`/`email`
+are channels (*how* a message is sent), while `power_partner` is an **audience**, already modelled
+as `contacts.is_power_partner`. These are split: a template carries a `channel_id →
+outreach_channels` (how it is sent) **and** a `message_template_kind_id → message_template_kinds`,
+a *purpose* vocabulary (power-partner intro, cold pitch, …). Exact purpose values are settled in
+slice 4, where `message_templates` and the `message_template_kinds` catalog are both created
+(`0004`); `message_template_kinds` is therefore the one catalog **not** seeded in `0001`.
+`outreach_channels` remains the genuine channel vocabulary shared with `outreaches`.
 
 ---
 
@@ -615,14 +627,16 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 
 | Migration | Contents | Slice |
 |---|---|---|
-| `0001_initial.sql` | `users`, all catalog tables + seed rows (**not** `schema_migrations`) | 1 |
+| `0001_initial.sql` | `users`, all catalog tables + seed rows — **except `message_template_kinds`**, deferred to `0004` (**not** `schema_migrations`) | 1 |
 | `0002_orgs_contacts.sql` | `organizations`, `contacts`, `contact_organizations` | 2 |
 | `0003_pipeline.sql` | `opportunities`, `opportunity_contacts`, `opportunity_notes`, `status_events` | 3 |
-| `0004_outreach.sql` | `outreaches`, `message_templates` + seed of the three strategy-doc templates | 4 |
+| `0004_outreach.sql` | `outreaches`, `message_templates` (+ `channel_id → outreach_channels`), the `message_template_kinds` purpose catalog + seed of the strategy-doc templates | 4 |
 | `0005_targets.sql` | `targets` | 5 |
 | `0006_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors` | 6 |
 | `0007_followups.sql` | `follow_ups` | 7 |
 | `0008_assets.sql` | `talks`, `materials` | 2–4 (as needed) |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
-(`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place.
+(`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The
+sole exception is `message_template_kinds`: its shape (a *purpose* axis, §5) is unresolved until
+`message_templates` is designed, so it is seeded in `0004` alongside that table rather than in `0001`.

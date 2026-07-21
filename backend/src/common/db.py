@@ -177,6 +177,36 @@ def get_connection(tz_name: str) -> Connection:
     return _conn
 
 
+def open_dedicated_connection() -> Connection:
+    """Open a fresh connection whose lifecycle the caller owns.
+
+    Unlike :func:`get_connection`, this is **not** cached at module scope. It is for one-off
+    tasks — chiefly the migration runner — that need a connection they close themselves, so a
+    session-scoped ``GET_LOCK`` advisory lock releases deterministically on close. Never use
+    this on the API request path; use :func:`get_connection` there.
+
+    Returns
+    -------
+    pymysql.connections.Connection
+        A new autocommit, TLS-verified, IAM-authenticated connection.
+    """
+    return _new_connection()
+
+
+def close_quietly(conn: Connection | None) -> None:
+    """Close a caller-owned connection, swallowing errors from an already-broken socket.
+
+    Public wrapper over :func:`_close_quietly` for one-off callers (e.g. the migrate handler)
+    that must close in a ``finally`` without a close error masking the real exception.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection or None
+        The connection to close; ``None`` is a no-op.
+    """
+    _close_quietly(conn)
+
+
 @contextmanager
 def transaction(conn: Connection) -> Iterator[Connection]:
     """Run a block as one atomic transaction on an ``autocommit=True`` connection.

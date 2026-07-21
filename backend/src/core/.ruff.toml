@@ -1,0 +1,17 @@
+# Purity enforcement for core/ (pure business logic — no I/O, no framework, no env).
+#
+# core/ holds domain logic that must be unit-testable with no AWS, no database, and no HTTP
+# framework in sight. I/O lives at the edges (handlers/ -> repositories/ -> common/db); config
+# is passed in, never read from the environment. core/ depends on repository *Protocols* (the
+# dependency-inversion design), wired to concrete repositories at the handler edge, so it never
+# imports concrete I/O. This is the CI-enforced version of that rule.
+#
+# Inherits the base ruleset (select, line-length, target-version); adds banned-api for I/O
+# drivers, the web framework, and environment access.
+extend = "../../pyproject.toml"
+
+[lint.flake8-tidy-imports.banned-api]
+"boto3".msg = "core/ is pure logic; no AWS SDK. Do I/O at the edge (handlers/ or repositories/)."
+"pymysql".msg = "core/ is pure logic; no DB driver. Depend on a repository Protocol, wired at the handler edge."
+"aws_lambda_powertools.event_handler".msg = "core/ is pure logic; no HTTP framework. Keep request/response handling in handlers/."
+"os.environ".msg = "core/ must not read the environment; pass configuration in as arguments."

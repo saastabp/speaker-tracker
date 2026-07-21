@@ -19,9 +19,10 @@ from __future__ import annotations
 from aws_lambda_powertools.event_handler import APIGatewayHttpResolver, Response
 
 from common.http import response_for_exception
-from handlers import health
+from handlers import catalogs, health
 
 app = APIGatewayHttpResolver()
+app.include_router(catalogs.router)
 app.include_router(health.router)
 
 

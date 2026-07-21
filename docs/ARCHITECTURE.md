@@ -162,7 +162,8 @@ headers plus candidate rows and *returns a decision*; `common/imap.py` does the 
 backend/src/
   app.py          resolver + include_router + exception handlers (HTTP composition root)
   api_handler.py  lambda_handler for the one API function
-  handlers/       presentation — one Router module per route-group
+  handlers/       presentation — one Router module per route-group, plus context.py
+                  (authenticate(): principal→connection→user upsert — the auth composition root)
   core/           business logic — pure (purity enforced by ruff, see §8)
   repositories/   data access — raw SQL, one module per aggregate
   models/         pydantic models — API contracts + typed rows
@@ -532,22 +533,25 @@ power-partner ★, cream `#FBF8F2` page background.
 
 ## 8. Testing & CI
 
-`pytest`, mirroring the source tree under `backend/tests/unit/`. `core/` is pure, so it tests with
-no database and no mocking — that is the entire point of the layering. Repository tests exercise
+`pytest` under `backend/tests/` (flat — DB-backed runner/repository tests live beside the pure unit
+tests). `core/` is pure, so it tests with no database and no mocking — that is the entire point of the layering. Repository tests exercise
 real SQL against a test schema with transaction rollback; handler tests cover validation, the happy
 path, and error mapping.
 
-**`core/` purity is enforced by ruff, not by review.** A `backend/src/core/.ruff.toml` inherits the
+**Layer purity is enforced by ruff, not by review.** `backend/src/core/.ruff.toml` inherits the
 root config and adds `flake8-tidy-imports.banned-api` entries for `boto3`, `pymysql`,
-`aws_lambda_powertools.event_handler`, and `os.environ`. Ruff's hierarchical config turns a layering
-violation into a CI failure instead of a code-review argument. The root config also bans
-`pymysql.connections.Connection.ping` (§1).
+`aws_lambda_powertools.event_handler`, and `os.environ`, so a core module reaching for I/O or the
+environment fails CI. `backend/src/common/.ruff.toml` does the same for the shared leaf layer,
+banning imports of `repositories`/`handlers`/`models`/`migrations` so `common/` can never depend
+*upward* (the regression `authenticate()` briefly introduced before moving to `handlers/context.py`).
+Ruff's hierarchical config turns each layering violation into a CI failure instead of a code-review
+argument. The root config also bans `pymysql.connections.Connection.ping` (§1).
 
 **The test schema is built by running the real migration runner** against an empty database, not by
 a hand-maintained fixture. Two payoffs: the test schema cannot drift from production, and the
 riskiest new code in slice 1 gets exercised on every push for free. This imposes one design
-constraint worth honouring from the start — `runner.run()` must take a connection and a directory as
-**parameters**, never read env vars at import.
+constraint worth honouring from the start — `run_migrations(connection, migrations_dir)` takes the
+connection and directory as **parameters**, never reading env vars at import.
 
 CI runs DB-backed tests against a **`mysql:8.4`** service container, pinned to match RDS 8.4.8:
 `mysql:8.0` differs on `utf8mb4` collation defaults, which is exactly the drift that makes CI green

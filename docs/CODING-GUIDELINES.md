@@ -133,7 +133,8 @@ Follow the global **API-logging discipline** (authoritative in `CLAUDE.md`) on e
 - **pytest.** Unit-test `core/` as pure functions (no DB/network). Repository tests exercise the
   SQL (test schema / transaction rollback). Handler tests cover request validation, the happy
   path, and error mapping.
-- Tests mirror the source tree: `tests/unit/test_<module>.py`.
+- Tests live flat under `backend/tests/` as `test_<module>.py`; DB-backed tests skip when
+  `TEST_DATABASE_URL` is unset.
 - Aim for meaningful coverage of core + repositories; don't chase 100%.
 
 ## 8. Error handling

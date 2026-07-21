@@ -74,7 +74,7 @@ almost pure setup.
 
 **Repo scaffold**
 ```
-backend/{src/{handlers,core,repositories,models,migrations,common},tests/unit}
+backend/{src/{handlers,core,repositories,models,migrations,common},tests}
 frontend/src/{pages,components,api,auth}
 infra/cdk/{lib,bin}
 .github/workflows/ci.yml
@@ -129,8 +129,9 @@ MySQL cannot roll back a partially-applied file. See `DATABASE.md` §6.
   `errorResponses` is distribution-wide and would rewrite API 401s into HTML with status 200.
 - `shared-db.ts` referencing `/jobtracker/data/*`; `rds-db:connect` scoped by `DbiResourceId`.
 - CI: `ruff check`, `ruff format --check`, pytest (`mysql:8.4` service container), `tsc --noEmit`,
-  `cdk synth`. **No deploy step.** `core/.ruff.toml` bans `boto3`/`pymysql`/`os.environ` so layer
-  purity is a CI failure, not a review argument.
+  `cdk synth`. **No deploy step.** `core/.ruff.toml` bans `boto3`/`pymysql`/`aws_lambda_powertools.event_handler`/`os.environ`,
+  and `common/.ruff.toml` bans upward imports (`repositories`/`handlers`/`models`/`migrations`), so
+  layer purity is a CI failure, not a review argument.
 
 > **Both environments ship in slice 1, deliberately.** Deploying them side by side surfaces
 > environment-specific conflicts — the conditional JWT authorizer, the cross-region cert reference,
