@@ -1,7 +1,10 @@
 import { CfnOutput, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
@@ -32,7 +35,13 @@ export interface FrontendStackProps extends StackProps {
   readonly envType: 'sandbox' | 'prod';
   /** API to serve under /api/* (same-origin, no CORS). */
   readonly httpApi: apigwv2.IHttpApi;
-  // prod-only (added later): domainName, certificate, hostedZone.
+  /** Prod custom domain (cert is cross-region from us-east-1). Absent → sandbox default *.cloudfront.net. */
+  readonly customDomain?: {
+    readonly domainName: string;
+    readonly certificate: acm.ICertificate;
+    readonly hostedZoneId: string;
+    readonly zoneName: string;
+  };
 }
 
 /**
@@ -70,6 +79,9 @@ export class FrontendStack extends Stack {
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       comment: `${props.envType}-speaker-tracker`,
       defaultRootObject: 'index.html',
+      // Custom domain + cert in prod; sandbox serves from the default *.cloudfront.net.
+      domainNames: props.customDomain ? [props.customDomain.domainName] : undefined,
+      certificate: props.customDomain?.certificate,
       // SPA static assets from S3 via OAC; extension-less paths fall back to index.html.
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(bucket),
@@ -104,9 +116,20 @@ export class FrontendStack extends Stack {
       distributionPaths: ['/index.html'],
     });
 
+    // Prod: alias the custom domain (A + AAAA) at the distribution. Same-account zone.
+    if (props.customDomain) {
+      const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
+        hostedZoneId: props.customDomain.hostedZoneId,
+        zoneName: props.customDomain.zoneName,
+      });
+      const target = route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution));
+      new route53.ARecord(this, 'AliasA', { zone, recordName: props.customDomain.domainName, target });
+      new route53.AaaaRecord(this, 'AliasAaaa', { zone, recordName: props.customDomain.domainName, target });
+    }
+
     new CfnOutput(this, 'DistributionUrl', {
-      value: `https://${distribution.distributionDomainName}`,
-      description: 'CloudFront URL serving the SPA and /api/* (sandbox: default *.cloudfront.net).',
+      value: `https://${props.customDomain?.domainName ?? distribution.distributionDomainName}`,
+      description: 'URL serving the SPA and /api/* (prod: custom domain; sandbox: *.cloudfront.net).',
     });
   }
 }

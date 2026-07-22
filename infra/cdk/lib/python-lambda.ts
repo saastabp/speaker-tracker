@@ -21,6 +21,9 @@ const BACKEND_DIR = path.resolve(__dirname, '..', '..', '..', 'backend');
  */
 export function backendBundle(): lambda.Code {
   return lambda.Code.fromAsset(BACKEND_DIR, {
+    // Keep dev-only trees out of the asset fingerprint (the bundle content comes from
+    // buildBundle's output, but a skipped-bundling path — e.g. tests — fingerprints source).
+    exclude: ['.venv', 'tests', '.pytest_cache', '.ruff_cache', '**/__pycache__'],
     bundling: {
       // Docker fallback is unreachable — buildBundle throws on failure rather than
       // returning false — but BundlingOptions requires an image.
