@@ -105,9 +105,9 @@ MySQL cannot roll back a partially-applied file. See `DATABASE.md` §6.
   one statement at a time. Takes `(connection, migrations_dir)` as parameters so tests drive it.
 - **Packaging:** `uv` with `--python-platform aarch64-manylinux2014 --only-binary=:all:`, bundled
   per function (no layer — layers earn their keep at 10+ functions; there are 3).
-- `handlers/`: `health.py`, `migrate.py`, `catalogs.py`, `seed_sandbox_user.py` — the last creates
-  an unauthenticated **`dev`** user for sandbox (a `users` row and nothing else), mirroring
-  legacy-tracker's `DEV_USER_SUB` pattern. **No owned records.**
+- `handlers/`: `health.py`, `migrate.py`, `catalogs.py`. (No `seed_sandbox_user` — the sandbox
+  `dev` user's `users` row is created lazily by the first authenticated request, same as any real
+  user; the legacy-tracker `DEV_USER_SUB` seed pattern is obsolete given the lazy upsert.)
 
 **Frontend**
 - AppShell: navy nav rail, logo, light theme, Mantine provider, brand palette tokens.

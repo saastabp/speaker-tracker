@@ -227,7 +227,6 @@ table.
 | `materials.py` | GET/POST `/materials`, POST `/materials/presign`, DELETE `/materials/{id}` |
 | `imap_poll.py` | *(separate function — EventBridge, 1-minute)* |
 | `followup_notify.py` | *(separate function — EventBridge Scheduler target)* |
-| `seed_sandbox_user.py` | *(no route — sandbox seeding)* |
 
 **History has no handler of its own.** It is closed opportunities:
 `GET /opportunities?closed=true` for the table, `GET /opportunities/{id}` for the detail. Adding a

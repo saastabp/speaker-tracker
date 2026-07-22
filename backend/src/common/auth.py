@@ -26,7 +26,8 @@ _ENV_TYPE = os.environ.get("ENV_TYPE", "prod")
 if _AUTH_MODE == "dev" and _ENV_TYPE != "sandbox":
     raise RuntimeError("AUTH_MODE=dev is only allowed when ENV_TYPE=sandbox")
 
-#: The fixed sandbox principal. Its ``users`` row owns no records (see seed_sandbox_user).
+#: The fixed sandbox principal. Its ``users`` row is created lazily by the first authenticated
+#: request (``handlers/context.authenticate`` -> ``upsert_user_id``) and owns no records.
 DEV_USER_SUB = "dev"
 DEV_USER_EMAIL = "dev@speaker-tracker.local"
 
