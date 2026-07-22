@@ -81,7 +81,7 @@ def _rows(conn, table: str) -> list[dict]:
 
 def test_applies_initial_migration(db_connection) -> None:
     result = run_migrations(db_connection, MIGRATIONS_DIR)
-    assert result.applied == [FIRST]
+    assert result.applied[0] == FIRST  # 0001 applies first; later slices add more migrations
     assert result.skipped == []
 
     with db_connection.cursor() as cur:
@@ -130,11 +130,11 @@ def test_rerun_is_a_noop(db_connection) -> None:
     run_migrations(db_connection, MIGRATIONS_DIR)
     result = run_migrations(db_connection, MIGRATIONS_DIR)
     assert result.applied == []
-    assert result.skipped == [FIRST]
+    assert FIRST in result.skipped
 
     with db_connection.cursor() as cur:
-        cur.execute("SELECT COUNT(*) AS n FROM schema_migrations")
-        assert cur.fetchone()["n"] == 1
+        cur.execute("SELECT COUNT(*) AS n FROM schema_migrations WHERE version = %s", (FIRST,))
+        assert cur.fetchone()["n"] == 1  # 0001 recorded once, not duplicated on re-run
         cur.execute("SELECT COUNT(*) AS n FROM opportunity_statuses")
         assert cur.fetchone()["n"] == 9  # seeds not duplicated on re-run
 
