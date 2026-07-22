@@ -1,5 +1,9 @@
 import * as logs from 'aws-cdk-lib/aws-logs';
 
+/** App name — prefixes stack ids and Lambda/log-group names, and tags every resource, so
+ *  speaker-tracker resources are filterable apart from the jobtracker/legacytracker siblings. */
+export const APP_NAME = 'speaker-tracker';
+
 export const ACCOUNT = '381492047863';
 export const PRIMARY_REGION = 'us-west-2';
 export const CERT_REGION = 'us-east-1'; // CloudFront requires the cert in us-east-1

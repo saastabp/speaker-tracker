@@ -27,6 +27,8 @@ const ROUTES: RouteDef[] = [
 ];
 
 export interface ApiStackProps extends StackProps {
+  /** App name prefix for resource naming (e.g. `speaker-tracker`). */
+  readonly appName: string;
   readonly envType: 'sandbox' | 'prod';
   readonly authMode: 'dev' | 'cognito';
   /** Schema selected on connect: `speakertracker` | `speakertracker_sandbox`. */
@@ -66,6 +68,7 @@ export class ApiStack extends Stack {
 
     // One Lambda serves every API route (see ARCHITECTURE.md §1).
     const apiFn = this.pythonFunction('ApiFunction', {
+      functionName: `${props.appName}-${props.envType}-api`,
       code,
       handler: 'api_handler.lambda_handler',
       memorySize: 1024,
@@ -79,6 +82,7 @@ export class ApiStack extends Stack {
     // Migrations run on their own short-lived, dedicated connection — never the API's
     // reused one (the GET_LOCK advisory lock is only safe while the session is short-lived).
     const migrateFn = this.pythonFunction('MigrateFunction', {
+      functionName: `${props.appName}-${props.envType}-migrate`,
       code,
       handler: 'handlers.migrate.lambda_handler',
       memorySize: 512,
@@ -92,7 +96,7 @@ export class ApiStack extends Stack {
     // HTTP API with explicit routes (not ANY /{proxy+}), so /health can stay open and
     // the gateway rejects unknown paths itself.
     this.httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
-      apiName: `${props.envType}-speaker-tracker`,
+      apiName: `${props.appName}-${props.envType}-api`,
     });
 
     const integration = new HttpLambdaIntegration('ApiIntegration', apiFn);
@@ -127,6 +131,7 @@ export class ApiStack extends Stack {
   private pythonFunction(
     id: string,
     props: {
+      functionName: string;
       code: lambda.Code;
       handler: string;
       memorySize: number;
@@ -137,10 +142,12 @@ export class ApiStack extends Stack {
     },
   ): lambda.Function {
     const logGroup = new logs.LogGroup(this, `${id}Logs`, {
+      logGroupName: `/aws/lambda/${props.functionName}`,
       retention: props.logRetention,
       removalPolicy: RemovalPolicy.DESTROY,
     });
     return new lambda.Function(this, id, {
+      functionName: props.functionName,
       runtime: PYTHON_RUNTIME,
       architecture: LAMBDA_ARCH,
       code: props.code,

@@ -16,6 +16,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
   test('sandbox locks no route — open gateway, zero authorizers', () => {
     const stack = new ApiStack(newApp(), 'sandbox-Api', {
       env: ENV,
+      appName: 'speaker-tracker',
       envType: 'sandbox',
       authMode: 'dev',
       dbName: 'speakertracker_sandbox',
@@ -41,6 +42,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
     });
     const stack = new ApiStack(app, 'prod-Api', {
       env: ENV,
+      appName: 'speaker-tracker',
       envType: 'prod',
       authMode: 'cognito',
       dbName: 'speakertracker',
