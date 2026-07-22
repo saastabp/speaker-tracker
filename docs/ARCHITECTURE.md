@@ -209,7 +209,6 @@ table.
 |---|---|
 | `health.py` | GET `/health` — **no authorizer** |
 | `migrate.py` | *(separate function — in-deploy `Trigger`)* |
-| `post_confirmation.py` | *(separate function — Cognito trigger; prod only, in the Auth stack)* |
 | `catalogs.py` | GET `/catalogs` |
 | `organizations.py` | GET/POST `/organizations`, GET/PUT/DELETE `/organizations/{id}` |
 | `contacts.py` | GET/POST `/contacts`, GET/PUT/DELETE `/contacts/{id}`, GET `/contacts/{id}/timeline` |
@@ -377,7 +376,7 @@ construct reference** — no SSM plumbing between our own stacks. The shared RDS
 ```mermaid
 flowchart TB
     JTDATA["/jobtracker/data/*<br/>shared RDS coords via SSM"]
-    AUTH["&lt;env&gt;-Auth<br/>Cognito pool + client + Hosted UI<br/>+ post_confirmation (prod)"]
+    AUTH["&lt;env&gt;-Auth<br/>Cognito pool + client + Hosted UI"]
     CERT["&lt;env&gt;-Cert (us-east-1)<br/>ACM cert (prod)"]
     MSG["&lt;env&gt;-Messaging<br/>SES identity · Scheduler group<br/>followup_notify · imap_poll<br/>IMAP secret"]
     API["&lt;env&gt;-Api<br/>HTTP API + route Lambdas<br/>+ migrate Trigger"]
@@ -391,13 +390,13 @@ flowchart TB
     API -->|"httpApi as /api/* origin"| FE
 ```
 
-Acyclic by construction: no SPA↔API URL cycle (same-origin), no auth↔api cycle (`post_confirmation`
-lives in `Auth`), and `Messaging` depends on nothing of `Api`'s — `imap_poll` writes to the database
+Acyclic by construction: no SPA↔API URL cycle (same-origin), no auth↔api cycle (the API depends on
+`Auth`'s pool + client, never the reverse), and `Messaging` depends on nothing of `Api`'s — `imap_poll` writes to the database
 directly and `followup_notify` reads only its payload.
 
 | Stack | Region | Role | Envs |
 |---|---|---|---|
-| `<env>-Auth` | us-west-2 | Cognito pool, client, Hosted UI, post-confirmation trigger | prod |
+| `<env>-Auth` | us-west-2 | Cognito pool, client, Hosted UI | prod |
 | `<env>-Cert` | **us-east-1** | ACM cert for the SPA domain | prod |
 | `<env>-Messaging` | us-west-2 | Scheduler group + exec role, `followup_notify`, `imap_poll` + its 1-min rule, IMAP secret. **SES clients target us-east-1**; the identity is pre-existing and *referenced*, never created | prod + sandbox |
 | `<env>-Api` | us-west-2 | HTTP API, route Lambdas, migrate Trigger, conditional JWT authorizer | prod + sandbox |
@@ -460,7 +459,6 @@ empirically. The failure mode is a blanket 401 with nothing in the Lambda logs.
 |---|---|---|---|
 | API | 1024 MB | 15s | 5 |
 | `migrate` | 512 MB | 300s | 1 |
-| `post_confirmation` | 512 MB | **5s** (Cognito's hard cap) | 2 |
 
 1024 MB on arm64 is the sweet spot — CPU scales with memory, so Python + pydantic import is roughly
 twice as fast as at 512 MB for near-identical cost, since duration halves. Reserved concurrency 5

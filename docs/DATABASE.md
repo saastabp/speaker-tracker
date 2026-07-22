@@ -285,8 +285,8 @@ erDiagram
 ### `users`
 Tenant root. `cognito_sub` UNIQUE — populated by the API's first-authenticated-request upsert
 (`handlers/context.py` → `repositories/users.upsert_user_id`, idempotent), the **source of truth**
-for the row. The Cognito `post_confirmation` Lambda is only best-effort — an `AdminCreateUser` user
-is pre-confirmed so it may never fire (see `DEV-PLAN.md` acceptance #4). `timezone` defaults to `Pacific/Honolulu`;
+for the row. No Cognito `post_confirmation` trigger is used — an `AdminCreateUser` user is
+pre-confirmed so it may never fire, and the API upsert is authoritative (see `DEV-PLAN.md` acceptance #4). `timezone` defaults to `Pacific/Honolulu`;
 the `X-User-Timezone` header still governs per-request `SET time_zone` (Kauaʻi is UTC-10, so
 "today" rollover is 10 hours off UTC and every date-bucketed metric depends on it).
 

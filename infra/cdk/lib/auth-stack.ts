@@ -72,8 +72,10 @@ export class AuthStack extends Stack {
       useCognitoProvidedValues: true,
     });
 
-    // TODO(post-confirmation): add the best-effort post_confirmation/post_authentication
-    // trigger here once handlers/post_confirmation.py exists (needs its own DB grant + env).
+    // No post_confirmation/post_authentication trigger by design — the API owns users-row
+    // creation via an idempotent upsert on the first authenticated request (DESIGN.md §7).
+    // A Cognito trigger would be best-effort at best: 5s cap vs 2-6s cold RDS TLS, and it
+    // never fires for AdminCreateUser (already-confirmed) users.
 
     new CfnOutput(this, 'UserPoolId', { value: this.userPool.userPoolId });
     new CfnOutput(this, 'UserPoolClientId', { value: this.userPoolClient.userPoolClientId });

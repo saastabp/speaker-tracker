@@ -427,10 +427,10 @@ the opportunity card, seeded from `how_to_approach`.
 - **The SPA sends the ID token**, not the access token — Cognito ID tokens carry `aud = clientId`,
   which is what `HttpJwtAuthorizer` validates. Access-token behaviour is unverified; test before
   relying on it.
-- **The API owns `users`-row creation**, not the Cognito trigger. `post_confirmation` has a hard 5s
-  timeout against a 2–6s cold TLS handshake, and `AdminCreateUser` creates users already-confirmed
-  so the trigger may never fire at all. A lazy idempotent upsert on the first authenticated request
-  runs on a warm path and cannot break sign-in; the trigger stays best-effort.
+- **The API owns `users`-row creation** via a lazy idempotent upsert on the first authenticated
+  request — a warm path that cannot break sign-in. No Cognito trigger is used: `post_confirmation`
+  would have a hard 5s timeout against a 2–6s cold TLS handshake, and `AdminCreateUser` creates users
+  already-confirmed so it may never fire at all.
 - **Packaging: `uv`** with `--python-platform aarch64-manylinux2014` and `--only-binary=:all:`,
   bundled per function rather than via a layer. `pydantic-core` ships compiled wheels, and without
   the binary-only flag a host-platform sdist build silently ships x86 objects to an arm64 function.
