@@ -24,6 +24,10 @@ export interface EnvConfig {
   readonly authMode: 'dev' | 'cognito';
   readonly dbName: string;
   readonly logRetention: logs.RetentionDays;
+  /** Reserved concurrency per function. Empty = none — required for sandbox until the account's
+   *  Lambda concurrency quota is raised above 10 (reserving anything drops unreserved below the
+   *  hard floor of 10). Prod reserves to bound connections on the shared db.t4g.micro. */
+  readonly reservedConcurrency: { readonly api?: number; readonly migrate?: number };
 }
 
 export const SANDBOX: EnvConfig = {
@@ -31,6 +35,7 @@ export const SANDBOX: EnvConfig = {
   authMode: 'dev',
   dbName: 'speakertracker_sandbox',
   logRetention: logs.RetentionDays.ONE_MONTH,
+  reservedConcurrency: {}, // none — account concurrency limit is 10 (quota increase pending)
 };
 
 export const PROD: EnvConfig = {
@@ -38,4 +43,5 @@ export const PROD: EnvConfig = {
   authMode: 'cognito',
   dbName: 'speakertracker',
   logRetention: logs.RetentionDays.THREE_MONTHS,
+  reservedConcurrency: { api: 5, migrate: 1 },
 };

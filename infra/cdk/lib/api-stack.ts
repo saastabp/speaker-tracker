@@ -34,6 +34,8 @@ export interface ApiStackProps extends StackProps {
   /** Schema selected on connect: `speakertracker` | `speakertracker_sandbox`. */
   readonly dbName: string;
   readonly logRetention: logs.RetentionDays;
+  /** Reserved concurrency per function; omit a value → no reservation. */
+  readonly reservedConcurrency: { readonly api?: number; readonly migrate?: number };
   /** Cognito wiring for the JWT authorizer. Absent → open gateway (sandbox). */
   readonly auth?: {
     readonly userPool: cognito.IUserPool;
@@ -73,7 +75,7 @@ export class ApiStack extends Stack {
       handler: 'api_handler.lambda_handler',
       memorySize: 1024,
       timeout: Duration.seconds(15),
-      reservedConcurrentExecutions: 5,
+      reservedConcurrentExecutions: props.reservedConcurrency.api,
       environment,
       logRetention: props.logRetention,
     });
@@ -87,7 +89,7 @@ export class ApiStack extends Stack {
       handler: 'handlers.migrate.lambda_handler',
       memorySize: 512,
       timeout: Duration.seconds(300),
-      reservedConcurrentExecutions: 1,
+      reservedConcurrentExecutions: props.reservedConcurrency.migrate,
       environment,
       logRetention: props.logRetention,
     });
@@ -136,7 +138,7 @@ export class ApiStack extends Stack {
       handler: string;
       memorySize: number;
       timeout: Duration;
-      reservedConcurrentExecutions: number;
+      reservedConcurrentExecutions?: number;
       environment: Record<string, string>;
       logRetention: logs.RetentionDays;
     },
