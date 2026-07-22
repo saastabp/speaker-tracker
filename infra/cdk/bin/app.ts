@@ -60,6 +60,7 @@ new FrontendStack(app, 'prod-Frontend', {
   envType: PROD.envType,
   httpApi: prodApi.httpApi,
   customDomain: { domainName: PROD_DOMAIN, certificate: prodCert.certificate, ...HOSTED_ZONE },
+  auth: { userPool: prodAuth.userPool, userPoolClient: prodAuth.userPoolClient },
 });
 
 app.synth();

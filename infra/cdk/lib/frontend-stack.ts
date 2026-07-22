@@ -2,6 +2,7 @@ import { CfnOutput, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
@@ -41,6 +42,12 @@ export interface FrontendStackProps extends StackProps {
     readonly certificate: acm.ICertificate;
     readonly hostedZoneId: string;
     readonly zoneName: string;
+  };
+  /** Cognito wiring (prod). When present, /config.json is written with the OIDC values so the
+   *  SPA fetches them at runtime and never carries them at build time. */
+  readonly auth?: {
+    readonly userPool: cognito.IUserPool;
+    readonly userPoolClient: cognito.IUserPoolClient;
   };
 }
 
@@ -107,13 +114,26 @@ export class FrontendStack extends Stack {
       },
     });
 
-    // Placeholder SPA content. Invalidate index.html only — real Vite assets are hashed/immutable.
+    // Placeholder SPA content, plus (prod) the runtime OIDC config the SPA fetches at boot — its
+    // values come from the prod-Auth stack, so they are never hand-copied into a committed file.
+    // Invalidate only these paths; real Vite assets are hashed/immutable.
     // TODO(frontend-shell): replace Source.data with Source.asset(frontend/dist build).
+    const sources = [s3deploy.Source.data('index.html', PLACEHOLDER_HTML)];
+    const distributionPaths = ['/index.html'];
+    if (props.auth) {
+      sources.push(
+        s3deploy.Source.jsonData('config.json', {
+          oidcAuthority: `https://cognito-idp.${this.region}.amazonaws.com/${props.auth.userPool.userPoolId}`,
+          oidcClientId: props.auth.userPoolClient.userPoolClientId,
+        }),
+      );
+      distributionPaths.push('/config.json');
+    }
     new s3deploy.BucketDeployment(this, 'SpaContent', {
-      sources: [s3deploy.Source.data('index.html', PLACEHOLDER_HTML)],
+      sources,
       destinationBucket: bucket,
       distribution,
-      distributionPaths: ['/index.html'],
+      distributionPaths,
     });
 
     // Prod: alias the custom domain (A + AAAA) at the distribution. Same-account zone.
