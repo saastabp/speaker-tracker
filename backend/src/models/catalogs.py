@@ -4,9 +4,9 @@ Each catalog shares ``short_name``/``description``/``sort_order``; three carry o
 the frontend and metric SQL consume (``DATABASE.md`` §3). ``id`` and the audit/soft-delete
 columns are deliberately not exposed — callers resolve vocabularies by ``short_name``.
 
-``message_template_kinds`` is intentionally absent: it moves to slice 4 (``0004``), where it
-is modelled as a template *purpose* vocabulary with a separate ``channel_id`` on
-``message_templates``, rather than the mixed channel/audience axis it once held.
+``message_template_kinds`` arrives in slice 4 (``0005``) as a template *purpose* vocabulary — a
+plain catalog (no extra flag), paired with a separate ``channel_id`` on ``message_templates`` —
+rather than the mixed channel/audience axis it once held.
 """
 
 from __future__ import annotations
@@ -52,4 +52,5 @@ class Catalogs(BaseModel):
     payment_statuses: list[PaymentStatus]
     outreach_kinds: list[OutreachKind]
     outreach_channels: list[CatalogItem]
+    message_template_kinds: list[CatalogItem]
     target_types: list[CatalogItem]
