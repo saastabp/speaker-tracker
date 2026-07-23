@@ -52,7 +52,6 @@ CREATE TABLE IF NOT EXISTS contacts (
   name             VARCHAR(255) NOT NULL,
   email            VARCHAR(320) NULL,
   phone            VARCHAR(64)  NULL,
-  is_power_partner BOOLEAN      NOT NULL DEFAULT FALSE,
   source           VARCHAR(255) NULL,
   how_you_know     TEXT         NULL,
   notes            TEXT         NULL,
@@ -67,18 +66,21 @@ CREATE TABLE IF NOT EXISTS contacts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ---------------------------------------------------------------------------
--- contact_organizations — many-to-many affiliation with per-org role + primary flag. UNIQUE
--- (contact_id, organization_id) is what makes the add-contact dedupe safe: a second venue for
--- an existing person is a new affiliation, never a duplicate contact. Hard-deleted on removal.
+-- contact_organizations — many-to-many affiliation carrying the per-venue role attributes:
+-- title, the primary-contact flag, and the power-partner flag (power-partnership is scoped to a
+-- specific venue, not the person). UNIQUE (contact_id, organization_id) is what makes the
+-- add-contact dedupe safe: a second venue for an existing person is a new affiliation, never a
+-- duplicate contact. Hard-deleted on removal.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS contact_organizations (
-  id              BIGINT       NOT NULL AUTO_INCREMENT,
-  contact_id      BIGINT       NOT NULL,
-  organization_id BIGINT       NOT NULL,
-  title           VARCHAR(255) NULL,
-  is_primary      BOOLEAN      NOT NULL DEFAULT FALSE,
-  created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id               BIGINT       NOT NULL AUTO_INCREMENT,
+  contact_id       BIGINT       NOT NULL,
+  organization_id  BIGINT       NOT NULL,
+  title            VARCHAR(255) NULL,
+  is_primary       BOOLEAN      NOT NULL DEFAULT FALSE,
+  is_power_partner BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_contact_organizations_contact_org (contact_id, organization_id),
   KEY ix_contact_organizations_org (organization_id),

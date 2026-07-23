@@ -134,7 +134,7 @@ def get_affiliated_contacts(conn: Connection, user_id: int, org_id: int) -> list
     """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT c.id AS contact_id, c.name, co.title, co.is_primary, c.is_power_partner "
+            "SELECT c.id AS contact_id, c.name, co.title, co.is_primary, co.is_power_partner "
             "FROM contact_organizations co "
             "JOIN contacts c ON c.id = co.contact_id AND c.deleted_at IS NULL "
             "JOIN organizations o ON o.id = co.organization_id "

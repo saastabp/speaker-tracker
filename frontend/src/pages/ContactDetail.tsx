@@ -14,7 +14,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArrowLeft, IconPencil, IconStar, IconTrash, IconX } from '@tabler/icons-react';
+import { IconArrowLeft, IconPencil, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
@@ -23,11 +23,13 @@ import {
   useAddAffiliation,
   useContact,
   useDeleteContact,
-  useRemoveAffiliation,
+  useDetachAffiliation,
+  useEditAffiliation,
   useUpdateContact,
   type ContactInput,
 } from '../api/contacts';
 import { useOrganizations } from '../api/organizations';
+import { AffiliationRow } from '../components/AffiliationRow';
 import { ContactFormModal } from '../components/ContactFormModal';
 
 export function ContactDetail() {
@@ -39,12 +41,14 @@ export function ContactDetail() {
   const update = useUpdateContact(contactId);
   const remove = useDeleteContact();
   const addAffiliation = useAddAffiliation(contactId);
-  const removeAffiliation = useRemoveAffiliation(contactId);
+  const editAffiliation = useEditAffiliation();
+  const detachAffiliation = useDetachAffiliation();
   const navigate = useNavigate();
   const [editOpen, editHandlers] = useDisclosure(false);
   const [newVenue, setNewVenue] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newPrimary, setNewPrimary] = useState(false);
+  const [newPowerPartner, setNewPowerPartner] = useState(false);
 
   if (contact.isPending) {
     return <Loader />;
@@ -83,10 +87,12 @@ export function ContactDetail() {
       organization_id: Number(newVenue),
       title: newTitle || null,
       is_primary: newPrimary,
+      is_power_partner: newPowerPartner,
     });
     setNewVenue(null);
     setNewTitle('');
     setNewPrimary(false);
+    setNewPowerPartner(false);
   }
 
   return (
@@ -103,11 +109,6 @@ export function ContactDetail() {
           <Title order={2} c="navy.9">
             {c.name}
           </Title>
-          {c.is_power_partner && (
-            <Badge color="gold" leftSection={<IconStar size={12} />}>
-              Power partner
-            </Badge>
-          )}
           {warmthLabel && <Badge variant="light">{warmthLabel}</Badge>}
         </Group>
         <Group>
@@ -152,39 +153,37 @@ export function ContactDetail() {
         <Text fw={600} mb="sm">
           Affiliations ({c.organizations.length})
         </Text>
-        <Stack gap="xs">
+        <Stack gap="sm">
           {c.organizations.length === 0 && (
             <Text c="dimmed" size="sm">
               Not affiliated with any venue yet.
             </Text>
           )}
-          {c.organizations.map((org) => (
-            <Group key={org.organization_id} justify="space-between">
-              <Group gap="sm">
-                <Anchor component={Link} to={`/venues/${org.organization_id}`}>
-                  {org.organization_name}
-                </Anchor>
-                {org.title && (
-                  <Text size="sm" c="dimmed">
-                    {org.title}
-                  </Text>
-                )}
-                {org.is_primary && (
-                  <Badge size="xs" variant="light">
-                    Primary
-                  </Badge>
-                )}
-              </Group>
-              <Button
-                size="compact-xs"
-                variant="subtle"
-                color="red"
-                leftSection={<IconX size={12} />}
-                onClick={() => removeAffiliation.mutate(org.organization_id)}
-              >
-                Remove
-              </Button>
-            </Group>
+          {[...c.organizations]
+            .sort((a, b) => a.organization_name.localeCompare(b.organization_name))
+            .map((org) => (
+            <AffiliationRow
+              key={org.organization_id}
+              label={org.organization_name}
+              linkTo={`/venues/${org.organization_id}`}
+              values={{
+                title: org.title,
+                is_primary: org.is_primary,
+                is_power_partner: org.is_power_partner,
+              }}
+              onSave={(values) =>
+                editAffiliation.mutate({
+                  contactId,
+                  organizationId: org.organization_id,
+                  data: values,
+                })
+              }
+              onRemove={() => {
+                if (window.confirm(`Remove affiliation with ${org.organization_name}?`)) {
+                  detachAffiliation.mutate({ contactId, organizationId: org.organization_id });
+                }
+              }}
+            />
           ))}
         </Stack>
 
@@ -210,6 +209,12 @@ export function ContactDetail() {
               mb={8}
               checked={newPrimary}
               onChange={(event) => setNewPrimary(event.currentTarget.checked)}
+            />
+            <Switch
+              label="Power partner"
+              mb={8}
+              checked={newPowerPartner}
+              onChange={(event) => setNewPowerPartner(event.currentTarget.checked)}
             />
             <Button
               onClick={handleAddAffiliation}

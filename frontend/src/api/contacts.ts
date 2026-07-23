@@ -9,7 +9,6 @@ export interface ContactInput {
   email?: string | null;
   phone?: string | null;
   warmth_tier?: string | null; // warmth_tiers catalog short_name
-  is_power_partner?: boolean;
   source?: string | null;
   how_you_know?: string | null;
   notes?: string | null;
@@ -20,6 +19,7 @@ export interface OrganizationAffiliation {
   organization_name: string;
   title: string | null;
   is_primary: boolean;
+  is_power_partner: boolean; // scoped to this contact↔venue edge
 }
 
 export interface ContactSummary {
@@ -27,7 +27,7 @@ export interface ContactSummary {
   name: string;
   email: string | null;
   warmth_tier: string | null;
-  is_power_partner: boolean;
+  is_power_partner: boolean; // rollup: a power partner at ≥1 affiliated venue
   organization_count: number;
   created_at: string;
   updated_at: string;
@@ -44,11 +44,13 @@ export interface AffiliationInput {
   organization_id: number;
   title?: string | null;
   is_primary?: boolean;
+  is_power_partner?: boolean;
 }
 
 export interface AffiliationUpdate {
   title?: string | null;
   is_primary?: boolean;
+  is_power_partner?: boolean;
 }
 
 const contactKeys = {
@@ -138,19 +140,46 @@ export function useAddAffiliation(contactId: number) {
   );
 }
 
-export function useUpdateAffiliation(contactId: number) {
-  return useAffiliationMutation<{ organizationId: number; data: AffiliationUpdate }>(
-    contactId,
-    (api, { organizationId, data }) =>
+// Edit and detach take both ids as mutation variables (not hook args), so a list page that fixes
+// one side (the venue's contacts panel) can drive them per-row. Both endpoints return the updated
+// contact, so the cache update is the same as the add path.
+function affiliationCacheUpdate(
+  queryClient: ReturnType<typeof useQueryClient>,
+  contactId: number,
+  updated: Contact,
+) {
+  queryClient.setQueryData(contactKeys.detail(contactId), updated);
+  queryClient.invalidateQueries({ queryKey: contactKeys.all });
+  queryClient.invalidateQueries({ queryKey: ['organizations'] });
+}
+
+export function useEditAffiliation() {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      contactId,
+      organizationId,
+      data,
+    }: {
+      contactId: number;
+      organizationId: number;
+      data: AffiliationUpdate;
+    }) =>
       api<Contact>(`/contacts/${contactId}/organizations/${organizationId}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
-  );
+    onSuccess: (updated, { contactId }) => affiliationCacheUpdate(queryClient, contactId, updated),
+  });
 }
 
-export function useRemoveAffiliation(contactId: number) {
-  return useAffiliationMutation<number>(contactId, (api, organizationId) =>
-    api<Contact>(`/contacts/${contactId}/organizations/${organizationId}`, { method: 'DELETE' }),
-  );
+export function useDetachAffiliation() {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contactId, organizationId }: { contactId: number; organizationId: number }) =>
+      api<Contact>(`/contacts/${contactId}/organizations/${organizationId}`, { method: 'DELETE' }),
+    onSuccess: (updated, { contactId }) => affiliationCacheUpdate(queryClient, contactId, updated),
+  });
 }

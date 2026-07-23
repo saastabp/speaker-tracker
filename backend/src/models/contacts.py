@@ -26,46 +26,54 @@ class ContactInput(BaseModel):
         Optional detail.
     warmth_tier : str or None
         Optional `warmth_tiers` catalog short_name; may be unset early in a relationship.
-    is_power_partner : bool
-        Person-level flag, independent of any org.
     """
 
     name: str = Field(min_length=1, max_length=255)
     email: str | None = None
     phone: str | None = None
     warmth_tier: str | None = None
-    is_power_partner: bool = False
     source: str | None = None
     how_you_know: str | None = None
     notes: str | None = None
 
 
 class AffiliationInput(BaseModel):
-    """Create an affiliation: attach a contact (path) to an organization (body)."""
+    """Create an affiliation: attach a contact (path) to an organization (body).
+
+    `is_primary` and `is_power_partner` are scoped to this contact↔venue edge, not the person —
+    a contact can be the primary and/or a power partner at one venue and neither at another.
+    """
 
     organization_id: int
     title: str | None = None
     is_primary: bool = False
+    is_power_partner: bool = False
 
 
 class AffiliationUpdate(BaseModel):
-    """Update an existing affiliation's role/primary flag (org is fixed by the path)."""
+    """Update an existing affiliation's per-venue role fields (org is fixed by the path)."""
 
     title: str | None = None
     is_primary: bool = False
+    is_power_partner: bool = False
 
 
 class OrganizationAffiliation(BaseModel):
-    """An organization a contact is affiliated with, with their role at it."""
+    """An organization a contact is affiliated with, with their per-venue role there."""
 
     organization_id: int
     organization_name: str
     title: str | None
     is_primary: bool
+    is_power_partner: bool
 
 
 class ContactSummary(BaseModel):
-    """One row in the contacts list and in the add-contact dedupe results."""
+    """One row in the contacts list and in the add-contact dedupe results.
+
+    `is_power_partner` here is a rollup — true when the contact is a power partner at **any**
+    affiliated venue — since the flag itself now lives per-affiliation, not on the person.
+    """
 
     id: int
     name: str

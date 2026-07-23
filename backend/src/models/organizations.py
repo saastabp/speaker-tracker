@@ -40,7 +40,10 @@ class OrganizationInput(BaseModel):
 
 
 class AffiliatedContact(BaseModel):
-    """A contact affiliated with an organization, with their role at that org."""
+    """A contact affiliated with an organization, with their per-venue role there.
+
+    `title`, `is_primary`, and `is_power_partner` are all scoped to this contact↔venue edge.
+    """
 
     contact_id: int
     name: str

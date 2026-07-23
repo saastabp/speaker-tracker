@@ -263,12 +263,13 @@ Core entities (user-scoped via `user_id`; every entity table has `id` /
 
 - **`organizations`** — venues/orgs/podcasts. Type (catalog), location, links, source, notes,
   plus the three **Kindling** research columns (§5).
-- **`contacts`** — the *person*. `warmth_tier`, `is_power_partner`, `source`, notes.
-  **No `organization_id`** — see the join below. Power-partner is a person-level flag,
-  independent of any org.
+- **`contacts`** — the *person*. `warmth_tier`, `source`, notes.
+  **No `organization_id`** — see the join below.
 - **`contact_organizations`** — **many-to-many** contact ↔ org. Fields: `contact_id`,
   `organization_id`, `title` (their role *at that org* — "Events Chair" at PWN, "Member" at BNI),
-  `is_primary` (the go-to contact for that org). `UNIQUE(contact_id, organization_id)`.
+  `is_primary` (the go-to contact for that org — at most one per org, enforced on write), and
+  `is_power_partner` (a power partner *at that venue*; a person can be one at one venue and not
+  another). `UNIQUE(contact_id, organization_id)`.
   Rationale: in a small community (Kauaʻi) people wear multiple hats — one person is a contact
   for several venues.
 - **`opportunities`** — one per gig/podcast spot. Talk offered, event date, format, outcome;

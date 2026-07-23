@@ -11,16 +11,18 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArrowLeft, IconPencil, IconStar, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconPencil, IconTrash } from '@tabler/icons-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
+import { useDetachAffiliation, useEditAffiliation } from '../api/contacts';
 import {
   useDeleteOrganization,
   useOrganization,
   useUpdateOrganization,
   type OrganizationInput,
 } from '../api/organizations';
+import { AffiliationRow } from '../components/AffiliationRow';
 import { VenueFormModal } from '../components/VenueFormModal';
 
 /** One labelled block in the Kindling research panel. */
@@ -42,6 +44,8 @@ export function VenueDetail() {
   const catalogs = useCatalogs();
   const update = useUpdateOrganization(venueId);
   const remove = useDeleteOrganization();
+  const editAffiliation = useEditAffiliation();
+  const detachAffiliation = useDetachAffiliation();
   const navigate = useNavigate();
   const [editOpen, editHandlers] = useDisclosure(false);
 
@@ -150,24 +154,35 @@ export function VenueDetail() {
             No contacts yet — add a contact and affiliate them with this venue.
           </Text>
         ) : (
-          <Stack gap="xs">
-            {v.contacts.map((contact) => (
-              <Group key={contact.contact_id} gap="sm">
-                <Anchor component={Link} to={`/contacts/${contact.contact_id}`}>
-                  {contact.name}
-                </Anchor>
-                {contact.is_power_partner && <IconStar size={14} color="var(--mantine-color-gold-6)" />}
-                {contact.title && (
-                  <Text size="sm" c="dimmed">
-                    {contact.title}
-                  </Text>
-                )}
-                {contact.is_primary && (
-                  <Badge size="xs" variant="light">
-                    Primary
-                  </Badge>
-                )}
-              </Group>
+          <Stack gap="sm">
+            {[...v.contacts]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((contact) => (
+              <AffiliationRow
+                key={contact.contact_id}
+                label={contact.name}
+                linkTo={`/contacts/${contact.contact_id}`}
+                values={{
+                  title: contact.title,
+                  is_primary: contact.is_primary,
+                  is_power_partner: contact.is_power_partner,
+                }}
+                onSave={(values) =>
+                  editAffiliation.mutate({
+                    contactId: contact.contact_id,
+                    organizationId: venueId,
+                    data: values,
+                  })
+                }
+                onRemove={() => {
+                  if (window.confirm(`Remove ${contact.name} from ${v.name}?`)) {
+                    detachAffiliation.mutate({
+                      contactId: contact.contact_id,
+                      organizationId: venueId,
+                    });
+                  }
+                }}
+              />
             ))}
           </Stack>
         )}

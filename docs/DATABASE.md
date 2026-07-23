@@ -101,7 +101,6 @@ erDiagram
         varchar name
         varchar email "indexed - poller matches From"
         varchar phone
-        bool is_power_partner
         varchar source
         text how_you_know
         text notes
@@ -113,6 +112,7 @@ erDiagram
         bigint organization_id FK
         varchar title "role AT THIS ORG"
         bool is_primary "default contact for the org"
+        bool is_power_partner "power partner AT THIS venue"
     }
     opportunities {
         bigint id PK
@@ -306,7 +306,8 @@ constraint — one person legitimately spans venues, and email may be absent.
 ### `contacts`
 The *person*, deliberately with **no `organization_id`** — affiliation lives in
 `contact_organizations`, because on Kauaʻi one person is frequently the contact for several venues.
-`is_power_partner` is a person-level flag, independent of any org.
+Power-partnership is **not** a person-level flag: it lives per-affiliation on
+`contact_organizations` (a person can be a power partner at one venue and not another).
 
 **`(user_id, email)` is a load-bearing index, not a convenience.** The IMAP poller resolves every
 inbound `From` address against it on every poll to decide whether a message is in scope at all
@@ -322,7 +323,11 @@ inbound `From` address against it on every poll to decide whether a message is i
 Many-to-many affiliation. `UNIQUE(contact_id, organization_id)` — this is what makes the
 add-contact dedupe flow safe: adding an existing person to a second venue creates a new
 *affiliation*, never a duplicate contact. `title` is their role **at that org** ("Events Chair" at
-PWN, "Member" at BNI). `is_primary` = the go-to contact for that org.
+PWN, "Member" at BNI). `is_primary` = the go-to contact for that org; `is_power_partner` = a power
+partner **at that venue** (both flags are per-edge, so they can differ across a person's venues).
+**At most one primary per org** is an application invariant enforced on every write (no DB
+constraint): setting an affiliation primary demotes any other primary at that org, so promoting a
+new primary contact atomically moves it off the previous one.
 
 ### `opportunities`
 One row per gig / podcast spot. `current_status_id` is denormalized from the latest
@@ -585,7 +590,7 @@ Two places where this schema departs from a convention or from `DESIGN.md`, with
 A resolved modelling decision worth recording: `DESIGN.md` §4 calls `message_templates.channel`
 a *channel*, but its proposed values `dm / email / power_partner` conflated two axes — `dm`/`email`
 are channels (*how* a message is sent), while `power_partner` is an **audience**, already modelled
-as `contacts.is_power_partner`. These are split: a template carries a `channel_id →
+as `contact_organizations.is_power_partner`. These are split: a template carries a `channel_id →
 outreach_channels` (how it is sent) **and** a `message_template_kind_id → message_template_kinds`,
 a *purpose* vocabulary (power-partner intro, cold pitch, …). Exact purpose values are settled in
 slice 4, where `message_templates` and the `message_template_kinds` catalog are both created

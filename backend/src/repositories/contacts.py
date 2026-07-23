@@ -5,11 +5,17 @@ writes resolve `warmth_tier` → the numeric `warmth_tier_id`, reads join back t
 Contacts are user-scoped and soft-deleted; they have no uniqueness constraint — the add-contact
 dedupe is a *search* (`list_contacts(query=...)`). Affiliation writes verify that **both** the
 contact and the organization belong to the caller; a duplicate affiliation → `Conflict`.
+
+Single-primary-per-venue is an application invariant (there is no DB constraint): setting an
+affiliation `is_primary` demotes any other primary contact at that organization, so a venue has at
+most one primary contact. It is enforced here on every write, so it holds whether the primary is
+set from the contact side or the venue side.
 """
 
 from __future__ import annotations
 
 from pymysql.connections import Connection
+from pymysql.cursors import Cursor
 from pymysql.err import IntegrityError
 
 from common import errors
@@ -23,7 +29,6 @@ _PLAIN_COLUMNS = (
     "name",
     "email",
     "phone",
-    "is_power_partner",
     "source",
     "how_you_know",
     "notes",
@@ -66,10 +71,13 @@ def list_contacts(conn: Connection, user_id: int, query: str | None = None) -> l
     Returns
     -------
     list of dict
-        One row per contact with `warmth_tier` (short_name or None) and `organization_count`.
+        One row per contact with `warmth_tier` (short_name or None), `organization_count`, and
+        `is_power_partner` (rolled up — true when a power partner at any live affiliated venue).
     """
     sql = (
-        "SELECT c.id, c.name, c.email, wt.short_name AS warmth_tier, c.is_power_partner, "
+        "SELECT c.id, c.name, c.email, wt.short_name AS warmth_tier, "
+        "       COALESCE(MAX(CASE WHEN o.id IS NOT NULL THEN co.is_power_partner ELSE 0 END), 0) "
+        "         AS is_power_partner, "
         "       c.created_at, c.updated_at, COUNT(DISTINCT o.id) AS organization_count "
         "FROM contacts c "
         "LEFT JOIN warmth_tiers wt ON wt.id = c.warmth_tier_id "
@@ -108,7 +116,7 @@ def get_contact(conn: Connection, user_id: int, contact_id: int) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             "SELECT c.id, c.name, c.email, c.phone, wt.short_name AS warmth_tier, "
-            "       c.is_power_partner, c.source, c.how_you_know, c.notes, "
+            "       c.source, c.how_you_know, c.notes, "
             "       c.created_at, c.updated_at "
             "FROM contacts c "
             "LEFT JOIN warmth_tiers wt ON wt.id = c.warmth_tier_id "
@@ -133,11 +141,13 @@ def get_affiliations(conn: Connection, user_id: int, contact_id: int) -> list[di
     Returns
     -------
     list of dict
-        Each with `organization_id`, `organization_name`, `title`, `is_primary`.
+        Each with `organization_id`, `organization_name`, `title`, `is_primary`,
+        `is_power_partner`.
     """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT o.id AS organization_id, o.name AS organization_name, co.title, co.is_primary "
+            "SELECT o.id AS organization_id, o.name AS organization_name, co.title, "
+            "       co.is_primary, co.is_power_partner "
             "FROM contact_organizations co "
             "JOIN organizations o ON o.id = co.organization_id AND o.deleted_at IS NULL "
             "JOIN contacts c ON c.id = co.contact_id AND c.user_id = %s AND c.deleted_at IS NULL "
@@ -248,13 +258,28 @@ def soft_delete_contact(conn: Connection, user_id: int, contact_id: int) -> bool
         return cur.rowcount > 0
 
 
+def _demote_other_primaries(cur: Cursor, org_id: int, keep_contact_id: int) -> None:
+    """Clear `is_primary` on every *other* contact at an organization (single-primary invariant).
+
+    Runs on the caller's open cursor so it shares the surrounding write transaction. Scoping by
+    `organization_id` alone is safe: every affiliation of a user's org is one of that user's
+    contacts (both sides are ownership-checked at write time).
+    """
+    cur.execute(
+        "UPDATE contact_organizations SET is_primary = FALSE "
+        "WHERE organization_id = %s AND contact_id <> %s AND is_primary",
+        (org_id, keep_contact_id),
+    )
+
+
 def add_affiliation(
     conn: Connection, user_id: int, contact_id: int, data: AffiliationInput
 ) -> None:
     """Affiliate a contact with an organization; both must belong to the caller.
 
     The insert is guarded by `EXISTS` checks on the owning contact and organization, so a
-    missing/foreign id inserts nothing rather than creating a cross-user link.
+    missing/foreign id inserts nothing rather than creating a cross-user link. If `is_primary` is
+    set, any other primary contact at that organization is demoted (one primary per venue).
 
     Parameters
     ----------
@@ -265,7 +290,7 @@ def add_affiliation(
     contact_id : int
         The contact to affiliate.
     data : models.contacts.AffiliationInput
-        The target organization plus role/primary flag.
+        The target organization plus the per-venue role fields (title, primary, power-partner).
 
     Raises
     ------
@@ -278,8 +303,8 @@ def add_affiliation(
         try:
             cur.execute(
                 "INSERT INTO contact_organizations "
-                "(contact_id, organization_id, title, is_primary) "
-                "SELECT %s, %s, %s, %s FROM DUAL "
+                "(contact_id, organization_id, title, is_primary, is_power_partner) "
+                "SELECT %s, %s, %s, %s, %s FROM DUAL "
                 "WHERE EXISTS (SELECT 1 FROM contacts "
                 "              WHERE id = %s AND user_id = %s AND deleted_at IS NULL) "
                 "  AND EXISTS (SELECT 1 FROM organizations "
@@ -289,6 +314,7 @@ def add_affiliation(
                     data.organization_id,
                     data.title,
                     data.is_primary,
+                    data.is_power_partner,
                     contact_id,
                     user_id,
                     data.organization_id,
@@ -303,12 +329,16 @@ def add_affiliation(
             raise
         if cur.rowcount == 0:
             raise errors.NotFound("contact or organization not found")
+        if data.is_primary:
+            _demote_other_primaries(cur, data.organization_id, contact_id)
 
 
 def update_affiliation(
     conn: Connection, user_id: int, contact_id: int, org_id: int, data: AffiliationUpdate
 ) -> bool:
-    """Update an affiliation's role/primary flag; return whether it existed (and was owned).
+    """Update an affiliation's per-venue role fields; return whether it existed (and was owned).
+
+    Setting `is_primary` demotes any other primary contact at that organization (one per venue).
 
     Parameters
     ----------
@@ -319,7 +349,7 @@ def update_affiliation(
     contact_id, org_id : int
         The affiliation's contact and organization.
     data : models.contacts.AffiliationUpdate
-        The new role/primary values.
+        The new per-venue role values (title, primary, power-partner).
 
     Returns
     -------
@@ -338,10 +368,13 @@ def update_affiliation(
         if cur.fetchone() is None:
             return False
         cur.execute(
-            "UPDATE contact_organizations SET title = %s, is_primary = %s "
+            "UPDATE contact_organizations "
+            "SET title = %s, is_primary = %s, is_power_partner = %s "
             "WHERE contact_id = %s AND organization_id = %s",
-            (data.title, data.is_primary, contact_id, org_id),
+            (data.title, data.is_primary, data.is_power_partner, contact_id, org_id),
         )
+        if data.is_primary:
+            _demote_other_primaries(cur, org_id, contact_id)
     return True
 
 

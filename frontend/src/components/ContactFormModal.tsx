@@ -6,7 +6,6 @@ import {
   Modal,
   Select,
   Stack,
-  Switch,
   Text,
   Textarea,
   TextInput,
@@ -24,7 +23,6 @@ const EMPTY: ContactInput = {
   email: '',
   phone: '',
   warmth_tier: '',
-  is_power_partner: false,
   source: '',
   how_you_know: '',
   notes: '',
@@ -38,7 +36,6 @@ function normalize(values?: ContactInput): ContactInput {
     email: base.email ?? '',
     phone: base.phone ?? '',
     warmth_tier: base.warmth_tier ?? '',
-    is_power_partner: base.is_power_partner ?? false,
     source: base.source ?? '',
     how_you_know: base.how_you_know ?? '',
     notes: base.notes ?? '',
@@ -139,20 +136,13 @@ export function ContactFormModal({
             <TextInput label="Email" {...form.getInputProps('email')} />
             <TextInput label="Phone" {...form.getInputProps('phone')} />
           </Group>
-          <Group grow align="center">
-            <Select
-              label="Warmth"
-              placeholder="Not set"
-              data={warmthOptions}
-              clearable
-              {...form.getInputProps('warmth_tier')}
-            />
-            <Switch
-              label="Power partner"
-              mt="lg"
-              {...form.getInputProps('is_power_partner', { type: 'checkbox' })}
-            />
-          </Group>
+          <Select
+            label="Warmth"
+            placeholder="Not set"
+            data={warmthOptions}
+            clearable
+            {...form.getInputProps('warmth_tier')}
+          />
           <TextInput
             label="Source"
             description="How you met, or where they came from"

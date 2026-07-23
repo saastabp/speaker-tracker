@@ -161,3 +161,47 @@ def test_soft_delete_hides_organization(api, db_connection) -> None:
     assert api("DELETE", f"/organizations/{org_id}") == (200, {"deleted": True})
     assert api("GET", f"/organizations/{org_id}")[0] == 404
     assert api("GET", "/organizations")[1] == {"organizations": []}
+
+
+def test_power_partner_is_scoped_per_venue(api, db_connection) -> None:
+    org_type = _first_short_name(db_connection, "organization_types")
+    a = api("POST", "/organizations", {"organization_type": org_type, "name": "Alpha"})[1]["id"]
+    b = api("POST", "/organizations", {"organization_type": org_type, "name": "Bravo"})[1]["id"]
+    cid = api("POST", "/contacts", {"name": "Jane"})[1]["id"]
+
+    api("POST", f"/contacts/{cid}/organizations", {"organization_id": a, "is_power_partner": True})
+    api("POST", f"/contacts/{cid}/organizations", {"organization_id": b})
+
+    # Same person: power partner at Alpha, not at Bravo.
+    assert api("GET", f"/organizations/{a}")[1]["contacts"][0]["is_power_partner"] is True
+    assert api("GET", f"/organizations/{b}")[1]["contacts"][0]["is_power_partner"] is False
+    affiliations = {
+        o["organization_name"]: o for o in api("GET", f"/contacts/{cid}")[1]["organizations"]
+    }
+    assert affiliations["Alpha"]["is_power_partner"] is True
+    assert affiliations["Bravo"]["is_power_partner"] is False
+
+    # PUT flips the Bravo edge without touching Alpha.
+    assert api("PUT", f"/contacts/{cid}/organizations/{b}", {"is_power_partner": True})[0] == 200
+    assert api("GET", f"/organizations/{b}")[1]["contacts"][0]["is_power_partner"] is True
+    assert api("GET", f"/organizations/{a}")[1]["contacts"][0]["is_power_partner"] is True
+
+    # The contacts list rolls it up to the person.
+    jane_row = next(c for c in api("GET", "/contacts")[1]["contacts"] if c["name"] == "Jane")
+    assert jane_row["is_power_partner"] is True
+
+
+def test_primary_contact_moves_between_contacts_at_a_venue(api, db_connection) -> None:
+    org_type = _first_short_name(db_connection, "organization_types")
+    venue = api("POST", "/organizations", {"organization_type": org_type, "name": "Alpha"})[1]["id"]
+    ann = api("POST", "/contacts", {"name": "Ann"})[1]["id"]
+    bob = api("POST", "/contacts", {"name": "Bob"})[1]["id"]
+    api("POST", f"/contacts/{ann}/organizations", {"organization_id": venue, "is_primary": True})
+    api("POST", f"/contacts/{bob}/organizations", {"organization_id": venue})
+
+    # Checking "primary" on Bob (the venue-panel move) demotes Ann.
+    assert api("PUT", f"/contacts/{bob}/organizations/{venue}", {"is_primary": True})[0] == 200
+    primaries = [
+        c["name"] for c in api("GET", f"/organizations/{venue}")[1]["contacts"] if c["is_primary"]
+    ]
+    assert primaries == ["Bob"]
