@@ -16,7 +16,7 @@ from core.funnel import (
     reached_or_beyond,
 )
 
-# The full opportunity_statuses catalog as seeded in 0001 (short_name, label, sort_order, terminal).
+# opportunity_statuses catalog (short_name, label, sort_order, terminal); nurture retired in 0004.
 ALL_STATUSES = [
     Stage("researching", "Researching", 10, False),
     Stage("outreach_sent", "Outreach Sent", 20, False),
@@ -24,7 +24,6 @@ ALL_STATUSES = [
     Stage("pitched", "Pitched", 40, False),
     Stage("booked", "Booked", 50, False),
     Stage("delivered", "Delivered", 60, True),
-    Stage("nurture", "Nurture", 70, False),
     Stage("cancelled", "Cancelled", 80, True),
     Stage("lost", "Lost / Passed", 90, True),
 ]
@@ -35,7 +34,6 @@ ALL_STATUSES = [
     [
         ("researching", False),
         ("booked", False),
-        ("nurture", False),
         ("delivered", True),  # terminal but payment-gated: still a board column
     ],
 )
@@ -52,7 +50,7 @@ def test_close_flow_statuses(short_name: str) -> None:
 
 def test_build_funnel_returns_board_columns_in_order() -> None:
     columns = [s.short_name for s in build_funnel(ALL_STATUSES)]
-    # cancelled/lost excluded; delivered and nurture kept; ascending sort_order.
+    # cancelled/lost excluded; delivered kept (payment-gated); ascending sort_order.
     assert columns == [
         "researching",
         "outreach_sent",
@@ -60,13 +58,13 @@ def test_build_funnel_returns_board_columns_in_order() -> None:
         "pitched",
         "booked",
         "delivered",
-        "nurture",
     ]
 
 
 def test_build_funnel_sorts_unordered_input() -> None:
-    shuffled = [ALL_STATUSES[4], ALL_STATUSES[0], ALL_STATUSES[6], ALL_STATUSES[2]]
-    assert [s.sort_order for s in build_funnel(shuffled)] == [10, 30, 50, 70]
+    # booked(50), researching(10), delivered(60), in_conversation(30) — all board stages.
+    shuffled = [ALL_STATUSES[4], ALL_STATUSES[0], ALL_STATUSES[5], ALL_STATUSES[2]]
+    assert [s.sort_order for s in build_funnel(shuffled)] == [10, 30, 50, 60]
 
 
 def test_cancelled_counts_as_booked() -> None:

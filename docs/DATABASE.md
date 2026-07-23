@@ -468,7 +468,7 @@ Per-folder poll watermark, `UNIQUE(user_id, folder_name)`. Each poll fetches onl
 | `warmth_tiers` | cold, lukewarm, warm | — |
 | `contact_roles` | primary, introducer, coordinator, backup | — |
 | `opportunity_formats` | workshop, keynote, podcast_spot, expo_table, panel, other | — |
-| `opportunity_statuses` | researching, outreach_sent, in_conversation, pitched, booked, delivered, nurture, cancelled, lost | `is_terminal`, `sort_order` |
+| `opportunity_statuses` | researching, outreach_sent, in_conversation, pitched, booked, delivered, cancelled, lost *(nurture retired in `0004`)* | `is_terminal`, `sort_order` |
 | `comp_types` | paid, pro_bono, trade | — |
 | `payment_statuses` | unbilled, invoiced, partial, paid, n_a | `is_settled` |
 | `outreach_kinds` | initial, follow_up, correspondence | **`counts_toward_target`** |
@@ -486,19 +486,19 @@ Per-folder poll watermark, `UNIQUE(user_id, folder_name)`. Each poll fetches onl
 | pitched | Pitched | F | 40 |
 | booked | Booked | F | 50 |
 | delivered | Delivered | **T** | 60 |
-| nurture | Nurture | F | 70 |
 | cancelled | Cancelled | **T** | 80 |
 | lost | Lost / Passed | **T** | 90 |
+
+> `nurture` (was 70) was **retired in `0004_remove_nurture.sql`** — keeping a relationship warm is a
+> property of the contact/venue (warmth tier, power-partner) and of follow-ups, not a stage of a past
+> gig. The acquisition pipeline now ends cleanly at Delivered. (Its `sort_order` gap is intentional.)
 
 The four **funnel ratio stages** are `outreach_sent → in_conversation → pitched → booked` (10–50),
 counted **reached-or-beyond** over `status_events.occurred_at`, so a gig that jumped straight to
 Pitched still counts toward Outreach Sent.
 
-Three notes on the ordering, because each is a trap:
+Two notes on the ordering, because each is a trap:
 
-- **`nurture` (70) sorts *after* `delivered` (60) and is deliberately non-terminal.** It is a
-  post-delivery holding state, not an outcome. Per `DESIGN.md` §1 an opportunity **ends** at
-  Delivered / Nurture — anything downstream is legacy-tracker's, and must not be modelled here.
 - **`cancelled` still counts as a booking** for funnel purposes (it was booked, then fell through).
   The Dashboard funnel shows it as the leak between Booked and Delivered. Do **not** exclude it
   from the booked count.
@@ -638,14 +638,15 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 
 | Migration | Contents | Slice |
 |---|---|---|
-| `0001_initial.sql` | `users`, all catalog tables + seed rows — **except `message_template_kinds`**, deferred to `0004` (**not** `schema_migrations`) | 1 |
+| `0001_initial.sql` | `users`, all catalog tables + seed rows — **except `message_template_kinds`**, deferred to `0005` (**not** `schema_migrations`) | 1 |
 | `0002_orgs_contacts.sql` | `organizations`, `contacts`, `contact_organizations` | 2 |
-| `0003_pipeline.sql` | `opportunities`, `opportunity_contacts`, `opportunity_notes`, `status_events` | 3 |
-| `0004_outreach.sql` | `outreaches`, `message_templates` (+ `channel_id → outreach_channels`), the `message_template_kinds` purpose catalog + seed of the strategy-doc templates | 4 |
-| `0005_targets.sql` | `targets` | 5 |
-| `0006_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors` | 6 |
-| `0007_followups.sql` | `follow_ups` | 7 |
-| `0008_assets.sql` | `talks`, `materials` | 2–4 (as needed) |
+| `0003_pipeline.sql` | `talks`, `opportunities`, `opportunity_contacts`, `opportunity_notes`, `status_events` | 3 |
+| `0004_remove_nurture.sql` | retires the `nurture` status (catalog soft-delete) | 3 (follow-up) |
+| `0005_outreach.sql` | `outreaches`, `message_templates` (+ `channel_id → outreach_channels`), the `message_template_kinds` purpose catalog + seed of the strategy-doc templates | 4 |
+| `0006_targets.sql` | `targets` | 5 |
+| `0007_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors` | 6 |
+| `0008_followups.sql` | `follow_ups` | 7 |
+| `0009_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The

@@ -19,7 +19,7 @@ This app is **upstream, gig-acquisition only**. The sibling app **legacy-tracker
 (`~/360-balanced-living/legacy-tracker`) owns the *listener-conversion* side of Donna's
 funnel — Legacy Spark Chats, discovery calls, podcast/guide-download/Legacy-Lounge lead
 sources. **Do not pull those concepts into speaker-tracker.** A speaker-tracker opportunity
-ends at `Delivered / Nurture`; any inbound interest a delivered gig produces is handed off to
+ends at `Delivered`; any inbound interest a delivered gig produces is handed off to
 legacy-tracker, not tracked here.
 
 ## 2. Features
@@ -30,7 +30,7 @@ legacy-tracker, not tracked here.
 2. **Contacts** — event coordinator / wellness director / retreat manager / podcast host.
    Power-partner flag; warmth tier; warm-intro / mutual-connection; how you know them.
 3. **Gig pipeline (kanban)** — one card per speaking/podcast opportunity:
-   `Researching → Outreach Sent → In Conversation → Pitched → Booked → Delivered → Nurture`.
+   `Researching → Outreach Sent → In Conversation → Pitched → Booked → Delivered`.
    Card holds talk offered, event date, format (workshop / keynote / podcast spot / expo table),
    outcome. Stage moves journaled (drag-and-drop).
 4. **Outreach journal** — append-only touch log per contact (email, DM, call, in-person),

@@ -11,13 +11,13 @@ import pytest
 from core.opportunities import initial_payment_status, is_closed, is_real_move
 
 # Non-terminal statuses never close, regardless of payment settlement.
-NON_TERMINAL = ["researching", "outreach_sent", "in_conversation", "pitched", "booked", "nurture"]
+NON_TERMINAL = ["researching", "outreach_sent", "in_conversation", "pitched", "booked"]
 
 
 @pytest.mark.parametrize("status", NON_TERMINAL)
 @pytest.mark.parametrize("settled", [True, False])
 def test_non_terminal_never_closes(status: str, settled: bool) -> None:
-    # #7: nurture (and every earlier stage) stays on the board even if payment is settled.
+    # A non-terminal status stays on the board even if payment happens to be settled.
     assert is_closed(status, status_is_terminal=False, payment_is_settled=settled) is False
 
 

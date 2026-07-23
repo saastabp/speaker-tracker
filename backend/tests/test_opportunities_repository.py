@@ -3,8 +3,8 @@ and the child (contact / note) repos.
 
 Skip without ``TEST_DATABASE_URL`` (see conftest). These mechanize the slice-3 acceptance criteria
 at the repository level: one-event-per-real-move (#1), the ``closed_at`` predicate (#3), a
-delivered-but-unpaid gig staying on the board (#4), correcting payment re-opening it (#5), nurture
-being reachable and non-closing (#7), and close writing a terminal event *and* a reason note (#8).
+delivered-but-unpaid gig staying on the board (#4), correcting payment re-opening it (#5), and close
+writing a terminal event *and* a reason note (#8).
 """
 
 from __future__ import annotations
@@ -195,11 +195,12 @@ def test_delivered_but_unpaid_stays_on_board(pipeline_db) -> None:
     assert opp.get_opportunity(conn, user_id, oid)["closed_at"] is None  # #4
 
 
-def test_nurture_is_reachable_and_non_closing(pipeline_db) -> None:
+def test_retired_nurture_status_is_rejected(pipeline_db) -> None:
+    # nurture was retired in migration 0004; resolving it now raises InvalidInput.
     conn, user_id, ids = pipeline_db
     oid = opp.create_opportunity(conn, user_id, _opp(ids["org"]))
-    assert opp.patch_status(conn, user_id, oid, "nurture") is StatusPatchResult.MOVED
-    assert opp.get_opportunity(conn, user_id, oid)["closed_at"] is None  # #7
+    with pytest.raises(errors.InvalidInput):
+        opp.patch_status(conn, user_id, oid, "nurture")
 
 
 def test_status_rejects_close_flow_targets(pipeline_db) -> None:

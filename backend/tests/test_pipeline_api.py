@@ -10,9 +10,9 @@ Coverage maps to the nine acceptance criteria: one status event per real move an
 same-column drag (#1); a rejected move leaves state unchanged, so the SPA can roll back (#2); the
 ``closed_at`` predicate (#3); delivered-but-unpaid stays on the board and marking it paid moves it
 to History (#4); correcting payment reopens it (#5); a cancelled gig leaves the board for History
-(#6, board realization — the funnel *ratio* is slice 5); nurture is reachable and non-closing (#7);
-closing writes a terminal event *and* a reason note (#8); the funnel order/labels come from the
-server (#9).
+(#6, board realization — the funnel *ratio* is slice 5); a retired status (nurture, dropped in 0004)
+is rejected; closing writes a terminal event *and* a reason note (#8); the funnel order/labels come
+from the server (#9).
 """
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ BOARD_STAGES = [
     "pitched",
     "booked",
     "delivered",
-    "nurture",
 ]
 
 
@@ -181,13 +180,12 @@ def test_rejected_status_move_leaves_state_unchanged(api, board) -> None:
     assert _detail(api, opp["id"])["current_status"] == "booked"  # unchanged
 
 
-def test_nurture_is_reachable_and_non_closing(api, board) -> None:
+def test_retired_nurture_status_is_rejected(api, board) -> None:
+    # nurture was retired in migration 0004; the resolver no longer knows it, so a move is rejected.
     opp = _new_opp(api, board)
-    status, moved = api("PATCH", f"/opportunities/{opp['id']}/status", {"status": "nurture"})
-    assert status == 200
-    assert moved["current_status"] == "nurture"
-    assert moved["closed_at"] is None  # #7
-    assert opp["title"] in _titles(api, closed="false")
+    status, _ = api("PATCH", f"/opportunities/{opp['id']}/status", {"status": "nurture"})
+    assert status == 400
+    assert _detail(api, opp["id"])["current_status"] == "researching"  # unchanged
 
 
 # --- closed_at predicate / payment (#3, #4, #5) --------------------------------------------------

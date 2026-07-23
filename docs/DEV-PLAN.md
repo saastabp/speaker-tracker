@@ -222,7 +222,7 @@ post-booking); History table + detail via `?closed=true`.
 4. **A delivered-but-unpaid gig stays on the board**; marking it paid moves it to History.
 5. Correcting a payment status back from `paid` **clears `closed_at`** and returns the card.
 6. Cancelled still counts as booked in the funnel; the Booked→Delivered leak is visible.
-7. `nurture` is reachable and does **not** close the opportunity.
+7. ~~`nurture` is reachable and does **not** close the opportunity.~~ *(retired in `0004_remove_nurture.sql` — the pipeline ends at Delivered; keeping a relationship warm lives on the contact/venue and follow-ups.)*
 8. Closing writes a terminal `status_event` **and** a note capturing the reason.
 9. Stage order/labels come from the server; no stage name is hardcoded in the SPA.
 
@@ -235,7 +235,7 @@ lands in History; then a second one to Cancelled.
 
 **Size: M.**
 
-**Migration `0004_outreach.sql`** — `outreaches`, `message_templates` + seed of the three
+**Migration `0005_outreach.sql`** — `outreaches`, `message_templates` + seed of the three
 strategy-doc templates (DM, formal email, power-partner DM) as **shared** rows (`user_id IS NULL`).
 These are reference content Donna actually sends, not sample data — the one seeding exception
 alongside the catalogs.
@@ -264,7 +264,7 @@ Templates page with in-place edit + Duplicate; contact timeline.
 
 **Size: M.** First slice where the §2 f.8 measurement gap — the point of the app — actually closes.
 
-**Migration `0005_targets.sql`** — `targets` with `UNIQUE(user_id, target_type_id, cadence)`.
+**Migration `0006_targets.sql`** — `targets` with `UNIQUE(user_id, target_type_id, cadence)`.
 
 **Backend** — `targets.py` (GET/PUT upsert on the unique key), `dashboard.py` (actuals vs targets,
 funnel ratios, money rollups, stale opportunities, Needs attention).
@@ -292,7 +292,7 @@ the tile.
 **Size: L.** *Split from `DESIGN.md` §6's single slice 6 — the send and receive halves are
 independently shippable, and shipping them together makes the first failure ambiguous.*
 
-**Migration `0006_email.sql`** — `email_threads`, `email_messages`, `imap_folder_cursors`
+**Migration `0007_email.sql`** — `email_threads`, `email_messages`, `imap_folder_cursors`
 (the cursor table ships here even though 6b uses it, to keep email schema in one migration).
 **Plus `materials`** (attachments; resolves the other half of §6's "as needed").
 
@@ -378,7 +378,7 @@ lands on the opportunity; then drag a stranger's email into Import and complete 
 **Size: S.** Smallest slice; deliberately last because it depends on contacts, opportunities, and
 the composer all existing.
 
-**Migration `0007_followups.sql`** — `follow_ups` with
+**Migration `0008_followups.sql`** — `follow_ups` with
 `CHECK (contact_id IS NOT NULL OR opportunity_id IS NOT NULL)`.
 
 **Backend** — `follow_ups.py`, `common/scheduler.py` (deterministic `followup-<id>`, no-op when

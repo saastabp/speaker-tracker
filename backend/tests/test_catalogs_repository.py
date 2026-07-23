@@ -57,8 +57,8 @@ def test_fetch_catalogs_returns_every_vocabulary(db_connection) -> None:
     assert terminal["delivered"] is True
     assert terminal["cancelled"] is True
     assert terminal["lost"] is True
-    assert terminal["nurture"] is False
     assert terminal["researching"] is False
+    assert "nurture" not in terminal  # retired in 0004
 
     settled = {status.short_name: status.is_settled for status in catalogs.payment_statuses}
     assert settled == {

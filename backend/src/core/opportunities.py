@@ -24,8 +24,7 @@ def is_closed(status_short_name: str, status_is_terminal: bool, payment_is_settl
     The payment gate applies **only to** ``delivered``: a delivered-but-unpaid gig stays on the
     active board so it is not lost before Donna collects (acceptance #4), and correcting a payment
     back off ``paid`` clears ``closed_at`` and returns the card (acceptance #5). Cancelled and lost
-    close immediately — there is nothing to collect. Non-terminal statuses (including ``nurture``)
-    never close (acceptance #7).
+    close immediately — there is nothing to collect. Non-terminal statuses never close.
 
     Parameters
     ----------
