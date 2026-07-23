@@ -9,6 +9,8 @@ import { AuthProvider } from './auth/AuthProvider';
 import { DeepLinkRestorer } from './auth/DeepLinkRestorer';
 import { loadRuntimeConfig, type RuntimeConfig } from './auth/runtimeConfig';
 import { AppShell } from './components/AppShell';
+import { ContactDetail } from './pages/ContactDetail';
+import { Contacts } from './pages/Contacts';
 import { Dashboard } from './pages/Dashboard';
 import { Placeholder } from './pages/Placeholder';
 import { VenueDetail } from './pages/VenueDetail';
@@ -32,6 +34,8 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
                   <Route index element={<Dashboard />} />
                   <Route path="venues" element={<Venues />} />
                   <Route path="venues/:id" element={<VenueDetail />} />
+                  <Route path="contacts" element={<Contacts />} />
+                  <Route path="contacts/:id" element={<ContactDetail />} />
                   <Route path="*" element={<Placeholder />} />
                 </Route>
               </Routes>

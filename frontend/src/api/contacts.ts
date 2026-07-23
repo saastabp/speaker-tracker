@@ -57,8 +57,9 @@ const contactKeys = {
   detail: (id: number) => ['contacts', id] as const,
 };
 
-/** List the caller's contacts; ``query`` runs the dedupe search (name/email substring). */
-export function useContacts(query?: string): UseQueryResult<ContactSummary[]> {
+/** List the caller's contacts; ``query`` runs the dedupe search (name/email substring). Pass
+ *  ``enabled: false`` to hold the query (e.g. until a debounced search term is long enough). */
+export function useContacts(query?: string, enabled = true): UseQueryResult<ContactSummary[]> {
   const api = useApi();
   return useQuery({
     queryKey: contactKeys.list(query),
@@ -66,6 +67,7 @@ export function useContacts(query?: string): UseQueryResult<ContactSummary[]> {
       const path = query ? `/contacts?q=${encodeURIComponent(query)}` : '/contacts';
       return (await api<{ contacts: ContactSummary[] }>(path)).contacts;
     },
+    enabled,
   });
 }
 
