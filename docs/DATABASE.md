@@ -298,6 +298,10 @@ research-readiness (§4) is computed from them.
 `email_domain` exists for the drop-folder import: when an unknown sender is imported, the sender's
 domain is matched here to suggest an existing organization before offering to create one.
 Indexes: `(user_id, name)`, `(user_id, organization_type_id)`, `(user_id, email_domain)`.
+Organization **names are unique per user among live rows**: a generated `name_key` (the name when
+`deleted_at IS NULL`, else NULL) backs `UNIQUE(user_id, name_key)`, so a soft-deleted name can be
+re-used while two live orgs cannot collide. Contacts, by contrast, are deduped by *search*, not a
+constraint — one person legitimately spans venues, and email may be absent.
 
 ### `contacts`
 The *person*, deliberately with **no `organization_id`** — affiliation lives in

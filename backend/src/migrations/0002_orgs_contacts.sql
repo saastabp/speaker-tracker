@@ -28,7 +28,11 @@ CREATE TABLE IF NOT EXISTS organizations (
   created_at           TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at           TIMESTAMP    NULL DEFAULT NULL,
+  -- Active-name uniqueness per user: name_key is NULL for soft-deleted rows (multiple NULLs are
+  -- allowed), so a deleted org's name can be reused while two live orgs cannot share a name.
+  name_key             VARCHAR(255) GENERATED ALWAYS AS (IF(deleted_at IS NULL, name, NULL)) STORED,
   PRIMARY KEY (id),
+  UNIQUE KEY uq_organizations_user_active_name (user_id, name_key),
   KEY ix_organizations_user_name (user_id, name),
   KEY ix_organizations_user_type (user_id, organization_type_id),
   KEY ix_organizations_user_email_domain (user_id, email_domain),

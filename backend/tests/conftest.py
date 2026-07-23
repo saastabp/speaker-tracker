@@ -14,12 +14,18 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pymysql
 import pymysql.cursors
 import pytest
 from pymysql.connections import Connection
+
+from migrations.runner import run_migrations
+
+#: The real migrations directory shipped with the backend.
+MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "migrations"
 
 
 def _connect_params(url: str) -> dict:
@@ -89,3 +95,22 @@ def db_connect() -> Iterator[Callable[[], Connection]]:
 def db_connection(db_connect: Callable[[], Connection]) -> Connection:
     """A single connection to the clean test database (the common case)."""
     return db_connect()
+
+
+@pytest.fixture
+def seeded_db(db_connection: Connection) -> tuple[Connection, int, int, int]:
+    """A migrated database with one user and handy catalog ids, for entity-repository tests.
+
+    Returns ``(conn, user_id, org_type_id, warmth_tier_id)`` — the migrations are applied (so
+    every table and catalog exists), one ``users`` row is inserted, and one id from each of the
+    ``organization_types`` and ``warmth_tiers`` catalogs is resolved for building fixtures.
+    """
+    run_migrations(db_connection, MIGRATIONS_DIR)
+    with db_connection.cursor() as cur:
+        cur.execute("INSERT INTO users (cognito_sub, email) VALUES ('user', 'user@example.com')")
+        user_id = cur.lastrowid
+        cur.execute("SELECT id FROM organization_types LIMIT 1")
+        org_type_id = cur.fetchone()["id"]
+        cur.execute("SELECT id FROM warmth_tiers LIMIT 1")
+        warmth_tier_id = cur.fetchone()["id"]
+    return db_connection, user_id, org_type_id, warmth_tier_id
