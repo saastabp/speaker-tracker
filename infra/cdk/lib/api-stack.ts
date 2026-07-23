@@ -20,10 +20,36 @@ interface RouteDef {
   readonly authRequired: boolean;
 }
 
-/** Slice-1 route table. `/health` stays open for uptime checks; `/catalogs` is protected in prod. */
+/** Route → authorizer table for the HTTP API. `/health` stays open for uptime checks; every other
+ *  route carries the JWT authorizer in prod (open in sandbox). Routes are declared explicitly (not
+ *  ANY /{proxy+}), so **a new backend Router module must have its paths added here too**. */
 const ROUTES: RouteDef[] = [
   { method: apigwv2.HttpMethod.GET, path: '/health', authRequired: false },
   { method: apigwv2.HttpMethod.GET, path: '/catalogs', authRequired: true },
+  // Organizations (slice 2)
+  { method: apigwv2.HttpMethod.GET, path: '/organizations', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/organizations', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/organizations/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/organizations/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/organizations/{id}', authRequired: true },
+  // Contacts (slice 2)
+  { method: apigwv2.HttpMethod.GET, path: '/contacts', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/contacts', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/contacts/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/contacts/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/contacts/{id}', authRequired: true },
+  // Contact-organization affiliations (slice 2)
+  { method: apigwv2.HttpMethod.POST, path: '/contacts/{id}/organizations', authRequired: true },
+  {
+    method: apigwv2.HttpMethod.PUT,
+    path: '/contacts/{id}/organizations/{orgId}',
+    authRequired: true,
+  },
+  {
+    method: apigwv2.HttpMethod.DELETE,
+    path: '/contacts/{id}/organizations/{orgId}',
+    authRequired: true,
+  },
 ];
 
 export interface ApiStackProps extends StackProps {

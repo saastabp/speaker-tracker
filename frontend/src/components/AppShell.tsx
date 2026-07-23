@@ -22,6 +22,7 @@ import {
 import { NavLink as RouterNavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuthSession } from '../auth/session';
 import { BRAND_CREAM } from '../theme';
+import classes from './AppShell.module.css';
 
 interface NavItem {
   label: string;
@@ -94,9 +95,7 @@ export function AppShell() {
                 active={isActive(pathname, item.to)}
                 label={item.label}
                 leftSection={<ItemIcon size={18} stroke={1.5} />}
-                color="gold"
-                variant="filled"
-                styles={{ root: { color: 'var(--mantine-color-gray-0)', borderRadius: 'var(--mantine-radius-sm)' } }}
+                className={classes.navLink}
               />
             );
           })}

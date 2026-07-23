@@ -1,0 +1,18 @@
+.navLink {
+  color: var(--mantine-color-gray-0);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.navLink:hover {
+  /* subtle overlay so the white label stays readable on the navy rail */
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.navLink[data-active] {
+  background-color: var(--mantine-color-gold-6);
+  color: var(--mantine-color-navy-9);
+}
+
+.navLink[data-active]:hover {
+  background-color: var(--mantine-color-gold-5);
+}
