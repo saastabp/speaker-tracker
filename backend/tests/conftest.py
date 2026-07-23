@@ -98,19 +98,20 @@ def db_connection(db_connect: Callable[[], Connection]) -> Connection:
 
 
 @pytest.fixture
-def seeded_db(db_connection: Connection) -> tuple[Connection, int, int, int]:
-    """A migrated database with one user and handy catalog ids, for entity-repository tests.
+def seeded_db(db_connection: Connection) -> tuple[Connection, int, str, str]:
+    """A migrated database with one user and handy catalog short_names, for repository tests.
 
-    Returns ``(conn, user_id, org_type_id, warmth_tier_id)`` — the migrations are applied (so
-    every table and catalog exists), one ``users`` row is inserted, and one id from each of the
-    ``organization_types`` and ``warmth_tiers`` catalogs is resolved for building fixtures.
+    Returns ``(conn, user_id, org_type, warmth_tier)`` — the migrations are applied (so every
+    table and catalog exists), one ``users`` row is inserted, and one short_name from each of the
+    ``organization_types`` and ``warmth_tiers`` catalogs is resolved for building fixtures. The API
+    references catalogs by short_name, so tests use those, not internal ids.
     """
     run_migrations(db_connection, MIGRATIONS_DIR)
     with db_connection.cursor() as cur:
         cur.execute("INSERT INTO users (cognito_sub, email) VALUES ('user', 'user@example.com')")
         user_id = cur.lastrowid
-        cur.execute("SELECT id FROM organization_types LIMIT 1")
-        org_type_id = cur.fetchone()["id"]
-        cur.execute("SELECT id FROM warmth_tiers LIMIT 1")
-        warmth_tier_id = cur.fetchone()["id"]
-    return db_connection, user_id, org_type_id, warmth_tier_id
+        cur.execute("SELECT short_name FROM organization_types LIMIT 1")
+        org_type = cur.fetchone()["short_name"]
+        cur.execute("SELECT short_name FROM warmth_tiers LIMIT 1")
+        warmth_tier = cur.fetchone()["short_name"]
+    return db_connection, user_id, org_type, warmth_tier

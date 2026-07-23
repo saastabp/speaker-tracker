@@ -18,8 +18,8 @@ class OrganizationInput(BaseModel):
 
     Parameters
     ----------
-    organization_type_id : int
-        FK into the `organization_types` catalog. Required — an org always has a type.
+    organization_type : str
+        `organization_types` catalog short_name. Required — an org always has a type.
     name : str
         Display name; 1-255 characters.
     location, website_url, email_domain, notes : str or None
@@ -28,7 +28,7 @@ class OrganizationInput(BaseModel):
         The three Kindling research fields; drive research-readiness.
     """
 
-    organization_type_id: int
+    organization_type: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=255)
     location: str | None = None
     website_url: str | None = None
@@ -53,7 +53,7 @@ class OrganizationSummary(BaseModel):
     """One row in the venues list — enough to scan and to show the research-ready state."""
 
     id: int
-    organization_type_id: int
+    organization_type: str
     name: str
     location: str | None
     why_it_fits: str | None

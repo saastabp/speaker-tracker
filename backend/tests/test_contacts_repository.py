@@ -16,14 +16,14 @@ from repositories import contacts as contacts_repo
 from repositories import organizations as orgs_repo
 
 
-def _org(org_type_id: int, name: str) -> OrganizationInput:
-    return OrganizationInput(organization_type_id=org_type_id, name=name)
+def _org(org_type: str, name: str) -> OrganizationInput:
+    return OrganizationInput(organization_type=org_type, name=name)
 
 
 def test_create_and_get_contact(seeded_db) -> None:
-    conn, user_id, _, warmth_id = seeded_db
+    conn, user_id, _, warmth = seeded_db
     contact_id = contacts_repo.create_contact(
-        conn, user_id, ContactInput(name="Jane", email="jane@x.com", warmth_tier_id=warmth_id)
+        conn, user_id, ContactInput(name="Jane", email="jane@x.com", warmth_tier=warmth)
     )
     row = contacts_repo.get_contact(conn, user_id, contact_id)
     assert row["name"] == "Jane"
@@ -33,7 +33,9 @@ def test_create_and_get_contact(seeded_db) -> None:
 def test_unknown_warmth_tier_is_invalid_input(seeded_db) -> None:
     conn, user_id, _, _ = seeded_db
     with pytest.raises(errors.InvalidInput):
-        contacts_repo.create_contact(conn, user_id, ContactInput(name="X", warmth_tier_id=999999))
+        contacts_repo.create_contact(
+            conn, user_id, ContactInput(name="X", warmth_tier="no_such_tier")
+        )
 
 
 def test_dedupe_search_matches_name_and_email(seeded_db) -> None:
@@ -50,9 +52,9 @@ def test_dedupe_search_matches_name_and_email(seeded_db) -> None:
 
 
 def test_contact_affiliated_with_two_orgs_appears_under_both(seeded_db) -> None:
-    conn, user_id, tid, _ = seeded_db
-    a = orgs_repo.create_organization(conn, user_id, _org(tid, "Alpha"))
-    b = orgs_repo.create_organization(conn, user_id, _org(tid, "Bravo"))
+    conn, user_id, org_type, _ = seeded_db
+    a = orgs_repo.create_organization(conn, user_id, _org(org_type, "Alpha"))
+    b = orgs_repo.create_organization(conn, user_id, _org(org_type, "Bravo"))
     jane = contacts_repo.create_contact(conn, user_id, ContactInput(name="Jane"))
     contacts_repo.add_affiliation(
         conn, user_id, jane, AffiliationInput(organization_id=a, title="Chair", is_primary=True)
@@ -69,8 +71,8 @@ def test_contact_affiliated_with_two_orgs_appears_under_both(seeded_db) -> None:
 
 
 def test_duplicate_affiliation_conflicts(seeded_db) -> None:
-    conn, user_id, tid, _ = seeded_db
-    a = orgs_repo.create_organization(conn, user_id, _org(tid, "Alpha"))
+    conn, user_id, org_type, _ = seeded_db
+    a = orgs_repo.create_organization(conn, user_id, _org(org_type, "Alpha"))
     jane = contacts_repo.create_contact(conn, user_id, ContactInput(name="Jane"))
     contacts_repo.add_affiliation(conn, user_id, jane, AffiliationInput(organization_id=a))
     with pytest.raises(errors.Conflict):
@@ -78,12 +80,12 @@ def test_duplicate_affiliation_conflicts(seeded_db) -> None:
 
 
 def test_affiliation_requires_owned_org(seeded_db, db_connection) -> None:
-    conn, user_id, tid, _ = seeded_db
+    conn, user_id, org_type, _ = seeded_db
     jane = contacts_repo.create_contact(conn, user_id, ContactInput(name="Jane"))
     with db_connection.cursor() as cur:
         cur.execute("INSERT INTO users (cognito_sub, email) VALUES ('u2', 'u2@x')")
         other_user = cur.lastrowid
-    other_org = orgs_repo.create_organization(conn, other_user, _org(tid, "Other"))
+    other_org = orgs_repo.create_organization(conn, other_user, _org(org_type, "Other"))
     with pytest.raises(errors.NotFound):
         contacts_repo.add_affiliation(
             conn, user_id, jane, AffiliationInput(organization_id=other_org)
@@ -91,15 +93,15 @@ def test_affiliation_requires_owned_org(seeded_db, db_connection) -> None:
 
 
 def test_add_affiliation_missing_contact_is_not_found(seeded_db) -> None:
-    conn, user_id, tid, _ = seeded_db
-    a = orgs_repo.create_organization(conn, user_id, _org(tid, "Alpha"))
+    conn, user_id, org_type, _ = seeded_db
+    a = orgs_repo.create_organization(conn, user_id, _org(org_type, "Alpha"))
     with pytest.raises(errors.NotFound):
         contacts_repo.add_affiliation(conn, user_id, 999, AffiliationInput(organization_id=a))
 
 
 def test_update_and_remove_affiliation(seeded_db) -> None:
-    conn, user_id, tid, _ = seeded_db
-    a = orgs_repo.create_organization(conn, user_id, _org(tid, "Alpha"))
+    conn, user_id, org_type, _ = seeded_db
+    a = orgs_repo.create_organization(conn, user_id, _org(org_type, "Alpha"))
     jane = contacts_repo.create_contact(conn, user_id, ContactInput(name="Jane"))
     contacts_repo.add_affiliation(
         conn, user_id, jane, AffiliationInput(organization_id=a, title="Chair", is_primary=True)
@@ -120,8 +122,8 @@ def test_update_and_remove_affiliation(seeded_db) -> None:
 
 
 def test_soft_deleted_contact_drops_from_org_count(seeded_db) -> None:
-    conn, user_id, tid, _ = seeded_db
-    a = orgs_repo.create_organization(conn, user_id, _org(tid, "Alpha"))
+    conn, user_id, org_type, _ = seeded_db
+    a = orgs_repo.create_organization(conn, user_id, _org(org_type, "Alpha"))
     jane = contacts_repo.create_contact(conn, user_id, ContactInput(name="Jane"))
     contacts_repo.add_affiliation(conn, user_id, jane, AffiliationInput(organization_id=a))
     assert orgs_repo.get_organization(conn, user_id, a)["contact_count"] == 1

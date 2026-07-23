@@ -1,10 +1,10 @@
 """Raw-SQL persistence for contacts and their organization affiliations.
 
-Contacts are user-scoped and soft-deleted (``deleted_at IS NULL``); they have no uniqueness
-constraint — the add-contact dedupe is a *search* (``list_contacts(query=...)``), because one
-person legitimately spans venues and email may be absent. Affiliation writes go through
-``contact_organizations`` and verify that **both** the contact and the organization belong to the
-caller; a duplicate affiliation (the ``UNIQUE(contact_id, organization_id)`` guard) → ``Conflict``.
+The public API references the `warmth_tiers` catalog by **short_name** (ids are never exposed);
+writes resolve `warmth_tier` → the numeric `warmth_tier_id`, reads join back to the short_name.
+Contacts are user-scoped and soft-deleted; they have no uniqueness constraint — the add-contact
+dedupe is a *search* (`list_contacts(query=...)`). Affiliation writes verify that **both** the
+contact and the organization belong to the caller; a duplicate affiliation → `Conflict`.
 """
 
 from __future__ import annotations
@@ -15,16 +15,14 @@ from pymysql.err import IntegrityError
 from common import errors
 from models.contacts import AffiliationInput, AffiliationUpdate, ContactInput
 
-#: MySQL error codes we translate to domain errors.
-_ER_DUP_ENTRY = 1062  # UNIQUE violation — affiliation already exists
-_ER_NO_REFERENCED_ROW = 1452  # FK constraint fails — unknown warmth_tier_id
+#: UNIQUE violation — affiliation already exists.
+_ER_DUP_ENTRY = 1062
 
-#: Writable contact columns, in the order create/update bind them.
-_WRITABLE = (
+#: Writable contact columns that map 1:1 from the input (warmth_tier is resolved separately).
+_PLAIN_COLUMNS = (
     "name",
     "email",
     "phone",
-    "warmth_tier_id",
     "is_power_partner",
     "source",
     "how_you_know",
@@ -32,13 +30,28 @@ _WRITABLE = (
 )
 
 
-def _values(data: ContactInput) -> tuple:
-    """Return the writable field values in ``_WRITABLE`` order."""
-    return tuple(getattr(data, column) for column in _WRITABLE)
+def _resolve_warmth_id(conn: Connection, short_name: str | None) -> int | None:
+    """Resolve a `warmth_tiers` short_name to its id; None stays None; unknown → InvalidInput."""
+    if short_name is None:
+        return None
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM warmth_tiers WHERE short_name = %s AND deleted_at IS NULL",
+            (short_name,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise errors.InvalidInput("unknown warmth_tier")
+    return row["id"]
+
+
+def _plain_values(data: ContactInput) -> tuple:
+    """Return the plain (non-catalog) writable values in `_PLAIN_COLUMNS` order."""
+    return tuple(getattr(data, column) for column in _PLAIN_COLUMNS)
 
 
 def list_contacts(conn: Connection, user_id: int, query: str | None = None) -> list[dict]:
-    """Return the caller's contacts with their live-org counts; optionally filtered by ``query``.
+    """Return the caller's contacts with their live-org counts; optionally filtered by `query`.
 
     Parameters
     ----------
@@ -47,18 +60,19 @@ def list_contacts(conn: Connection, user_id: int, query: str | None = None) -> l
     user_id : int
         The owning user.
     query : str or None
-        When given, a case-insensitive substring matched against name or email — this is the
-        add-contact dedupe search. When None, returns all live contacts.
+        When given, a case-insensitive substring matched against name or email (the dedupe
+        search). When None, returns all live contacts.
 
     Returns
     -------
     list of dict
-        One row per contact with ``organization_count``, name-ordered.
+        One row per contact with `warmth_tier` (short_name or None) and `organization_count`.
     """
     sql = (
-        "SELECT c.id, c.name, c.email, c.warmth_tier_id, c.is_power_partner, "
+        "SELECT c.id, c.name, c.email, wt.short_name AS warmth_tier, c.is_power_partner, "
         "       c.created_at, c.updated_at, COUNT(DISTINCT o.id) AS organization_count "
         "FROM contacts c "
+        "LEFT JOIN warmth_tiers wt ON wt.id = c.warmth_tier_id "
         "LEFT JOIN contact_organizations co ON co.contact_id = c.id "
         "LEFT JOIN organizations o ON o.id = co.organization_id AND o.deleted_at IS NULL "
         "WHERE c.user_id = %s AND c.deleted_at IS NULL "
@@ -68,7 +82,7 @@ def list_contacts(conn: Connection, user_id: int, query: str | None = None) -> l
         sql += "AND (c.name LIKE %s OR c.email LIKE %s) "
         like = f"%{query}%"
         params += [like, like]
-    sql += "GROUP BY c.id ORDER BY c.name"
+    sql += "GROUP BY c.id, wt.short_name ORDER BY c.name"
     with conn.cursor() as cur:
         cur.execute(sql, tuple(params))
         return list(cur.fetchall())
@@ -89,13 +103,16 @@ def get_contact(conn: Connection, user_id: int, contact_id: int) -> dict | None:
     Returns
     -------
     dict or None
-        The contact row (writable fields, id, timestamps), or None.
+        The contact row (writable fields with `warmth_tier` short_name, id, timestamps), or None.
     """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, email, phone, warmth_tier_id, is_power_partner, source, "
-            "       how_you_know, notes, created_at, updated_at "
-            "FROM contacts WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+            "SELECT c.id, c.name, c.email, c.phone, wt.short_name AS warmth_tier, "
+            "       c.is_power_partner, c.source, c.how_you_know, c.notes, "
+            "       c.created_at, c.updated_at "
+            "FROM contacts c "
+            "LEFT JOIN warmth_tiers wt ON wt.id = c.warmth_tier_id "
+            "WHERE c.id = %s AND c.user_id = %s AND c.deleted_at IS NULL",
             (contact_id, user_id),
         )
         return cur.fetchone()
@@ -116,7 +133,7 @@ def get_affiliations(conn: Connection, user_id: int, contact_id: int) -> list[di
     Returns
     -------
     list of dict
-        Each with ``organization_id``, ``organization_name``, ``title``, ``is_primary``.
+        Each with `organization_id`, `organization_name`, `title`, `is_primary`.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -141,7 +158,7 @@ def create_contact(conn: Connection, user_id: int, data: ContactInput) -> int:
     user_id : int
         The owning user.
     data : models.contacts.ContactInput
-        The validated writable fields.
+        The validated writable fields (`warmth_tier` is a short_name or None).
 
     Returns
     -------
@@ -151,19 +168,16 @@ def create_contact(conn: Connection, user_id: int, data: ContactInput) -> int:
     Raises
     ------
     common.errors.InvalidInput
-        When ``warmth_tier_id`` does not reference an existing catalog row.
+        When `warmth_tier` is not a known catalog short_name.
     """
-    placeholders = ", ".join(["%s"] * (len(_WRITABLE) + 1))
+    warmth_id = _resolve_warmth_id(conn, data.warmth_tier)
+    columns = ("user_id", "warmth_tier_id", *_PLAIN_COLUMNS)
+    placeholders = ", ".join(["%s"] * len(columns))
     with conn.cursor() as cur:
-        try:
-            cur.execute(
-                f"INSERT INTO contacts (user_id, {', '.join(_WRITABLE)}) VALUES ({placeholders})",
-                (user_id, *_values(data)),
-            )
-        except IntegrityError as exc:
-            if exc.args[0] == _ER_NO_REFERENCED_ROW:
-                raise errors.InvalidInput("unknown warmth_tier_id") from exc
-            raise
+        cur.execute(
+            f"INSERT INTO contacts ({', '.join(columns)}) VALUES ({placeholders})",
+            (user_id, warmth_id, *_plain_values(data)),
+        )
         return cur.lastrowid
 
 
@@ -179,20 +193,21 @@ def update_contact(conn: Connection, user_id: int, contact_id: int, data: Contac
     contact_id : int
         The contact id.
     data : models.contacts.ContactInput
-        The validated replacement fields.
+        The validated replacement fields (`warmth_tier` is a short_name or None).
 
     Returns
     -------
     bool
-        True if the contact existed and was updated; False if absent. Existence is checked
-        separately so an unchanged-value update is not mistaken for absent.
+        True if the contact existed and was updated; False if absent.
 
     Raises
     ------
     common.errors.InvalidInput
-        When ``warmth_tier_id`` does not reference an existing catalog row.
+        When `warmth_tier` is not a known catalog short_name.
     """
-    assignments = ", ".join(f"{column} = %s" for column in _WRITABLE)
+    warmth_id = _resolve_warmth_id(conn, data.warmth_tier)
+    columns = ("warmth_tier_id", *_PLAIN_COLUMNS)
+    assignments = ", ".join(f"{column} = %s" for column in columns)
     with conn.cursor() as cur:
         cur.execute(
             "SELECT 1 FROM contacts WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
@@ -200,15 +215,10 @@ def update_contact(conn: Connection, user_id: int, contact_id: int, data: Contac
         )
         if cur.fetchone() is None:
             return False
-        try:
-            cur.execute(
-                f"UPDATE contacts SET {assignments} WHERE id = %s AND user_id = %s",
-                (*_values(data), contact_id, user_id),
-            )
-        except IntegrityError as exc:
-            if exc.args[0] == _ER_NO_REFERENCED_ROW:
-                raise errors.InvalidInput("unknown warmth_tier_id") from exc
-            raise
+        cur.execute(
+            f"UPDATE contacts SET {assignments} WHERE id = %s AND user_id = %s",
+            (warmth_id, *_plain_values(data), contact_id, user_id),
+        )
     return True
 
 
@@ -227,8 +237,7 @@ def soft_delete_contact(conn: Connection, user_id: int, contact_id: int) -> bool
     Returns
     -------
     bool
-        True if a non-deleted contact was marked deleted; False otherwise. Affiliation rows are
-        left intact — reads hide them via the contact's ``deleted_at``.
+        True if a non-deleted contact was marked deleted; False otherwise.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -244,7 +253,7 @@ def add_affiliation(
 ) -> None:
     """Affiliate a contact with an organization; both must belong to the caller.
 
-    The insert is guarded by ``EXISTS`` checks on the owning contact and organization, so a
+    The insert is guarded by `EXISTS` checks on the owning contact and organization, so a
     missing/foreign id inserts nothing rather than creating a cross-user link.
 
     Parameters
@@ -263,7 +272,7 @@ def add_affiliation(
     common.errors.NotFound
         When the contact or organization does not exist for this user.
     common.errors.Conflict
-        When the affiliation already exists (``UNIQUE(contact_id, organization_id)``).
+        When the affiliation already exists (`UNIQUE(contact_id, organization_id)`).
     """
     with conn.cursor() as cur:
         try:

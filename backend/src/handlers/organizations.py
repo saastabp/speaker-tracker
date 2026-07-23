@@ -31,7 +31,7 @@ def list_organizations() -> dict:
     summaries = [
         OrganizationSummary(
             id=row["id"],
-            organization_type_id=row["organization_type_id"],
+            organization_type=row["organization_type"],
             name=row["name"],
             location=row["location"],
             why_it_fits=row["why_it_fits"],

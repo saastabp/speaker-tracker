@@ -24,8 +24,8 @@ class ContactInput(BaseModel):
         contact (a documented limitation, `DATABASE.md`).
     phone, source, how_you_know, notes : str or None
         Optional detail.
-    warmth_tier_id : int or None
-        Optional FK into the `warmth_tiers` catalog; may be unset early in a relationship.
+    warmth_tier : str or None
+        Optional `warmth_tiers` catalog short_name; may be unset early in a relationship.
     is_power_partner : bool
         Person-level flag, independent of any org.
     """
@@ -33,7 +33,7 @@ class ContactInput(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: str | None = None
     phone: str | None = None
-    warmth_tier_id: int | None = None
+    warmth_tier: str | None = None
     is_power_partner: bool = False
     source: str | None = None
     how_you_know: str | None = None
@@ -70,7 +70,7 @@ class ContactSummary(BaseModel):
     id: int
     name: str
     email: str | None
-    warmth_tier_id: int | None
+    warmth_tier: str | None
     is_power_partner: bool
     organization_count: int
     created_at: datetime

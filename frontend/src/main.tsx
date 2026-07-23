@@ -11,6 +11,8 @@ import { loadRuntimeConfig, type RuntimeConfig } from './auth/runtimeConfig';
 import { AppShell } from './components/AppShell';
 import { Dashboard } from './pages/Dashboard';
 import { Placeholder } from './pages/Placeholder';
+import { VenueDetail } from './pages/VenueDetail';
+import { Venues } from './pages/Venues';
 import { theme } from './theme';
 
 const queryClient = new QueryClient({
@@ -28,6 +30,8 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
               <Routes>
                 <Route element={<AppShell />}>
                   <Route index element={<Dashboard />} />
+                  <Route path="venues" element={<Venues />} />
+                  <Route path="venues/:id" element={<VenueDetail />} />
                   <Route path="*" element={<Placeholder />} />
                 </Route>
               </Routes>

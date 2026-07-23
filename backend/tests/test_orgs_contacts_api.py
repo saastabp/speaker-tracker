@@ -22,10 +22,10 @@ from migrations.runner import run_migrations
 MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "migrations"
 
 
-def _first_id(conn, table: str) -> int:
+def _first_short_name(conn, table: str) -> str:
     with conn.cursor() as cur:
-        cur.execute(f"SELECT id FROM {table} LIMIT 1")
-        return cur.fetchone()["id"]
+        cur.execute(f"SELECT short_name FROM {table} LIMIT 1")
+        return cur.fetchone()["short_name"]
 
 
 @pytest.fixture
@@ -60,14 +60,14 @@ def api(db_connection, monkeypatch):
 
 
 def test_create_organization_requires_name(api) -> None:
-    status, body = api("POST", "/organizations", {"organization_type_id": 1})
+    status, body = api("POST", "/organizations", {"organization_type": "womens_network"})
     assert status == 400
     assert body == {"error": "invalid request"}
 
 
 def test_create_then_get_organization(api, db_connection) -> None:
-    tid = _first_id(db_connection, "organization_types")
-    status, created = api("POST", "/organizations", {"organization_type_id": tid, "name": "PWN"})
+    org_type = _first_short_name(db_connection, "organization_types")
+    status, created = api("POST", "/organizations", {"organization_type": org_type, "name": "PWN"})
     assert status == 200
     assert created["name"] == "PWN"
     assert created["research_ready"] is False
@@ -79,9 +79,9 @@ def test_create_then_get_organization(api, db_connection) -> None:
 
 
 def test_duplicate_organization_name_conflicts(api, db_connection) -> None:
-    tid = _first_id(db_connection, "organization_types")
-    api("POST", "/organizations", {"organization_type_id": tid, "name": "PWN"})
-    status, body = api("POST", "/organizations", {"organization_type_id": tid, "name": "PWN"})
+    org_type = _first_short_name(db_connection, "organization_types")
+    api("POST", "/organizations", {"organization_type": org_type, "name": "PWN"})
+    status, body = api("POST", "/organizations", {"organization_type": org_type, "name": "PWN"})
     assert status == 409
     assert "already exists" in body["error"]
 
@@ -95,9 +95,9 @@ def test_malformed_id_is_404(api) -> None:
 
 
 def test_contact_affiliated_with_two_organizations(api, db_connection) -> None:
-    tid = _first_id(db_connection, "organization_types")
-    a = api("POST", "/organizations", {"organization_type_id": tid, "name": "Alpha"})[1]["id"]
-    b = api("POST", "/organizations", {"organization_type_id": tid, "name": "Bravo"})[1]["id"]
+    org_type = _first_short_name(db_connection, "organization_types")
+    a = api("POST", "/organizations", {"organization_type": org_type, "name": "Alpha"})[1]["id"]
+    b = api("POST", "/organizations", {"organization_type": org_type, "name": "Bravo"})[1]["id"]
     contact = api("POST", "/contacts", {"name": "Jane"})[1]
 
     api(
@@ -118,8 +118,8 @@ def test_contact_affiliated_with_two_organizations(api, db_connection) -> None:
 
 
 def test_duplicate_affiliation_conflicts(api, db_connection) -> None:
-    tid = _first_id(db_connection, "organization_types")
-    a = api("POST", "/organizations", {"organization_type_id": tid, "name": "Alpha"})[1]["id"]
+    org_type = _first_short_name(db_connection, "organization_types")
+    a = api("POST", "/organizations", {"organization_type": org_type, "name": "Alpha"})[1]["id"]
     contact = api("POST", "/contacts", {"name": "Jane"})[1]
     api("POST", f"/contacts/{contact['id']}/organizations", {"organization_id": a})
     status, _ = api("POST", f"/contacts/{contact['id']}/organizations", {"organization_id": a})
@@ -135,12 +135,12 @@ def test_dedupe_search_finds_existing_contact(api) -> None:
 
 
 def test_research_ready_requires_kindling_and_a_contact(api, db_connection) -> None:
-    tid = _first_id(db_connection, "organization_types")
+    org_type = _first_short_name(db_connection, "organization_types")
     org = api(
         "POST",
         "/organizations",
         {
-            "organization_type_id": tid,
+            "organization_type": org_type,
             "name": "PWN",
             "what_it_is": "a network",
             "why_it_fits": "great audience",
@@ -156,8 +156,8 @@ def test_research_ready_requires_kindling_and_a_contact(api, db_connection) -> N
 
 
 def test_soft_delete_hides_organization(api, db_connection) -> None:
-    tid = _first_id(db_connection, "organization_types")
-    org_id = api("POST", "/organizations", {"organization_type_id": tid, "name": "PWN"})[1]["id"]
+    org_type = _first_short_name(db_connection, "organization_types")
+    org_id = api("POST", "/organizations", {"organization_type": org_type, "name": "PWN"})[1]["id"]
     assert api("DELETE", f"/organizations/{org_id}") == (200, {"deleted": True})
     assert api("GET", f"/organizations/{org_id}")[0] == 404
     assert api("GET", "/organizations")[1] == {"organizations": []}
