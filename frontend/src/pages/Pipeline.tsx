@@ -25,6 +25,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle, IconPlus, IconX } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -247,7 +248,21 @@ export function Pipeline() {
     const card = (opps.data ?? []).find((o) => o.id === Number(active.id));
     const target = String(over.id);
     if (card && card.current_status !== target) {
-      patchStatus.mutate({ id: card.id, status: target });
+      patchStatus.mutate(
+        { id: card.id, status: target },
+        {
+          onSuccess: (updated) => {
+            // A move that settles a delivered gig closes it — tell the user why it left the board.
+            if (updated.closed_at) {
+              notifications.show({
+                message: `"${updated.title}" moved to History`,
+                color: 'gray',
+                autoClose: 4000,
+              });
+            }
+          },
+        },
+      );
     }
   }
 

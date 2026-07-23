@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
     server: proxyTarget
       ? { proxy: { '/api': { target: proxyTarget, changeOrigin: true, secure: true } } }
       : undefined,
-    build: { outDir: 'dist', sourcemap: true },
+    // No source maps in production (they would expose the original TS to anyone opening devtools
+    // once the dist is served). Sandbox keeps them for debugging the deployed bundle; local
+    // `vite dev` has its own maps regardless.
+    build: { outDir: 'dist', sourcemap: mode === 'production' ? false : true },
   };
 });
