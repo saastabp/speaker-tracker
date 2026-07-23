@@ -162,8 +162,10 @@ headers plus candidate rows and *returns a decision*; `common/imap.py` does the 
 backend/src/
   app.py          resolver + include_router + exception handlers (HTTP composition root)
   api_handler.py  lambda_handler for the one API function
-  handlers/       presentation — one Router module per route-group, plus context.py
-                  (authenticate(): principal→connection→user upsert — the auth composition root)
+  handlers/       presentation — one Router module per route-group, plus edge helpers:
+                  context.py   (authenticate(): principal→connection→user upsert — auth root)
+                  params.py    (path/query-parameter parsing, e.g. path_int → 404)
+                  responses.py (detail-response composition, so no route imports a sibling route)
   core/           business logic — pure (purity enforced by ruff, see §8)
   repositories/   data access — raw SQL, one module per aggregate
   models/         pydantic models — API contracts + typed rows
@@ -211,7 +213,7 @@ table.
 | `migrate.py` | *(separate function — in-deploy `Trigger`)* |
 | `catalogs.py` | GET `/catalogs` |
 | `organizations.py` | GET/POST `/organizations`, GET/PUT/DELETE `/organizations/{id}` |
-| `contacts.py` | GET/POST `/contacts`, GET/PUT/DELETE `/contacts/{id}`, GET `/contacts/{id}/timeline` |
+| `contacts.py` | GET/POST `/contacts`, GET/PUT/DELETE `/contacts/{id}`, GET `/contacts/{id}/timeline` *(timeline deferred — needs opportunities/outreach, slices 3–4)* |
 | `contact_organizations.py` | POST `/contacts/{id}/organizations`, PUT/DELETE `/contacts/{id}/organizations/{orgId}` |
 | `opportunities.py` | GET/POST `/opportunities`, GET/PUT/DELETE `/opportunities/{id}`, PATCH `/opportunities/{id}/status`, POST `/opportunities/{id}/close` |
 | `opportunity_contacts.py` | POST `/opportunities/{id}/contacts`, PUT/DELETE `/opportunities/{id}/contacts/{contactId}` |
@@ -507,7 +509,7 @@ frontend/src/
 | `/` | Dashboard — targets vs actuals, funnel, money rollup, Needs attention |
 | `/pipeline` | Kanban board (dnd-kit), full browser width |
 | `/venues`, `/venues/{id}` | Organizations list + detail with the Kindling research panel |
-| `/contacts`, `/contacts/{id}` | Contacts list + detail with multi-org affiliations and timeline |
+| `/contacts`, `/contacts/{id}` | Contacts list + detail with multi-org affiliations (timeline deferred to slices 3–4) |
 | `/opportunities/{id}` | Opportunity detail — fields, linked contacts, dated notes, lifecycle |
 | `/emails`, `/emails/{threadId}` | Thread list + thread view with inline reply |
 | `/history`, `/history/{id}` | Closed gigs table + detail |
