@@ -25,9 +25,8 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle, IconPlus, IconX } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
 import { useFunnel } from '../api/funnel';
@@ -168,6 +167,7 @@ function Column({
   label,
   cards,
   labels,
+  flashTitle,
   onOpen,
   onClose,
 }: {
@@ -175,6 +175,7 @@ function Column({
   label: string;
   cards: OpportunitySummary[];
   labels: CardLabels;
+  flashTitle: string | null;
   onOpen: (opp: OpportunitySummary) => void;
   onClose: (opp: OpportunitySummary) => void;
 }) {
@@ -199,6 +200,20 @@ function Column({
         </Badge>
       </Group>
       <Stack gap="xs">
+        {flashTitle && (
+          <Box
+            style={{
+              border: '1px solid var(--mantine-color-green-6)',
+              borderRadius: 6,
+              padding: '6px 8px',
+              backgroundColor: 'var(--mantine-color-green-0)',
+            }}
+          >
+            <Text size="xs" fw={600} c="green.8">
+              "{flashTitle}" moved to History
+            </Text>
+          </Box>
+        )}
         {cards.map((opp) => (
           <DraggableCard
             key={opp.id}
@@ -225,6 +240,11 @@ export function Pipeline() {
   const [addOpen, addHandlers] = useDisclosure(false);
   const [closeTarget, setCloseTarget] = useState<CloseTarget | null>(null);
   const [activeOpp, setActiveOpp] = useState<OpportunitySummary | null>(null);
+  // A transient "moved to History" flash anchored to the column a drag archived from.
+  const [flash, setFlash] = useState<{ status: string; title: string } | null>(null);
+  const flashTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -252,13 +272,12 @@ export function Pipeline() {
         { id: card.id, status: target },
         {
           onSuccess: (updated) => {
-            // A move that settles a delivered gig closes it — tell the user why it left the board.
+            // A move that settles a delivered gig closes it — flash at the column it left from so
+            // the user sees why the card disappeared (their eye is on the drop target).
             if (updated.closed_at) {
-              notifications.show({
-                message: `"${updated.title}" moved to History`,
-                color: 'gray',
-                autoClose: 4000,
-              });
+              window.clearTimeout(flashTimer.current);
+              setFlash({ status: target, title: updated.title });
+              flashTimer.current = window.setTimeout(() => setFlash(null), 4000);
             }
           },
         },
@@ -320,6 +339,7 @@ export function Pipeline() {
                 label={stage.label}
                 cards={byStatus(stage.short_name)}
                 labels={labels}
+                flashTitle={flash?.status === stage.short_name ? flash.title : null}
                 onOpen={(opp) => navigate(`/pipeline/${opp.id}`)}
                 onClose={(opp) => setCloseTarget(opp)}
               />
