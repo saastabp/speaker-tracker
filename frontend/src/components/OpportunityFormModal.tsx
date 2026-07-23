@@ -1,0 +1,189 @@
+import { Alert, Button, Group, Modal, Select, Stack, Textarea, TextInput } from '@mantine/core';
+import { useForm } from '@mantine/form';
+import { useEffect, useState } from 'react';
+import { useCatalogs } from '../api/catalogs';
+import { ApiError } from '../api/client';
+import type { Opportunity, OpportunityInput } from '../api/opportunities';
+import { useOrganizations } from '../api/organizations';
+import { useTalks } from '../api/talks';
+
+// The form works in strings (Select/TextInput values); it maps to OpportunityInput on submit.
+interface FormValues {
+  title: string;
+  organization_id: string;
+  talk_id: string;
+  opportunity_format: string;
+  comp_type: string;
+  event_date: string;
+  fee_amount: string;
+  currency: string;
+  angle: string;
+}
+
+function toFormValues(opp?: Opportunity): FormValues {
+  return {
+    title: opp?.title ?? '',
+    organization_id: opp ? String(opp.organization_id) : '',
+    talk_id: opp?.talk_id != null ? String(opp.talk_id) : '',
+    opportunity_format: opp?.opportunity_format ?? '',
+    comp_type: opp?.comp_type ?? 'paid',
+    event_date: opp?.event_date ?? '',
+    fee_amount: opp?.fee_amount ?? '',
+    currency: opp?.currency ?? 'USD',
+    angle: opp?.angle ?? '',
+  };
+}
+
+function toInput(values: FormValues): OpportunityInput {
+  const fee = values.fee_amount.trim();
+  return {
+    title: values.title.trim(),
+    organization_id: Number(values.organization_id),
+    opportunity_format: values.opportunity_format,
+    comp_type: values.comp_type,
+    talk_id: values.talk_id ? Number(values.talk_id) : null,
+    event_date: values.event_date || null,
+    fee_amount: fee || null,
+    currency: values.currency.trim() || 'USD',
+    angle: values.angle.trim() || null,
+  };
+}
+
+interface OpportunityFormModalProps {
+  opened: boolean;
+  onClose: () => void;
+  title: string;
+  submitLabel: string;
+  /** Edit mode seeds the form from an existing opportunity; omit for create. */
+  initialValues?: Opportunity;
+  onSubmit: (values: OpportunityInput) => Promise<unknown>;
+}
+
+export function OpportunityFormModal({
+  opened,
+  onClose,
+  title,
+  submitLabel,
+  initialValues,
+  onSubmit,
+}: OpportunityFormModalProps) {
+  const catalogs = useCatalogs();
+  const venues = useOrganizations();
+  const talks = useTalks();
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const form = useForm<FormValues>({
+    initialValues: toFormValues(initialValues),
+    validate: {
+      title: (value) => (value.trim() ? null : 'Title is required'),
+      organization_id: (value) => (value ? null : 'Venue is required'),
+      opportunity_format: (value) => (value ? null : 'Format is required'),
+      comp_type: (value) => (value ? null : 'Compensation is required'),
+      fee_amount: (value) =>
+        !value.trim() || /^\d+(\.\d{1,2})?$/.test(value.trim()) ? null : 'Enter an amount like 1500 or 1500.00',
+    },
+  });
+
+  // Mantine's useForm doesn't auto-sync initialValues; refresh on each open.
+  useEffect(() => {
+    if (opened) {
+      form.setValues(toFormValues(initialValues));
+      setError(null);
+    }
+  }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const venueOptions = (venues.data ?? []).map((v) => ({ value: String(v.id), label: v.name }));
+  const talkOptions = (talks.data ?? []).map((t) => ({ value: String(t.id), label: t.title }));
+  const formatOptions = (catalogs.data?.opportunity_formats ?? []).map((f) => ({
+    value: f.short_name,
+    label: f.description,
+  }));
+  const compOptions = (catalogs.data?.comp_types ?? []).map((c) => ({
+    value: c.short_name,
+    label: c.description,
+  }));
+
+  async function handleSubmit(values: FormValues) {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await onSubmit(toInput(values));
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={title} size="lg">
+      <form onSubmit={form.onSubmit(handleSubmit)}>
+        <Stack>
+          {error && (
+            <Alert color="red" variant="light">
+              {error}
+            </Alert>
+          )}
+          <TextInput label="Title" withAsterisk {...form.getInputProps('title')} />
+          <Select
+            label="Venue"
+            placeholder="Select a venue"
+            data={venueOptions}
+            withAsterisk
+            searchable
+            {...form.getInputProps('organization_id')}
+          />
+          <Group grow>
+            <Select
+              label="Format"
+              placeholder="Select a format"
+              data={formatOptions}
+              withAsterisk
+              {...form.getInputProps('opportunity_format')}
+            />
+            <Select
+              label="Talk offered"
+              placeholder="Optional"
+              data={talkOptions}
+              clearable
+              searchable
+              {...form.getInputProps('talk_id')}
+            />
+          </Group>
+          <Group grow>
+            <Select
+              label="Compensation"
+              data={compOptions}
+              withAsterisk
+              {...form.getInputProps('comp_type')}
+            />
+            <TextInput
+              label="Fee"
+              placeholder="e.g. 1500.00"
+              {...form.getInputProps('fee_amount')}
+            />
+            <TextInput label="Currency" maxLength={3} {...form.getInputProps('currency')} />
+          </Group>
+          <TextInput label="Event date" type="date" {...form.getInputProps('event_date')} />
+          <Textarea
+            label="Angle"
+            description="Seeded from the venue's approach; edit as needed"
+            autosize
+            minRows={2}
+            {...form.getInputProps('angle')}
+          />
+          <Group justify="flex-end" mt="sm">
+            <Button variant="default" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={submitting}>
+              {submitLabel}
+            </Button>
+          </Group>
+        </Stack>
+      </form>
+    </Modal>
+  );
+}

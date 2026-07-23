@@ -12,9 +12,18 @@ from pymysql.connections import Connection
 from common import errors
 from core.research import is_research_ready
 from models.contacts import Contact, OrganizationAffiliation
+from models.opportunities import (
+    Opportunity,
+    OpportunityContact,
+    OpportunityNote,
+    StatusEvent,
+)
 from models.organizations import AffiliatedContact, Organization
+from models.talks import Talk
 from repositories import contacts as contacts_repo
+from repositories import opportunities as opps_repo
 from repositories import organizations as orgs_repo
+from repositories import talks as talks_repo
 
 
 def organization_response(conn: Connection, user_id: int, org_id: int) -> dict:
@@ -86,3 +95,71 @@ def contact_response(conn: Connection, user_id: int, contact_id: int) -> dict:
         organizations=[OrganizationAffiliation(**a) for a in affiliations],
     )
     return contact.model_dump(mode="json")
+
+
+def talk_response(conn: Connection, user_id: int, talk_id: int) -> dict:
+    """Build a talk's detail response, or raise NotFound.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection.
+    user_id : int
+        The owning user.
+    talk_id : int
+        The talk id.
+
+    Returns
+    -------
+    dict
+        The JSON-ready :class:`models.talks.Talk`.
+
+    Raises
+    ------
+    common.errors.NotFound
+        When the talk does not exist for this user.
+    """
+    row = talks_repo.get_talk(conn, user_id, talk_id)
+    if row is None:
+        raise errors.NotFound("talk not found")
+    return Talk(**row).model_dump(mode="json")
+
+
+def opportunity_response(conn: Connection, user_id: int, opp_id: int) -> dict:
+    """Build an opportunity's full detail response, or raise NotFound.
+
+    Composes the base row with its linked contacts, dated notes, and status journal — the read-time
+    aggregate the frontend refreshes from after every write.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection.
+    user_id : int
+        The owning user.
+    opp_id : int
+        The opportunity id.
+
+    Returns
+    -------
+    dict
+        The JSON-ready :class:`models.opportunities.Opportunity` with contacts, notes, and events.
+
+    Raises
+    ------
+    common.errors.NotFound
+        When the opportunity does not exist for this user.
+    """
+    row = opps_repo.get_opportunity(conn, user_id, opp_id)
+    if row is None:
+        raise errors.NotFound("opportunity not found")
+    contacts = opps_repo.get_opportunity_contacts(conn, user_id, opp_id)
+    notes = opps_repo.get_opportunity_notes(conn, user_id, opp_id)
+    events = opps_repo.get_status_events(conn, user_id, opp_id)
+    opportunity = Opportunity(
+        **row,
+        contacts=[OpportunityContact(**c) for c in contacts],
+        notes=[OpportunityNote(**n) for n in notes],
+        status_events=[StatusEvent(**e) for e in events],
+    )
+    return opportunity.model_dump(mode="json")

@@ -146,7 +146,9 @@ def test_power_partner_is_scoped_to_the_venue_and_rolls_up(seeded_db) -> None:
     # Same person, per-edge flag: power partner at Alpha, not at Bravo.
     assert orgs_repo.get_affiliated_contacts(conn, user_id, a)[0]["is_power_partner"]
     assert not orgs_repo.get_affiliated_contacts(conn, user_id, b)[0]["is_power_partner"]
-    by_org = {x["organization_name"]: x for x in contacts_repo.get_affiliations(conn, user_id, jane)}
+    by_org = {
+        x["organization_name"]: x for x in contacts_repo.get_affiliations(conn, user_id, jane)
+    }
     assert by_org["Alpha"]["is_power_partner"]
     assert not by_org["Bravo"]["is_power_partner"]
     # The contacts list rolls it up: power partner at *any* live venue.
@@ -183,7 +185,9 @@ def test_update_affiliation_toggles_power_partner(seeded_db) -> None:
     jane = contacts_repo.create_contact(conn, user_id, ContactInput(name="Jane"))
     contacts_repo.add_affiliation(conn, user_id, jane, AffiliationInput(organization_id=a))
     assert not contacts_repo.get_affiliations(conn, user_id, jane)[0]["is_power_partner"]
-    contacts_repo.update_affiliation(conn, user_id, jane, a, AffiliationUpdate(is_power_partner=True))
+    contacts_repo.update_affiliation(
+        conn, user_id, jane, a, AffiliationUpdate(is_power_partner=True)
+    )
     assert contacts_repo.get_affiliations(conn, user_id, jane)[0]["is_power_partner"]
 
 

@@ -204,7 +204,7 @@ frontend work in the project.
 `status_events`. **Plus `talks`** (resolving `DESIGN.md` §6's "as needed": `opportunities.talk_id` is
 an FK, so `talks` cannot come later).
 
-**Backend** — `opportunities.py` (incl. `PATCH /{id}/status`, `POST /{id}/close`),
+**Backend** — `opportunities.py` (incl. `PATCH /{id}/status`, `PATCH /{id}/payment`, `POST /{id}/close`, `GET /funnel`),
 `opportunity_contacts.py`, `opportunity_notes.py`, `talks.py`;
 `core/opportunities.py` owning **status transitions and the `closed_at` predicate**;
 `core/funnel.py` (server-owned stage order and labels).

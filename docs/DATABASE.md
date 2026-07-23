@@ -343,7 +343,9 @@ plus `(user_id, current_status_id)`, `(user_id, event_date)`, `(organization_id)
 ### `opportunity_contacts`
 Many-to-many with a `contact_role_id` (primary / introducer / backup / coordinator) and
 `is_primary`. Covers the intro-chain case: an insider `introducer` plus the working `primary`.
-`UNIQUE(opportunity_id, contact_id)`.
+`UNIQUE(opportunity_id, contact_id)`. At most one lead (`is_primary`) per gig is an application
+invariant enforced on every write — setting a new lead demotes the previous one — mirroring the
+one-primary-per-org rule on `contact_organizations`.
 
 > **Two scoped meanings of "primary", labelled distinctly in the UI:**
 > `contact_organizations.is_primary` = "Primary contact" (default contact for an org);

@@ -19,14 +19,28 @@ from __future__ import annotations
 from aws_lambda_powertools.event_handler import APIGatewayHttpResolver, Response
 
 from common.http import response_for_exception
-from handlers import catalogs, contact_organizations, contacts, health, organizations
+from handlers import (
+    catalogs,
+    contact_organizations,
+    contacts,
+    health,
+    opportunities,
+    opportunity_contacts,
+    opportunity_notes,
+    organizations,
+    talks,
+)
 
 app = APIGatewayHttpResolver()
 app.include_router(catalogs.router)
 app.include_router(contacts.router)
 app.include_router(contact_organizations.router)
 app.include_router(health.router)
+app.include_router(opportunities.router)
+app.include_router(opportunity_contacts.router)
+app.include_router(opportunity_notes.router)
 app.include_router(organizations.router)
+app.include_router(talks.router)
 
 
 @app.exception_handler(Exception)

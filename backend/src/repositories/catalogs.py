@@ -50,3 +50,23 @@ def fetch_catalogs(conn: Connection) -> Catalogs:
         outreach_channels=_fetch(conn, "outreach_channels"),
         target_types=_fetch(conn, "target_types"),
     )
+
+
+def list_opportunity_statuses(conn: Connection) -> list[dict]:
+    """Return the ``opportunity_statuses`` catalog rows, ordered by ``sort_order``.
+
+    Each row carries ``short_name``, ``description``, ``sort_order``, and ``is_terminal`` — the
+    inputs the server-owned funnel (:mod:`core.funnel`) needs to build the board columns, without
+    fetching the other nine catalogs.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection.
+
+    Returns
+    -------
+    list of dict
+        The non-deleted status rows.
+    """
+    return _fetch(conn, "opportunity_statuses", "is_terminal")

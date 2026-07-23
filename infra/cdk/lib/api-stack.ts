@@ -50,6 +50,41 @@ const ROUTES: RouteDef[] = [
     path: '/contacts/{id}/organizations/{orgId}',
     authRequired: true,
   },
+
+  { method: apigwv2.HttpMethod.GET, path: '/talks', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/talks', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/talks/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/talks/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/talks/{id}', authRequired: true },
+
+  { method: apigwv2.HttpMethod.GET, path: '/funnel', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/opportunities', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/opportunities', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/opportunities/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/opportunities/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/opportunities/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.PATCH, path: '/opportunities/{id}/status', authRequired: true },
+  { method: apigwv2.HttpMethod.PATCH, path: '/opportunities/{id}/payment', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/opportunities/{id}/close', authRequired: true },
+
+  { method: apigwv2.HttpMethod.POST, path: '/opportunities/{id}/contacts', authRequired: true },
+  {
+    method: apigwv2.HttpMethod.PUT,
+    path: '/opportunities/{id}/contacts/{contactId}',
+    authRequired: true,
+  },
+  {
+    method: apigwv2.HttpMethod.DELETE,
+    path: '/opportunities/{id}/contacts/{contactId}',
+    authRequired: true,
+  },
+
+  { method: apigwv2.HttpMethod.POST, path: '/opportunities/{id}/notes', authRequired: true },
+  {
+    method: apigwv2.HttpMethod.DELETE,
+    path: '/opportunities/{id}/notes/{noteId}',
+    authRequired: true,
+  },
 ];
 
 export interface ApiStackProps extends StackProps {

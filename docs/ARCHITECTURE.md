@@ -215,9 +215,9 @@ table.
 | `organizations.py` | GET/POST `/organizations`, GET/PUT/DELETE `/organizations/{id}` |
 | `contacts.py` | GET/POST `/contacts`, GET/PUT/DELETE `/contacts/{id}`, GET `/contacts/{id}/timeline` *(timeline deferred — needs opportunities/outreach, slices 3–4)* |
 | `contact_organizations.py` | POST `/contacts/{id}/organizations`, PUT/DELETE `/contacts/{id}/organizations/{orgId}` |
-| `opportunities.py` | GET/POST `/opportunities`, GET/PUT/DELETE `/opportunities/{id}`, PATCH `/opportunities/{id}/status`, POST `/opportunities/{id}/close` |
+| `opportunities.py` | GET/POST `/opportunities`, GET/PUT/DELETE `/opportunities/{id}`, PATCH `/opportunities/{id}/status`, PATCH `/opportunities/{id}/payment`, POST `/opportunities/{id}/close`, GET `/funnel` |
 | `opportunity_contacts.py` | POST `/opportunities/{id}/contacts`, PUT/DELETE `/opportunities/{id}/contacts/{contactId}` |
-| `opportunity_notes.py` | GET/POST `/opportunities/{id}/notes`, PUT/DELETE `/opportunities/{id}/notes/{noteId}` |
+| `opportunity_notes.py` | POST `/opportunities/{id}/notes`, DELETE `/opportunities/{id}/notes/{noteId}` *(notes are read with the opportunity detail; add + soft-delete only)* |
 | `outreaches.py` | GET/POST `/outreaches`, GET/PUT/DELETE `/outreaches/{id}` |
 | `message_templates.py` | GET/POST `/message-templates`, PUT/DELETE `/message-templates/{id}`, POST `/message-templates/{id}/duplicate` |
 | `follow_ups.py` | GET/POST `/follow-ups`, PUT/DELETE `/follow-ups/{id}`, POST `/follow-ups/{id}/complete` |
@@ -233,6 +233,11 @@ table.
 **History has no handler of its own.** It is closed opportunities:
 `GET /opportunities?closed=true` for the table, `GET /opportunities/{id}` for the detail. Adding a
 parallel `history.py` would duplicate the same SQL against the same rows.
+
+**The board payload is one flat list.** `GET /opportunities` returns a flat array the SPA buckets
+by `current_status` into columns — simpler optimistic-drag cache invalidation than a pre-grouped
+`{status: [...]}` shape, and History is the same route with `?closed=true`. Column order and
+labels come from `GET /funnel` (server-owned, so no stage name is hardcoded in the SPA).
 
 **Dedupe is a query, not an endpoint.** The add-contact "this person may already exist" step is
 `GET /contacts?q=` against the existing list route — no separate search handler.

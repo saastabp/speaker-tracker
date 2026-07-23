@@ -12,6 +12,9 @@ import { AppShell } from './components/AppShell';
 import { ContactDetail } from './pages/ContactDetail';
 import { Contacts } from './pages/Contacts';
 import { Dashboard } from './pages/Dashboard';
+import { History } from './pages/History';
+import { OpportunityDetail } from './pages/OpportunityDetail';
+import { Pipeline } from './pages/Pipeline';
 import { Placeholder } from './pages/Placeholder';
 import { VenueDetail } from './pages/VenueDetail';
 import { Venues } from './pages/Venues';
@@ -32,6 +35,9 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
               <Routes>
                 <Route element={<AppShell />}>
                   <Route index element={<Dashboard />} />
+                  <Route path="pipeline" element={<Pipeline />} />
+                  <Route path="pipeline/:id" element={<OpportunityDetail />} />
+                  <Route path="history" element={<History />} />
                   <Route path="venues" element={<Venues />} />
                   <Route path="venues/:id" element={<VenueDetail />} />
                   <Route path="contacts" element={<Contacts />} />
