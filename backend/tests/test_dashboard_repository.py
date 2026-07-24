@@ -161,8 +161,15 @@ def test_funnel_is_reached_or_beyond(seeded_db) -> None:
     b = _opp(conn, user_id, org)
     opp.patch_status(conn, user_id, b, "booked")
     counts = {r["status"]: r["count"] for r in dashboard.funnel_counts(conn, user_id)}
-    # All four stages present; a gig that jumped to Pitched still counts toward Outreach Sent (#3).
-    assert counts == {"outreach_sent": 2, "in_conversation": 2, "pitched": 2, "booked": 1}
+    # All five stages present; a gig that jumped to Pitched still counts toward Outreach Sent (#3).
+    # `delivered` is the display-only final row (neither gig reached it).
+    assert counts == {
+        "outreach_sent": 2,
+        "in_conversation": 2,
+        "pitched": 2,
+        "booked": 1,
+        "delivered": 0,
+    }
 
 
 # --- #5: money rollup ----------------------------------------------------------------------------
@@ -184,6 +191,10 @@ def test_money_rollup_excludes_pro_bono_from_currency_totals(seeded_db) -> None:
     assert str(money["outstanding"]) == "1000.00"
     assert money["pro_bono_count"] == 1
     assert money["currency"] == "USD"
+    # Sub-counts behind each figure (money-card sub-labels).
+    assert money["booked_count"] == 2  # booked_unpaid + delivered_paid
+    assert money["received_count"] == 1  # delivered_paid
+    assert money["invoiced_count"] == 0  # none invoiced
 
 
 # --- stale (14d) ---------------------------------------------------------------------------------
@@ -211,6 +222,7 @@ def test_stale_lists_only_inactive_open_gigs(seeded_db) -> None:
 def test_needs_attention_flags_awaiting_payment_and_overdue_unbooked(seeded_db) -> None:
     conn, user_id, _, _ = seeded_db
     org = _org(conn, user_id, "Venue")
+    _affiliate(conn, _contact(conn, user_id), org)  # research-ready → not a research_incomplete row
     # Delivered but unpaid → awaiting_payment (stays open).
     awaiting = _opp(conn, user_id, org, title="Awaiting", fee_amount="800")
     opp.patch_status(conn, user_id, awaiting, "delivered")
@@ -225,11 +237,45 @@ def test_needs_attention_flags_awaiting_payment_and_overdue_unbooked(seeded_db) 
     assert by_title == {"Awaiting": "awaiting_payment", "Overdue": "overdue_unbooked"}
 
 
+def test_needs_attention_flags_research_incomplete_venues(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    ready = _org(conn, user_id, "Ready", kindling=True)
+    _affiliate(conn, _contact(conn, user_id, "C1"), ready)  # 3 fields + contact → research-ready
+    _org(conn, user_id, "NoKindling", kindling=False)  # missing Kindling fields → incomplete
+    _org(conn, user_id, "NoContact", kindling=True)  # fields filled but no contact → incomplete
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    incomplete = {r["title"] for r in rows if r["reason"] == "research_incomplete"}
+    assert incomplete == {"NoKindling", "NoContact"}
+
+
+# --- coming up -----------------------------------------------------------------------------------
+
+
+def test_upcoming_events_lists_future_dated_open_gigs_soonest_first(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    org = _org(conn, user_id, "Venue")
+    _opp(conn, user_id, org, title="Soon", event_date=date(2026, 7, 25))
+    _opp(conn, user_id, org, title="Later", event_date=date(2026, 8, 10))
+    _opp(conn, user_id, org, title="Past", event_date=date(2026, 7, 1))  # before now → excluded
+    _opp(conn, user_id, org, title="Undated")  # no event_date → excluded
+    closed = _opp(conn, user_id, org, title="Closed", event_date=date(2026, 7, 26))
+    opp.close(conn, user_id, closed, "lost", "cold")  # closed → excluded
+    rows = dashboard.upcoming_events(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert [r["title"] for r in rows] == ["Soon", "Later"]  # soonest first, future/open only
+
+
 # --- composite -----------------------------------------------------------------------------------
 
 
 def test_build_dashboard_returns_all_sections(seeded_db) -> None:
     conn, user_id, _, _ = seeded_db
     payload = dashboard.build_dashboard(conn, user_id)
-    assert set(payload) == {"targets", "funnel", "money", "stale", "needs_attention"}
-    assert len(payload["funnel"]) == 4  # all four funnel stages always present
+    assert set(payload) == {
+        "targets",
+        "funnel",
+        "money",
+        "stale",
+        "needs_attention",
+        "coming_up",
+    }
+    assert len(payload["funnel"]) == 5  # all five funnel stages always present

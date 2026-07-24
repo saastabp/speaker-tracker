@@ -158,22 +158,16 @@ export function LogOutreachModal({
             searchable
           />
 
-          <Group grow align="flex-start">
-            <Select
-              label="Channel"
+          <div>
+            <Text size="sm" fw={500} mb={4}>
+              Channel
+            </Text>
+            <SegmentedControl
               data={channelOptions}
               value={channel}
-              onChange={(value) => setChannel(value ?? '')}
-              withAsterisk
+              onChange={(value) => setChannel(value)}
             />
-            <TextInput
-              label="When"
-              type="date"
-              description="Defaults to now"
-              value={occurredOn}
-              onChange={(event) => setOccurredOn(event.currentTarget.value)}
-            />
-          </Group>
+          </div>
 
           <div>
             <Text size="sm" fw={500} mb={4}>
@@ -192,16 +186,6 @@ export function LogOutreachModal({
             </Text>
           </div>
 
-          <Select
-            label="About a gig"
-            placeholder="Optional — link this touch to an opportunity"
-            data={oppOptions}
-            value={opportunityId}
-            onChange={setOpportunityId}
-            clearable
-            searchable
-          />
-
           {selectedId != null && (
             <TemplatePicker
               contactName={resolvedName}
@@ -215,6 +199,25 @@ export function LogOutreachModal({
             />
           )}
 
+          <Group grow align="flex-start">
+            <TextInput
+              label="Date"
+              type="date"
+              description="Defaults to now"
+              value={occurredOn}
+              onChange={(event) => setOccurredOn(event.currentTarget.value)}
+            />
+            <Select
+              label="Opportunity"
+              placeholder="Optional — link this touch to a gig"
+              data={oppOptions}
+              value={opportunityId}
+              onChange={setOpportunityId}
+              clearable
+              searchable
+            />
+          </Group>
+
           <Textarea
             label="Note"
             placeholder="Optional — what you said or how it went"
@@ -224,13 +227,18 @@ export function LogOutreachModal({
             onChange={(event) => setNote(event.currentTarget.value)}
           />
 
-          <Group justify="flex-end" mt="sm">
-            <Button variant="default" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit} loading={submitting}>
-              Log outreach
-            </Button>
+          <Group justify="space-between" mt="sm">
+            <Group>
+              <Button onClick={handleSubmit} loading={submitting}>
+                Log touch
+              </Button>
+              <Button variant="default" onClick={onClose}>
+                Cancel
+              </Button>
+            </Group>
+            <Text size="xs" c="dimmed">
+              Counts toward this week&apos;s outreach target
+            </Text>
           </Group>
         </Stack>
       )}

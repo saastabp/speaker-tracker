@@ -29,6 +29,8 @@ export interface OpportunitySummary {
   title: string;
   organization_id: number;
   organization_name: string;
+  organization_type: string; // organization_types short_name (for the card's venue chip)
+  talk_title: string | null; // resolved talk name (null when no talk chosen)
   opportunity_format: string;
   current_status: string; // opportunity_statuses short_name — the SPA buckets by this
   comp_type: string;

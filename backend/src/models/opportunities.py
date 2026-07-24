@@ -192,6 +192,8 @@ class OpportunitySummary(BaseModel):
     title: str
     organization_id: int
     organization_name: str
+    organization_type: str
+    talk_title: str | None
     opportunity_format: str
     current_status: str
     comp_type: str

@@ -292,9 +292,9 @@ the tile.
 **Size: L.** *Split from `DESIGN.md` §6's single slice 6 — the send and receive halves are
 independently shippable, and shipping them together makes the first failure ambiguous.*
 
-**Migration `0007_email.sql`** — `email_threads`, `email_messages`, `imap_folder_cursors`
+**Migration `0008_email.sql`** — `email_threads`, `email_messages`, `imap_folder_cursors`
 (the cursor table ships here even though 6b uses it, to keep email schema in one migration).
-`materials` (attachments) is **not** folded in here — it ships in its own `0009_materials.sql`
+`materials` (attachments) is **not** folded in here — it ships in its own `0010_materials.sql`
 (DATABASE.md §6).
 
 **Backend** — `common/secrets.py` (module-scope cached — **first runtime secret in the family**),
@@ -379,7 +379,7 @@ lands on the opportunity; then drag a stranger's email into Import and complete 
 **Size: S.** Smallest slice; deliberately last because it depends on contacts, opportunities, and
 the composer all existing.
 
-**Migration `0008_followups.sql`** — `follow_ups` with
+**Migration `0009_followups.sql`** — `follow_ups` with
 `CHECK (contact_id IS NOT NULL OR opportunity_id IS NOT NULL)`.
 
 **Backend** — `follow_ups.py`, `common/scheduler.py` (deterministic `followup-<id>`, no-op when
@@ -402,6 +402,30 @@ confirm only one fires.
 
 ---
 
+## Slice 8 — Dashboard drill-down (+ reporting enhancements)
+
+**Size: M.** Post-6 polish; depends on slice 5's dashboard and the summary lists (Pipeline, History,
+Contacts, Venues) gaining their filter rows in the UX-reconciliation pass.
+
+Every Dashboard element that represents an **aggregate** — a target tile, a funnel-stage bar, a money
+figure, the pro-bono count, a Needs-attention or Coming-up row — becomes **clickable**, opening the
+relevant existing summary list **filtered to the exact set of records that make up that aggregate**.
+The dashboard stops being a dead-end readout and becomes the entry point into the lists. Requires the
+list pages to accept filter state via query params (the filter rows built during UX reconciliation).
+
+**Related (same shape of work — parameterize the dashboard queries + add UX):** windowed totals —
+display the money/funnel aggregates over a **selectable window** (weekly / monthly / quarterly /
+annual, aligned to the target cadences) with a window picker. The data model already supports it
+since everything is dated; `core/periods.py` already has the period math.
+
+**Acceptance**
+1. Clicking a funnel stage opens the Pipeline filtered to gigs at-or-beyond that stage; the row count
+   matches the aggregate.
+2. Clicking "Outstanding" opens the list filtered to invoiced-unpaid gigs.
+3. Clicking a target tile opens the list of records counted toward that target in the period.
+
+---
+
 ## Sequencing and risk
 
 ```mermaid
@@ -416,6 +440,7 @@ flowchart LR
     S2 --> S6B
     S3 --> S7["7 · Follow-ups"]
     S6A --> S7
+    S5 --> S8["8 · Dashboard drill-down"]
 ```
 
 Slices **3 and 4 can run in parallel** after 2 — they touch different tables and different pages.

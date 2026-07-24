@@ -10,7 +10,7 @@ three journals, ordered by ``occurred_at`` descending:
 Notes and status events hang off *opportunities*, not contacts, so they reach the contact page
 through the ``opportunity_contacts`` link — which is what lets ``outreaches`` stay outbound-only
 without the contact losing sight of the gig history it belongs to. ``email_messages`` joins this
-union in the email slice (0007). Every branch is owner-scoped, so an unknown or foreign contact
+union in the email slice (0008). Every branch is owner-scoped, so an unknown or foreign contact
 yields an empty list. The three branches emit one shared column set projecting
 :class:`models.timeline.TimelineItem`; a branch fills only its own type's fields and NULLs the rest.
 """

@@ -11,7 +11,7 @@ export const RETURN_TO_KEY = 'speaker-tracker:returnTo';
 export interface AuthSession {
   isAuthenticated: boolean;
   isLoading: boolean;
-  user: { email: string } | null;
+  user: { email: string; name: string | null } | null;
   /** Cognito ID token for the Authorization header, or null in sandbox dev mode. */
   idToken: string | null;
   /** Begin sign-in (redirect to Cognito in prod; no-op in sandbox). */

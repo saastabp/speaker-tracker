@@ -31,8 +31,9 @@ from core.periods import period_bounds, stale_cutoff
 #: Money totals assume a single currency (the app default); Donna's gigs are all USD.
 _CURRENCY = "USD"
 
-#: The four funnel ratio stages, in order (DATABASE.md §"funnel ratio stages").
-_FUNNEL_STAGES = ("outreach_sent", "in_conversation", "pitched", "booked")
+#: The funnel ratio stages in order (DATABASE.md §"funnel ratio stages"), plus `delivered` which the
+#: dashboard funnel card shows as its final row (the approved mockup renders 5 rows).
+_FUNNEL_STAGES = ("outreach_sent", "in_conversation", "pitched", "booked", "delivered")
 
 #: Research-ready predicate as SQL — mirrors ``core.research.is_research_ready`` (all three Kindling
 #: fields filled AND ≥1 non-deleted affiliated contact).
@@ -146,6 +147,12 @@ def money_rollup(conn: Connection, user_id: int) -> dict:
             "THEN o.fee_amount END), 0) AS booked, "
             "  COALESCE(SUM(CASE WHEN ct.short_name = 'paid' "
             "    AND pay.short_name = 'paid' THEN o.fee_amount END), 0) AS received, "
+            "  SUM(CASE WHEN ct.short_name = 'paid' "
+            "    AND st.short_name IN ('booked', 'delivered') THEN 1 ELSE 0 END) AS booked_count, "
+            "  SUM(CASE WHEN ct.short_name = 'paid' AND pay.short_name = 'paid' "
+            "    THEN 1 ELSE 0 END) AS received_count, "
+            "  SUM(CASE WHEN ct.short_name = 'paid' AND pay.short_name = 'invoiced' "
+            "    THEN 1 ELSE 0 END) AS invoiced_count, "
             "  SUM(CASE WHEN ct.short_name = 'pro_bono' "
             "    AND st.short_name IN ('booked', 'delivered') THEN 1 ELSE 0 END) AS pro_bono_count "
             "FROM opportunities o "
@@ -163,6 +170,9 @@ def money_rollup(conn: Connection, user_id: int) -> dict:
         "booked": booked,
         "received": received,
         "outstanding": booked - received,
+        "booked_count": int(row["booked_count"] or 0),
+        "received_count": int(row["received_count"] or 0),
+        "invoiced_count": int(row["invoiced_count"] or 0),
         "pro_bono_count": int(row["pro_bono_count"] or 0),
     }
 
@@ -190,7 +200,15 @@ def stale_opportunities(conn: Connection, user_id: int, now_local: datetime) -> 
 
 
 def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
-    """Return follow-up rows: delivered-but-unsettled, and past-event still-pre-Booked gigs."""
+    """Return follow-up rows the dashboard flags.
+
+    Three reasons today: ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked``
+    (past-event gig still pre-Booked) are **opportunity**-scoped; ``research_incomplete`` is
+    **organization**-scoped (a venue that is not research-ready — missing a Kindling field or a
+    contact), so its ``id`` is the org id and the SPA links to the venue. Opportunity rows carry an
+    ``event_date`` and sort first; research rows (no date) follow. A richer tickler model with
+    per-type timing thresholds is future work (its own table).
+    """
     with conn.cursor() as cur:
         cur.execute(
             "SELECT o.id, o.title, org.name AS organization_name, "
@@ -210,8 +228,34 @@ def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list
             "  AND o.event_date IS NOT NULL AND o.event_date < %s "
             "  AND st.sort_order < (SELECT sort_order FROM opportunity_statuses "
             "                       WHERE short_name = 'booked') "
-            "ORDER BY event_date ASC",
-            (user_id, user_id, now_local.date()),
+            "UNION ALL "
+            "SELECT o.id, o.name AS title, o.name, 'research_incomplete', NULL "
+            "FROM organizations o "
+            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND NOT (" + _RESEARCH_READY + ") "
+            "ORDER BY event_date IS NULL, event_date ASC",
+            (user_id, user_id, now_local.date(), user_id),
+        )
+        return list(cur.fetchall())
+
+
+def upcoming_events(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
+    """Return active gigs with a today-or-future event date, soonest first (the "Coming up" card).
+
+    Follow-up reminders and ad-hoc calendar items are out of scope until ``follow_ups`` (0008); once
+    that lands, follow-up reminders also surface in this panel. For now this shows booked/pending
+    gigs by their ``event_date``.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT o.id, o.title, org.name AS organization_name, o.event_date, "
+            "       st.short_name AS current_status "
+            "FROM opportunities o "
+            "JOIN organizations org ON org.id = o.organization_id "
+            "JOIN opportunity_statuses st ON st.id = o.current_status_id "
+            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND o.closed_at IS NULL "
+            "  AND o.event_date IS NOT NULL AND o.event_date >= %s "
+            "ORDER BY o.event_date ASC LIMIT 6",
+            (user_id, now_local.date()),
         )
         return list(cur.fetchall())
 
@@ -225,4 +269,5 @@ def build_dashboard(conn: Connection, user_id: int) -> dict:
         "money": money_rollup(conn, user_id),
         "stale": stale_opportunities(conn, user_id, now_local),
         "needs_attention": needs_attention(conn, user_id, now_local),
+        "coming_up": upcoming_events(conn, user_id, now_local),
     }

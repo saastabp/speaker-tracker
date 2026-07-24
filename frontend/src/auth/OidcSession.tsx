@@ -16,7 +16,12 @@ function OidcSessionBridge({ children }: { children: ReactNode }) {
     () => ({
       isAuthenticated: auth.isAuthenticated,
       isLoading: auth.isLoading,
-      user: auth.user ? { email: auth.user.profile.email ?? '' } : null,
+      user: auth.user
+        ? {
+            email: auth.user.profile.email ?? '',
+            name: auth.user.profile.given_name ?? auth.user.profile.name ?? null,
+          }
+        : null,
       idToken: auth.user?.id_token ?? null,
       signIn: () => {
         // Stash the deep link for DeepLinkRestorer to route to after the redirect returns.

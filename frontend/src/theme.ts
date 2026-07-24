@@ -1,4 +1,4 @@
-import { createTheme, type MantineColorsTuple } from '@mantine/core';
+import { Badge, createTheme, type MantineColorsTuple } from '@mantine/core';
 
 // Brand palette (DESIGN §7 / ARCHITECTURE §7): navy nav rail + headings, terracotta primary
 // actions, gold accents, cream page background. Sans-serif — the brand guide's Playfair/Lato
@@ -18,9 +18,25 @@ const gold: MantineColorsTuple = [
   '#fbf4e2', '#f3e2b8', '#ebcd85', '#e3b954', '#dda832',
   '#d99f26', '#d9a02c', '#bd8a1e', '#977015', '#6f5310',
 ];
+// Approved semantic colours (mockup --good / --warn), anchored at shade 6; used for positive
+// (Received / goal-met) and caution (Outstanding / awaiting) states across the app.
+const good: MantineColorsTuple = [
+  '#eef5f0', '#e2eee4', '#bfdac8', '#97c3a6', '#71ac86',
+  '#549b6c', '#3f7a52', '#356a46', '#2b5539', '#20402b',
+];
+const warn: MantineColorsTuple = [
+  '#faf3e1', '#f5e9cd', '#ecd49b', '#e0be66', '#d5aa3e',
+  '#c69a29', '#b07d1e', '#956819', '#785314', '#5a3e0f',
+];
 
 /** Cream page background (Mantine has no natural slot for it; applied on AppShell.Main). */
 export const BRAND_CREAM = '#FBF8F2';
+
+/** Hairline that separates card titles from content and list rows (mockup `--line`). */
+export const BRAND_LINE = '#E7DCC9';
+
+/** Warm panel fill behind grouped surfaces — pipeline columns, insets (mockup `--surface-2`). */
+export const BRAND_PANEL = '#F2EADE';
 
 const SANS =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
@@ -28,7 +44,11 @@ const SANS =
 export const theme = createTheme({
   primaryColor: 'terracotta',
   primaryShade: 6,
-  colors: { navy, terracotta, gold },
+  colors: { navy, terracotta, gold, good, warn },
   fontFamily: SANS,
   headings: { fontFamily: SANS, fontWeight: '600' },
+  components: {
+    // The approved mockup uses sentence-case chips; Mantine's Badge defaults to uppercase.
+    Badge: Badge.extend({ styles: { label: { textTransform: 'none' } } }),
+  },
 });

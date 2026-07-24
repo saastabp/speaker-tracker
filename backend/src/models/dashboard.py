@@ -41,12 +41,17 @@ class MoneyRollup(BaseModel):
 
     ``booked`` is committed fees (booked or delivered), ``received`` is what has been paid, and
     ``outstanding`` is ``booked - received``. Amounts are Decimals serialized as precise strings.
+    The ``*_count`` fields are the gig counts behind each figure, shown as the money-card sub-labels
+    (e.g. "3 paid gigs", "2 collected", "2 invoiced").
     """
 
     currency: str
     booked: Decimal
     received: Decimal
     outstanding: Decimal
+    booked_count: int
+    received_count: int
+    invoiced_count: int
     pro_bono_count: int
 
 
@@ -61,10 +66,13 @@ class StaleOpportunity(BaseModel):
 
 
 class NeedsAttentionItem(BaseModel):
-    """A gig flagged for follow-up.
+    """A row flagged for follow-up on the dashboard.
 
-    ``reason`` is a machine token the SPA maps to display text: ``awaiting_payment`` (delivered but
-    unsettled) or ``overdue_unbooked`` (past its event date, still pre-Booked).
+    ``reason`` is a machine token the SPA maps to display text and a link target:
+    ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked`` (past-event gig still
+    pre-Booked) are gig-scoped, so ``id`` is the opportunity id; ``research_incomplete`` is
+    org-scoped (a venue that is not research-ready), so ``id`` is the organization id and the SPA
+    links to the venue. ``event_date`` is null for research rows.
     """
 
     id: int
@@ -72,6 +80,20 @@ class NeedsAttentionItem(BaseModel):
     organization_name: str
     reason: str
     event_date: date | None
+
+
+class ComingUpEvent(BaseModel):
+    """An active gig with a today-or-future event date (the "Coming up" card).
+
+    Follow-up reminders will also populate this panel once ``follow_ups`` (slice 7) exists; for now
+    it is upcoming gigs by ``event_date`` only.
+    """
+
+    id: int
+    title: str
+    organization_name: str
+    event_date: date
+    current_status: str
 
 
 class Dashboard(BaseModel):
@@ -82,3 +104,4 @@ class Dashboard(BaseModel):
     money: MoneyRollup
     stale: list[StaleOpportunity]
     needs_attention: list[NeedsAttentionItem]
+    coming_up: list[ComingUpEvent]

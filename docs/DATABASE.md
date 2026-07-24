@@ -12,9 +12,10 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: implemented through migration `0006` (slices 1–5).** This document is the schema
-> contract; migrations `0001`–`0006` satisfy it, while slices 6–8 (`0007`–`0009`) remain target
-> schema. Derived from `DESIGN.md` §4/§5 and supersedes any older sketch.
+> **Status: implemented through migration `0006` (slices 1–5), plus `0007_target_labels` (UX
+> reconciliation — catalog label update, no schema change).** This document is the schema contract;
+> migrations `0001`–`0006` satisfy it, while slices 6–8 (`0008`–`0010`) remain target schema.
+> Derived from `DESIGN.md` §4/§5 and supersedes any older sketch.
 
 **Conventions** (inherited from the sibling apps, see `CODING-GUIDELINES.md` §2):
 
@@ -644,9 +645,10 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 | `0004_remove_nurture.sql` | retires the `nurture` status (catalog soft-delete) | 3 (follow-up) |
 | `0005_outreach.sql` | `outreaches`, `message_templates` (+ `channel_id → outreach_channels`), the `message_template_kinds` purpose catalog + seed of the strategy-doc templates | 4 |
 | `0006_targets.sql` | `targets` | 5 |
-| `0007_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors` | 6 |
-| `0008_followups.sql` | `follow_ups` | 7 |
-| `0009_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a |
+| `0007_target_labels.sql` | updates `target_types` display labels to the approved mockup wording (no schema change) | UX reconciliation |
+| `0008_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors` | 6a |
+| `0009_followups.sql` | `follow_ups` | 7 |
+| `0010_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a / Talks |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The

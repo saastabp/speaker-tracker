@@ -1,4 +1,15 @@
-import { Alert, Button, Group, Modal, Select, Stack, Textarea, TextInput } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Group,
+  Modal,
+  SegmentedControl,
+  Select,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { useCatalogs } from '../api/catalogs';
@@ -88,7 +99,13 @@ export function OpportunityFormModal({
   // Mantine's useForm doesn't auto-sync initialValues; refresh on each open.
   useEffect(() => {
     if (opened) {
-      form.setValues(toFormValues(initialValues));
+      const values = toFormValues(initialValues);
+      // The Format segmented control has no empty state — default it to the first format on create.
+      if (!values.opportunity_format) {
+        const first = catalogs.data?.opportunity_formats?.[0]?.short_name;
+        if (first) values.opportunity_format = first;
+      }
+      form.setValues(values);
       setError(null);
     }
   }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -128,59 +145,90 @@ export function OpportunityFormModal({
           )}
           <TextInput label="Title" withAsterisk {...form.getInputProps('title')} />
           <Select
-            label="Venue"
+            label="Venue / organization"
             placeholder="Select a venue"
             data={venueOptions}
             withAsterisk
             searchable
             {...form.getInputProps('organization_id')}
           />
-          <Group grow>
+          <Group grow align="flex-start">
             <Select
-              label="Format"
-              placeholder="Select a format"
-              data={formatOptions}
-              withAsterisk
-              {...form.getInputProps('opportunity_format')}
-            />
-            <Select
-              label="Talk offered"
+              label="Talk / offer"
               placeholder="Optional"
               data={talkOptions}
               clearable
               searchable
               {...form.getInputProps('talk_id')}
             />
+            <TextInput label="Event date" type="date" {...form.getInputProps('event_date')} />
           </Group>
-          <Group grow>
-            <Select
-              label="Compensation"
-              data={compOptions}
-              withAsterisk
-              {...form.getInputProps('comp_type')}
+          <div>
+            <Text size="sm" fw={500} mb={4}>
+              Format{' '}
+              <Text span c="red">
+                *
+              </Text>
+            </Text>
+            <SegmentedControl
+              data={formatOptions}
+              value={form.values.opportunity_format}
+              onChange={(value) => form.setFieldValue('opportunity_format', value)}
             />
-            <TextInput
-              label="Fee"
-              placeholder="e.g. 1500.00"
-              {...form.getInputProps('fee_amount')}
-            />
-            <TextInput label="Currency" maxLength={3} {...form.getInputProps('currency')} />
-          </Group>
-          <TextInput label="Event date" type="date" {...form.getInputProps('event_date')} />
+          </div>
           <Textarea
-            label="Angle"
+            label="Angle for this gig"
             description="Seeded from the venue's approach; edit as needed"
             autosize
             minRows={2}
             {...form.getInputProps('angle')}
           />
-          <Group justify="flex-end" mt="sm">
-            <Button variant="default" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={submitting}>
-              {submitLabel}
-            </Button>
+          <Text
+            fw={700}
+            size="xs"
+            tt="uppercase"
+            c="terracotta.7"
+            mt="xs"
+            style={{ letterSpacing: '0.04em' }}
+          >
+            Compensation
+          </Text>
+          <Group grow align="flex-start">
+            <div>
+              <Text size="sm" fw={500} mb={4}>
+                Type
+              </Text>
+              <SegmentedControl
+                data={compOptions}
+                value={form.values.comp_type}
+                onChange={(value) => form.setFieldValue('comp_type', value)}
+              />
+            </div>
+            <TextInput
+              label="Fee"
+              description="if paid"
+              placeholder="e.g. 1500.00"
+              {...form.getInputProps('fee_amount')}
+            />
+          </Group>
+          <Text size="xs" c="dimmed" fs="italic">
+            Pro bono still counts as a booking — it just carries no fee and shows a “Pro bono” chip
+            instead of a dollar amount.
+          </Text>
+          <Group justify="space-between" mt="sm">
+            <Group>
+              <Button type="submit" loading={submitting}>
+                {submitLabel}
+              </Button>
+              <Button variant="default" onClick={onClose}>
+                Cancel
+              </Button>
+            </Group>
+            {!initialValues && (
+              <Text size="xs" c="dimmed">
+                Starts in Researching — drag it across the board as it advances
+              </Text>
+            )}
           </Group>
         </Stack>
       </form>

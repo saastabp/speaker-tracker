@@ -93,6 +93,13 @@ def test_delete_missing_target_is_404(api) -> None:
 def test_dashboard_returns_all_sections(api) -> None:
     status, body = api("GET", "/dashboard")
     assert status == 200
-    assert set(body) == {"targets", "funnel", "money", "stale", "needs_attention"}
-    assert len(body["funnel"]) == 4  # all four funnel stages always present
+    assert set(body) == {
+        "targets",
+        "funnel",
+        "money",
+        "stale",
+        "needs_attention",
+        "coming_up",
+    }
+    assert len(body["funnel"]) == 5  # all five funnel stages always present
     assert body["money"]["currency"] == "USD"

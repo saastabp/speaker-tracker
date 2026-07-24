@@ -3,7 +3,7 @@
 The contact page interleaves three journals into one time-ordered list (DEV-PLAN slice 4 acceptance
 #5, DATABASE.md §4 "Computed on the fly"): outbound ``outreaches``, dated ``opportunity_notes``, and
 pipeline ``status_events``. The repository assembles it with a ``UNION ALL`` and orders by
-``occurred_at`` descending; ``email_messages`` joins the union in the email slice (0007).
+``occurred_at`` descending; ``email_messages`` joins the union in the email slice (0008).
 
 The union emits a common column set, so this is one flat model with an ``item_type`` discriminator
 rather than a polymorphic hierarchy: each row populates only the fields its type carries and leaves

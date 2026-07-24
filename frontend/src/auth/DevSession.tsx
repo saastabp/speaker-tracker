@@ -9,7 +9,7 @@ import { AuthSessionContext, type AuthSession } from './session';
 const DEV_SESSION: AuthSession = {
   isAuthenticated: true,
   isLoading: false,
-  user: { email: 'dev@speaker-tracker.local' },
+  user: { email: 'dev@speaker-tracker.local', name: null },
   idToken: null,
   signIn: () => {},
   signOut: () => {},

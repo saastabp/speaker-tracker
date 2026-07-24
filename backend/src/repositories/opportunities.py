@@ -46,12 +46,15 @@ class StatusPatchResult(Enum):
 #: Summary columns for the flat board payload / History rows (see models.OpportunitySummary).
 _SUMMARY_SELECT = (
     "SELECT o.id, o.title, o.organization_id, org.name AS organization_name, "
+    "       otype.short_name AS organization_type, tlk.title AS talk_title, "
     "       fmt.short_name AS opportunity_format, st.short_name AS current_status, "
     "       ct.short_name AS comp_type, o.fee_amount, o.currency, "
     "       pay.short_name AS payment_status, o.event_date, o.paid_on, "
     "       o.closed_at, o.created_at, o.updated_at "
     "FROM opportunities o "
     "JOIN organizations org ON org.id = o.organization_id "
+    "JOIN organization_types otype ON otype.id = org.organization_type_id "
+    "LEFT JOIN talks tlk ON tlk.id = o.talk_id "
     "JOIN opportunity_formats fmt ON fmt.id = o.opportunity_format_id "
     "JOIN opportunity_statuses st ON st.id = o.current_status_id "
     "JOIN comp_types ct ON ct.id = o.comp_type_id "
