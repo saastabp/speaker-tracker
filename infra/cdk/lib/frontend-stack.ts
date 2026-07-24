@@ -9,12 +9,7 @@ import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
-
-/** Placeholder served until the Vite SPA build is wired in (frontend-shell step). */
-const PLACEHOLDER_HTML = `<!doctype html><meta charset="utf-8">
-<title>Speaker Tracker</title>
-<body style="font-family:sans-serif;background:#FBF8F2;color:#1F3B4D;padding:3rem">
-<h1>Speaker Tracker</h1><p>Sandbox shell placeholder — SPA build not yet deployed.</p>`;
+import { frontendBundle } from './frontend-bundle';
 
 /** Rewrite extension-less paths to /index.html so the SPA router owns them. Default behavior only. */
 const SPA_FALLBACK_FN = `function handler(event) {
@@ -114,11 +109,13 @@ export class FrontendStack extends Stack {
       },
     });
 
-    // Placeholder SPA content, plus (prod) the runtime OIDC config the SPA fetches at boot — its
-    // values come from the prod-Auth stack, so they are never hand-copied into a committed file.
-    // Invalidate only these paths; real Vite assets are hashed/immutable.
-    // TODO(frontend-shell): replace Source.data with Source.asset(frontend/dist build).
-    const sources = [s3deploy.Source.data('index.html', PLACEHOLDER_HTML)];
+    // The Vite SPA (built at synth time for this env), plus (prod) the runtime OIDC config the SPA
+    // fetches at boot — its values come from the prod-Auth stack, so they are never hand-copied into
+    // a committed file. Invalidate only the mutable entry points; Vite's asset files are
+    // content-hashed and immutable, so they need no invalidation.
+    const sources: s3deploy.ISource[] = [
+      frontendBundle(props.envType === 'prod' ? 'production' : 'sandbox'),
+    ];
     const distributionPaths = ['/index.html'];
     if (props.auth) {
       sources.push(
