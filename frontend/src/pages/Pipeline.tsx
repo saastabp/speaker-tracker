@@ -40,37 +40,10 @@ import {
 import { CloseOpportunityModal, type CloseTarget } from '../components/CloseOpportunityModal';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
+import { STAGE_DOT, formatMoney, paymentColor } from '../opportunityChips';
 import { BRAND_LINE, BRAND_PANEL } from '../theme';
 
 const COLUMN_WIDTH = 264;
-
-/** Stage marker dot colour — the mockup's cool→warm→good progression across the funnel. */
-const STAGE_DOT: Record<string, string> = {
-  researching: 'var(--mantine-color-gray-5)',
-  outreach_sent: 'var(--mantine-color-terracotta-6)',
-  in_conversation: 'var(--mantine-color-terracotta-6)',
-  pitched: 'var(--mantine-color-gold-6)',
-  booked: 'var(--mantine-color-gold-6)',
-  delivered: 'var(--mantine-color-good-6)',
-};
-
-/** Payment-status chip colour: settled → green, billed-unpaid → amber, otherwise muted. */
-function paymentColor(shortName: string, settled: boolean): string {
-  if (settled) return 'good';
-  if (shortName === 'invoiced' || shortName === 'partial') return 'warn';
-  return 'gray';
-}
-
-function formatMoney(fee: string | null, currency: string): string | null {
-  if (!fee) return null;
-  const amount = Number(fee);
-  if (Number.isNaN(amount)) return `${currency} ${fee}`;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
-}
 
 interface CardLabels {
   paymentLabel: (shortName: string) => string;
@@ -92,9 +65,8 @@ function CardBody({
   onClose?: () => void;
 }) {
   const money = formatMoney(opp.fee_amount, opp.currency);
-  const talkLine = [opp.talk_title, labels.formatLabel(opp.opportunity_format)]
-    .filter(Boolean)
-    .join(' · ');
+  // The gig's identity beneath the venue: "<format>: <title>" (title falls back to the talk name).
+  const identityLine = `${labels.formatLabel(opp.opportunity_format)}: ${opp.title}`;
   const isProBono = opp.comp_type === 'pro_bono';
   const isTrade = opp.comp_type === 'trade';
   const showMoney = Boolean(money) || isProBono || isTrade;
@@ -128,11 +100,9 @@ function CardBody({
             </ActionIcon>
           )}
         </Group>
-        {talkLine && (
-          <Text size="xs" c="dimmed" lineClamp={1}>
-            {talkLine}
-          </Text>
-        )}
+        <Text size="xs" c="dimmed" lineClamp={1}>
+          {identityLine}
+        </Text>
         <Group gap={6} wrap="wrap">
           <Badge variant="light" color="gray" size="sm">
             {labels.orgTypeLabel(opp.organization_type)}

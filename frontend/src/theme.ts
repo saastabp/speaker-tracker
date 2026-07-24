@@ -1,4 +1,4 @@
-import { Badge, createTheme, type MantineColorsTuple } from '@mantine/core';
+import { Badge, Input, Modal, createTheme, type MantineColorsTuple } from '@mantine/core';
 
 // Brand palette (DESIGN §7 / ARCHITECTURE §7): navy nav rail + headings, terracotta primary
 // actions, gold accents, cream page background. Sans-serif — the brand guide's Playfair/Lato
@@ -53,8 +53,25 @@ export const theme = createTheme({
   colors: { navy, terracotta, gold, good, warn },
   fontFamily: SANS,
   headings: { fontFamily: SANS, fontWeight: '600' },
+  // Radius scale from the approved mockup: inputs/segmented 9px (sm, the default), cards 12px (md),
+  // modal 14px (lg), pills/avatars fully round (xl). Mantine's defaults were ~4px (near-square).
+  defaultRadius: 'sm',
+  radius: {
+    xs: '6px',
+    sm: '9px',
+    md: '12px',
+    lg: '14px',
+    xl: '9999px',
+  },
   components: {
-    // The approved mockup uses sentence-case chips; Mantine's Badge defaults to uppercase.
-    Badge: Badge.extend({ styles: { label: { textTransform: 'none' } } }),
+    // The approved mockup uses sentence-case, full-pill chips; Mantine's Badge defaults to uppercase.
+    Badge: Badge.extend({
+      styles: { label: { textTransform: 'none' } },
+      defaultProps: { radius: 'xl' },
+    }),
+    // The modal frame is a 14px (lg) radius.
+    Modal: Modal.extend({ defaultProps: { radius: 'lg' } }),
+    // Warm brand hairline on input borders (mockup `--line`) instead of Mantine's generic grey.
+    Input: Input.extend({ styles: { input: { borderColor: BRAND_LINE } } }),
   },
 });

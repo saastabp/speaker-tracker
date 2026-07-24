@@ -22,9 +22,11 @@ import { BRAND_LINE } from '../theme';
 import { FieldLabel } from './FieldLabel';
 
 // The form works in strings (Select/SegmentedControl/TextInput values); it maps to
-// OpportunityCreateInput on submit. `title` is derived from venue + talk (no free-text field), and
-// the lifecycle seeds (starting_status / payment_status / lead_contact_id) are sent on create only.
+// OpportunityCreateInput on submit. `title` is an optional free-text name; when left blank it falls
+// back to the chosen talk's name (one of title / talk is required). The lifecycle seeds
+// (starting_status / payment_status / lead_contact_id) are sent on create only.
 interface FormValues {
+  title: string;
   organization_id: string;
   talk_id: string;
   opportunity_format: string;
@@ -39,6 +41,7 @@ interface FormValues {
 
 function toFormValues(opp?: Opportunity): FormValues {
   return {
+    title: opp?.title ?? '',
     organization_id: opp ? String(opp.organization_id) : '',
     talk_id: opp?.talk_id != null ? String(opp.talk_id) : '',
     opportunity_format: opp?.opportunity_format ?? '',
@@ -82,6 +85,8 @@ export function OpportunityFormModal({
   const form = useForm<FormValues>({
     initialValues: toFormValues(initialValues),
     validate: {
+      title: (value, values) =>
+        value.trim() || values.talk_id ? null : 'Add a title, or pick a talk',
       organization_id: (value) => (value ? null : 'Venue is required'),
       opportunity_format: (value) => (value ? null : 'Format is required'),
       comp_type: (value) => (value ? null : 'Compensation is required'),
@@ -135,11 +140,11 @@ export function OpportunityFormModal({
     setError(null);
     setSubmitting(true);
     try {
-      // Title is derived from venue + talk (mockup dropped the free-text field).
-      const venueName = venueOptions.find((o) => o.value === values.organization_id)?.label ?? '';
+      // Free-text title if given, otherwise fall back to the chosen talk's name (validation
+      // guarantees at least one is present, so `title` is never empty).
       const talkTitle = talkOptions.find((o) => o.value === values.talk_id)?.label ?? '';
       const input: OpportunityCreateInput = {
-        title: talkTitle ? `${venueName} — ${talkTitle}` : venueName,
+        title: values.title.trim() || talkTitle,
         organization_id: Number(values.organization_id),
         opportunity_format: values.opportunity_format,
         comp_type: values.comp_type,
@@ -183,6 +188,14 @@ export function OpportunityFormModal({
               data={venueOptions}
               searchable
               {...form.getInputProps('organization_id')}
+            />
+          </div>
+
+          <div>
+            <FieldLabel helper="optional if a talk is set">Title</FieldLabel>
+            <TextInput
+              placeholder="Name this gig — e.g. “Wellness Wheel keynote”"
+              {...form.getInputProps('title')}
             />
           </div>
 

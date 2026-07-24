@@ -144,6 +144,28 @@ backend is touched. Check items off as they land.
 
 ---
 
+## 2b. Opportunity detail  (`pages/OpportunityDetail.tsx` + `CloseOpportunityModal`)
+
+> **✅ SHIPPED & browser-verified (2026-07-24).** Rebuilt to the mockup (mL490–560): breadcrumb,
+> header chip row (stage · comp · payment · date), two-column grid — left: Details (key-value card
+> with stage chip) / Payment (editable, kept) / Notes (add-at-top) / Lifecycle; right: Venue card
+> (avatar + type·location via `useOrganization`, no backend change) / On-this-gig (avatars + Lead
+> chip). Close modal restyled (FieldLabels, defaults-by-stage explainer, footer hint). Shared
+> `opportunityChips.ts` (stage/payment colours + money) extracted from Pipeline.
+> **DEFERRED:** Next-follow-up card (needs `follow_ups`/0009); Close modal reason-catalog + date
+> (backend). **KEEP:** editable Payment card + Delete button (real-app needs beyond the mockup).
+
+## App-wide (this session)
+
+> **Theme radii + brand borders (`theme.ts`):** the app was near-square (Mantine ~4px default). Added
+> the mockup radius scale — modal 14px, cards 12px, inputs/segmented 9px, chips/avatars pill — plus
+> warm brand-line (`#E7DCC9`) input borders. Applies to every modal/card/input.
+> **Optional Title reinstated:** the mockup dropped the free-text title, which left board cards
+> showing only the venue. Re-added an optional Title (validation: title *or* talk required; blank →
+> talk name); card sub-line is now `<format>: <title>`. Frontend-only (title column stays NOT NULL).
+
+---
+
 ## 3. Venues  (`pages/Venues.tsx` + `VenueDetail.tsx` + `VenueFormModal`)
 
 ### List (vs mL652–674)
