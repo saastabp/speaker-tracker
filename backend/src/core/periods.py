@@ -10,7 +10,7 @@ so it is unit-tested with no database and no wall clock. The repository obtains 
 parameters. The window is left-closed/right-open ``[start, end)``; both bounds are **naive local**
 datetimes — the MySQL session ``time_zone`` (already set to the user's zone in ``common/db.py``)
 interprets them in local time and converts the stored UTC ``TIMESTAMP`` columns to match, so the
-comparison lands on the correct local day. Weeks start **Monday** (ISO 8601).
+comparison lands on the correct local day. Weeks start **Sunday** (US convention).
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def period_bounds(cadence: str, now_local: datetime) -> tuple[datetime, datetime
     -------
     tuple of datetime
         ``(start, end)`` naive-local datetimes: ``start`` is inclusive at 00:00, ``end`` is the
-        exclusive start of the next period. Weeks start Monday.
+        exclusive start of the next period. Weeks start Sunday.
 
     Raises
     ------
@@ -64,13 +64,14 @@ def period_bounds(cadence: str, now_local: datetime) -> tuple[datetime, datetime
     --------
     >>> from datetime import datetime
     >>> period_bounds("weekly", datetime(2026, 7, 22, 15, 30))  # a Wednesday
-    (datetime.datetime(2026, 7, 20, 0, 0), datetime.datetime(2026, 7, 27, 0, 0))
+    (datetime.datetime(2026, 7, 19, 0, 0), datetime.datetime(2026, 7, 26, 0, 0))
     >>> period_bounds("quarterly", datetime(2026, 11, 10, 9, 0))  # Q4
     (datetime.datetime(2026, 10, 1, 0, 0), datetime.datetime(2027, 1, 1, 0, 0))
     """
     day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
     if cadence == WEEKLY:
-        start = day_start - timedelta(days=now_local.weekday())  # Monday of this week
+        # weekday() is Mon=0..Sun=6; (weekday()+1) % 7 is days since the most recent Sunday.
+        start = day_start - timedelta(days=(now_local.weekday() + 1) % 7)
         return start, start + timedelta(days=7)
     if cadence == MONTHLY:
         start = day_start.replace(day=1)

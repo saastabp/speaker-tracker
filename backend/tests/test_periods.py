@@ -21,14 +21,14 @@ from core.periods import (
 @pytest.mark.parametrize(
     ("now", "start", "end"),
     [
-        # Wednesday → Monday-of-week .. next Monday.
-        (datetime(2026, 7, 22, 15, 30), datetime(2026, 7, 20), datetime(2026, 7, 27)),
-        # Monday itself is the start of its own week.
-        (datetime(2026, 7, 20, 9, 0), datetime(2026, 7, 20), datetime(2026, 7, 27)),
-        # Sunday is the last day of the Monday-started week.
-        (datetime(2026, 7, 26, 23, 59), datetime(2026, 7, 20), datetime(2026, 7, 27)),
-        # Week spanning a month/year boundary.
-        (datetime(2026, 12, 31, 12, 0), datetime(2026, 12, 28), datetime(2027, 1, 4)),
+        # Wednesday → Sunday-of-week .. next Sunday.
+        (datetime(2026, 7, 22, 15, 30), datetime(2026, 7, 19), datetime(2026, 7, 26)),
+        # Sunday itself is the start of its own week.
+        (datetime(2026, 7, 19, 9, 0), datetime(2026, 7, 19), datetime(2026, 7, 26)),
+        # Saturday is the last day of the Sunday-started week.
+        (datetime(2026, 7, 25, 23, 59), datetime(2026, 7, 19), datetime(2026, 7, 26)),
+        # Week spanning a month/year boundary (2026-12-31 is a Thursday).
+        (datetime(2026, 12, 31, 12, 0), datetime(2026, 12, 27), datetime(2027, 1, 3)),
     ],
 )
 def test_weekly_bounds(now: datetime, start: datetime, end: datetime) -> None:
