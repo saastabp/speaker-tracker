@@ -23,6 +23,7 @@ from handlers import (
     catalogs,
     contact_organizations,
     contacts,
+    dashboard,
     health,
     message_templates,
     opportunities,
@@ -31,12 +32,14 @@ from handlers import (
     organizations,
     outreaches,
     talks,
+    targets,
 )
 
 app = APIGatewayHttpResolver()
 app.include_router(catalogs.router)
 app.include_router(contacts.router)
 app.include_router(contact_organizations.router)
+app.include_router(dashboard.router)
 app.include_router(health.router)
 app.include_router(message_templates.router)
 app.include_router(opportunities.router)
@@ -45,6 +48,7 @@ app.include_router(opportunity_notes.router)
 app.include_router(organizations.router)
 app.include_router(outreaches.router)
 app.include_router(talks.router)
+app.include_router(targets.router)
 
 
 @app.exception_handler(Exception)

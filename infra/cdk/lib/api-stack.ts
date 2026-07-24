@@ -99,6 +99,16 @@ const ROUTES: RouteDef[] = [
   { method: apigwv2.HttpMethod.PUT, path: '/templates/{id}', authRequired: true },
   { method: apigwv2.HttpMethod.DELETE, path: '/templates/{id}', authRequired: true },
   { method: apigwv2.HttpMethod.POST, path: '/templates/{id}/duplicate', authRequired: true },
+
+  // Slice 5 — targets + dashboard (handlers/targets.py, handlers/dashboard.py).
+  { method: apigwv2.HttpMethod.GET, path: '/targets', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/targets', authRequired: true },
+  {
+    method: apigwv2.HttpMethod.DELETE,
+    path: '/targets/{targetType}/{cadence}',
+    authRequired: true,
+  },
+  { method: apigwv2.HttpMethod.GET, path: '/dashboard', authRequired: true },
 ];
 
 export interface ApiStackProps extends StackProps {
