@@ -29,6 +29,7 @@ export interface Catalogs {
   payment_statuses: PaymentStatus[];
   outreach_kinds: OutreachKind[];
   outreach_channels: CatalogItem[];
+  message_template_kinds: CatalogItem[];
   target_types: CatalogItem[];
 }
 
