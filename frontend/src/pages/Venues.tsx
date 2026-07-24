@@ -1,6 +1,6 @@
 import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconAlertTriangle, IconPlus } from '@tabler/icons-react';
+import { IconAlertTriangle, IconMessagePlus, IconPlus } from '@tabler/icons-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
 import {
@@ -8,6 +8,7 @@ import {
   useOrganizations,
   type OrganizationInput,
 } from '../api/organizations';
+import { LogOutreachModal } from '../components/LogOutreachModal';
 import { VenueFormModal } from '../components/VenueFormModal';
 
 function firstLine(text: string | null): string {
@@ -20,6 +21,7 @@ export function Venues() {
   const create = useCreateOrganization();
   const navigate = useNavigate();
   const [addOpen, addHandlers] = useDisclosure(false);
+  const [logOpen, logHandlers] = useDisclosure(false);
 
   const typeLabel = (shortName: string) =>
     catalogs.data?.organization_types.find((type) => type.short_name === shortName)?.description ??
@@ -36,9 +38,18 @@ export function Venues() {
         <Title order={2} c="navy.9">
           Venues
         </Title>
-        <Button leftSection={<IconPlus size={16} />} onClick={addHandlers.open}>
-          Add Venue
-        </Button>
+        <Group>
+          <Button
+            variant="default"
+            leftSection={<IconMessagePlus size={16} />}
+            onClick={logHandlers.open}
+          >
+            Log outreach
+          </Button>
+          <Button leftSection={<IconPlus size={16} />} onClick={addHandlers.open}>
+            Add Venue
+          </Button>
+        </Group>
       </Group>
 
       {venues.isLoading && (
@@ -103,6 +114,7 @@ export function Venues() {
         submitLabel="Create"
         onSubmit={handleCreate}
       />
+      <LogOutreachModal opened={logOpen} onClose={logHandlers.close} />
     </Stack>
   );
 }

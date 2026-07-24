@@ -14,7 +14,8 @@ import {
 import { useEffect, useState } from 'react';
 import { useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
-import { useCreateOutreach } from '../api/outreaches';
+import { useContacts } from '../api/contacts';
+import { useContactOutreaches, useCreateOutreach } from '../api/outreaches';
 import { useOpportunities } from '../api/opportunities';
 import { TemplatePicker } from './TemplatePicker';
 
@@ -25,10 +26,12 @@ const EMAIL_CHANNEL = 'email';
 interface LogOutreachModalProps {
   opened: boolean;
   onClose: () => void;
-  contactId: number;
-  contactName: string;
-  /** Whether this contact already has an outbound touch — drives the inferred kind default. */
-  hasPriorOutreach: boolean;
+  /** When set, the contact is preselected and its selector is locked (opened from a contact).
+   *  Omit to let the user pick the contact (opened from the pipeline, venues, etc.). */
+  contactId?: number;
+  /** Display-name fallback for the locked contact, so merge fields resolve before the contact
+   *  list finishes loading. */
+  contactName?: string;
 }
 
 export function LogOutreachModal({
@@ -36,14 +39,21 @@ export function LogOutreachModal({
   onClose,
   contactId,
   contactName,
-  hasPriorOutreach,
 }: LogOutreachModalProps) {
   const catalogs = useCatalogs();
+  const contacts = useContacts();
   const opportunities = useOpportunities(false);
   const create = useCreateOutreach();
 
-  // Client-side default preview; the server re-infers authoritatively when kind is omitted.
+  const locked = contactId != null;
+  const [selectedId, setSelectedId] = useState<number | null>(contactId ?? null);
+
+  // The chosen contact's prior touches drive the inferred kind default (contact 0 → empty list).
+  const priorOutreaches = useContactOutreaches(selectedId ?? 0);
+  const hasPriorOutreach = (priorOutreaches.data?.length ?? 0) > 0;
   const inferredKind = hasPriorOutreach ? 'correspondence' : 'initial';
+  const resolvedName =
+    contacts.data?.find((c) => c.id === selectedId)?.name ?? contactName ?? '';
 
   const [channel, setChannel] = useState('dm');
   const [kind, setKind] = useState(inferredKind);
@@ -55,9 +65,10 @@ export function LogOutreachModal({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Reset the form each time the modal opens.
+  // Reset the form each time the modal opens (preselecting the locked contact, if any).
   useEffect(() => {
     if (opened) {
+      setSelectedId(contactId ?? null);
       setChannel('dm');
       setKindTouched(false);
       setOpportunityId(null);
@@ -66,7 +77,7 @@ export function LogOutreachModal({
       setTemplateId(null);
       setError(null);
     }
-  }, [opened]);
+  }, [opened, contactId]);
 
   // Track the inferred default until the user overrides the chip (then leave their choice alone).
   useEffect(() => {
@@ -75,6 +86,10 @@ export function LogOutreachModal({
     }
   }, [opened, inferredKind, kindTouched]);
 
+  const contactOptions = (contacts.data ?? []).map((c) => ({
+    value: String(c.id),
+    label: c.name,
+  }));
   const channelOptions = (catalogs.data?.outreach_channels ?? [])
     .filter((c) => c.short_name !== EMAIL_CHANNEL)
     .map((c) => ({ value: c.short_name, label: c.description }));
@@ -89,6 +104,10 @@ export function LogOutreachModal({
   }));
 
   async function handleSubmit() {
+    if (!selectedId) {
+      setError('Pick a contact.');
+      return;
+    }
     if (!channel) {
       setError('Pick a channel.');
       return;
@@ -97,7 +116,7 @@ export function LogOutreachModal({
     setSubmitting(true);
     try {
       await create.mutateAsync({
-        contact_id: contactId,
+        contact_id: selectedId,
         channel,
         // Omit kind unless the user overrode the chip, so the server stays the source of inference.
         kind: kindTouched ? kind : undefined,
@@ -114,8 +133,10 @@ export function LogOutreachModal({
     }
   }
 
+  const title = locked && resolvedName ? `Log outreach to ${resolvedName}` : 'Log outreach';
+
   return (
-    <Modal opened={opened} onClose={onClose} title={`Log outreach to ${contactName}`} size="lg">
+    <Modal opened={opened} onClose={onClose} title={title} size="lg">
       {catalogs.isPending ? (
         <Loader />
       ) : (
@@ -125,6 +146,17 @@ export function LogOutreachModal({
               {error}
             </Alert>
           )}
+
+          <Select
+            label="Contact"
+            placeholder="Who did you reach out to?"
+            data={contactOptions}
+            value={selectedId != null ? String(selectedId) : null}
+            onChange={(value) => setSelectedId(value ? Number(value) : null)}
+            disabled={locked}
+            withAsterisk
+            searchable
+          />
 
           <Group grow align="flex-start">
             <Select
@@ -170,16 +202,18 @@ export function LogOutreachModal({
             searchable
           />
 
-          <TemplatePicker
-            contactName={contactName}
-            allowedChannels={manualChannels}
-            onTemplateSelected={(template) => {
-              setTemplateId(template?.id ?? null);
-              if (template) {
-                setChannel(template.channel);
-              }
-            }}
-          />
+          {selectedId != null && (
+            <TemplatePicker
+              contactName={resolvedName}
+              allowedChannels={manualChannels}
+              onTemplateSelected={(template) => {
+                setTemplateId(template?.id ?? null);
+                if (template) {
+                  setChannel(template.channel);
+                }
+              }}
+            />
+          )}
 
           <Textarea
             label="Note"

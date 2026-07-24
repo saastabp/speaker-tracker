@@ -25,7 +25,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconAlertTriangle, IconPlus, IconX } from '@tabler/icons-react';
+import { IconAlertTriangle, IconMessagePlus, IconPlus, IconX } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
@@ -38,6 +38,7 @@ import {
   type OpportunitySummary,
 } from '../api/opportunities';
 import { CloseOpportunityModal, type CloseTarget } from '../components/CloseOpportunityModal';
+import { LogOutreachModal } from '../components/LogOutreachModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
 
 const COLUMN_WIDTH = 264;
@@ -238,6 +239,7 @@ export function Pipeline() {
   const navigate = useNavigate();
 
   const [addOpen, addHandlers] = useDisclosure(false);
+  const [logOpen, logHandlers] = useDisclosure(false);
   const [closeTarget, setCloseTarget] = useState<CloseTarget | null>(null);
   const [activeOpp, setActiveOpp] = useState<OpportunitySummary | null>(null);
   // A transient "moved to History" flash anchored to the column a drag archived from.
@@ -301,6 +303,13 @@ export function Pipeline() {
             checked={showClosed}
             onChange={(event) => setShowClosed(event.currentTarget.checked)}
           />
+          <Button
+            variant="default"
+            leftSection={<IconMessagePlus size={16} />}
+            onClick={logHandlers.open}
+          >
+            Log outreach
+          </Button>
           <Button leftSection={<IconPlus size={16} />} onClick={addHandlers.open}>
             Add opportunity
           </Button>
@@ -363,6 +372,7 @@ export function Pipeline() {
         onClose={() => setCloseTarget(null)}
         opportunity={closeTarget}
       />
+      <LogOutreachModal opened={logOpen} onClose={logHandlers.close} />
     </Stack>
   );
 }

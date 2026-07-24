@@ -29,7 +29,7 @@ import {
   useUpdateContact,
   type ContactInput,
 } from '../api/contacts';
-import { useContactOutreaches, useContactTimeline, type TimelineItem } from '../api/outreaches';
+import { useContactTimeline, type TimelineItem } from '../api/outreaches';
 import { useOrganizations } from '../api/organizations';
 import { AffiliationRow } from '../components/AffiliationRow';
 import { ContactFormModal } from '../components/ContactFormModal';
@@ -56,7 +56,6 @@ export function ContactDetail() {
   const contact = useContact(contactId);
   const catalogs = useCatalogs();
   const venues = useOrganizations();
-  const outreaches = useContactOutreaches(contactId);
   const timeline = useContactTimeline(contactId);
   const update = useUpdateContact(contactId);
   const remove = useDeleteContact();
@@ -87,7 +86,6 @@ export function ContactDetail() {
 
   const affiliatedIds = new Set(c.organizations.map((org) => org.organization_id));
   const availableVenues = (venues.data ?? []).filter((venue) => !affiliatedIds.has(venue.id));
-  const hasPriorOutreach = (outreaches.data?.length ?? 0) > 0;
 
   function timelineTitle(item: TimelineItem): string {
     if (item.item_type === 'outreach') {
@@ -326,7 +324,6 @@ export function ContactDetail() {
         onClose={logHandlers.close}
         contactId={contactId}
         contactName={c.name}
-        hasPriorOutreach={hasPriorOutreach}
       />
     </Stack>
   );
