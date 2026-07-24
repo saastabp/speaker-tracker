@@ -2,7 +2,7 @@
 
 > Working design doc for a bespoke, behind-auth CRM that funnels **live speaking and
 > podcast-guest gigs** for Donna King (360 Balanced Living). Not for public consumption.
-> Status: **pre-implementation** — architecture chosen, UI mocked, no code written yet.
+> Status: **implemented through slice 4** — slices 1–4 shipped (backend + frontend); slices 5–8 remain designed-not-built.
 
 ## 1. Purpose & scope
 
@@ -325,9 +325,12 @@ Core entities (user-scoped via `user_id`; every entity table has `id` /
   `completed_at`. Created standalone (from a contact, opportunity, the composer, or a Next-follow-up
   card) or as a rider on a logged outreach. Distinct from `outreaches` (past touches) and
   `opportunity_notes` (dated commentary): follow-ups are *future*, actionable, and can be marked done.
-- **`message_templates`** — `channel` (dm / email / power_partner), body with **merge fields**
-  (`[Name]`, …). `user_id` NULL = shared template (editable in place — admin-gated under
-  multi-user); **duplicate** a shared template into a personal copy (`user_id` set).
+- **`message_templates`** — two orthogonal axes in separate columns: `channel_id → outreach_channels`
+  (*how* it is sent: dm / email) and `message_template_kind_id → message_template_kinds` (*purpose*:
+  cold pitch / power-partner intro). Body has **merge fields** (`[Name]`, …). `user_id` NULL = shared
+  template (editable in place — admin-gated under multi-user); **duplicate** a shared template into a
+  personal copy (`user_id` set). *(The old single-`channel` dm/email/power_partner column was split —
+  `power_partner` is an audience, not a channel; see DATABASE.md §5.)*
 - **`targets`** — per-user, per-type, cadence (weekly/monthly/quarterly), `goal_count`.
 - **`talks`** + **materials** (S3 files) — the Guest Workshop menu.
 - Catalog tables: `organization_types`, `contact_roles`, `opportunity_statuses`

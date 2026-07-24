@@ -12,9 +12,9 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: pre-implementation.** No migration has been written yet. This document is the
-> *target* schema — the contract migration `0001` onward must satisfy. It is derived from
-> `DESIGN.md` §4/§5 and supersedes any older sketch.
+> **Status: implemented through migration `0005` (slices 1–4).** This document is the schema
+> contract; migrations `0001`–`0005` satisfy it, while slices 5–8 (`0006`–`0009`) remain target
+> schema. Derived from `DESIGN.md` §4/§5 and supersedes any older sketch.
 
 **Conventions** (inherited from the sibling apps, see `CODING-GUIDELINES.md` §2):
 
@@ -439,7 +439,7 @@ client-side for the copy-to-clipboard DM flow.
 Two orthogonal axes, deliberately separate columns (see §5): `message_template_kind_id` is the
 template's **purpose/audience** (`message_template_kinds` — e.g. a power-partner intro vs. a cold
 pitch), while `channel_id → outreach_channels` is **how it is sent** (`dm` / `email`). Both this
-table and its `message_template_kinds` catalog arrive in `0004`, not `0001`.
+table and its `message_template_kinds` catalog arrive in `0005`, not `0001`.
 
 ### `targets`
 `UNIQUE(user_id, target_type_id, cadence)` — the key the `PUT /targets` upsert
@@ -473,7 +473,7 @@ Per-folder poll watermark, `UNIQUE(user_id, folder_name)`. Each poll fetches onl
 | `payment_statuses` | unbilled, invoiced, partial, paid, n_a | `is_settled` |
 | `outreach_kinds` | initial, follow_up, correspondence | **`counts_toward_target`** |
 | `outreach_channels` | email, dm, call, in_person, text | — |
-| `message_template_kinds` | *purpose vocabulary — values defined in slice 4 (§5); seeded in `0004`, not `0001`* | — |
+| `message_template_kinds` | *purpose vocabulary — values defined in slice 4 (§5); seeded in `0005`, not `0001`* | — |
 | `target_types` | venues_researched, outreaches, pitches, bookings | — |
 
 ### `opportunity_statuses` — `sort_order` drives the funnel
@@ -596,7 +596,7 @@ as `contact_organizations.is_power_partner`. These are split: a template carries
 outreach_channels` (how it is sent) **and** a `message_template_kind_id → message_template_kinds`,
 a *purpose* vocabulary (power-partner intro, cold pitch, …). Exact purpose values are settled in
 slice 4, where `message_templates` and the `message_template_kinds` catalog are both created
-(`0004`); `message_template_kinds` is therefore the one catalog **not** seeded in `0001`.
+(`0005`); `message_template_kinds` is therefore the one catalog **not** seeded in `0001`.
 `outreach_channels` remains the genuine channel vocabulary shared with `outreaches`.
 
 ---
@@ -651,4 +651,4 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The
 sole exception is `message_template_kinds`: its shape (a *purpose* axis, §5) is unresolved until
-`message_templates` is designed, so it is seeded in `0004` alongside that table rather than in `0001`.
+`message_templates` is designed, so it is seeded in `0005` alongside that table rather than in `0001`.

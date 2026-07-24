@@ -4,8 +4,8 @@ Authoritative map of how the pieces fit: the React SPA, one CloudFront distribut
 SPA and API, the Python Lambda handlers, the layered backend, the WorkMail/SES/IMAP email
 subsystem, and the CDK stacks that deploy them.
 
-> **Status: pre-implementation.** Nothing here is built yet — this is the *target* architecture and
-> the contract the scaffold must satisfy. Derived from `DESIGN.md` §3 and
+> **Status: implemented through slice 4.** The request path, layers, and CDK stacks here are built
+> and satisfied by slices 1–4; the slices 5–8 endpoint rows below remain target. Derived from `DESIGN.md` §3 and
 > `CODING-GUIDELINES.md` §1. Where this doc and a sibling repo disagree, the disagreement is
 > deliberate and called out inline.
 
@@ -213,13 +213,13 @@ table.
 | `migrate.py` | *(separate function — in-deploy `Trigger`)* |
 | `catalogs.py` | GET `/catalogs` |
 | `organizations.py` | GET/POST `/organizations`, GET/PUT/DELETE `/organizations/{id}` |
-| `contacts.py` | GET/POST `/contacts`, GET/PUT/DELETE `/contacts/{id}`, GET `/contacts/{id}/timeline` *(timeline deferred — needs opportunities/outreach, slices 3–4)* |
+| `contacts.py` | GET/POST `/contacts`, GET/PUT/DELETE `/contacts/{id}` *(the contact timeline + outreach list are served by `outreaches.py`)* |
 | `contact_organizations.py` | POST `/contacts/{id}/organizations`, PUT/DELETE `/contacts/{id}/organizations/{orgId}` |
 | `opportunities.py` | GET/POST `/opportunities`, GET/PUT/DELETE `/opportunities/{id}`, PATCH `/opportunities/{id}/status`, PATCH `/opportunities/{id}/payment`, POST `/opportunities/{id}/close`, GET `/funnel` |
 | `opportunity_contacts.py` | POST `/opportunities/{id}/contacts`, PUT/DELETE `/opportunities/{id}/contacts/{contactId}` |
 | `opportunity_notes.py` | POST `/opportunities/{id}/notes`, DELETE `/opportunities/{id}/notes/{noteId}` *(notes are read with the opportunity detail; add + soft-delete only)* |
-| `outreaches.py` | GET/POST `/outreaches`, GET/PUT/DELETE `/outreaches/{id}` |
-| `message_templates.py` | GET/POST `/message-templates`, PUT/DELETE `/message-templates/{id}`, POST `/message-templates/{id}/duplicate` |
+| `outreaches.py` | POST `/outreaches`, DELETE `/outreaches/{id}`, GET `/contacts/{id}/outreaches`, GET `/contacts/{id}/timeline` |
+| `message_templates.py` | GET/POST `/templates`, GET/PUT/DELETE `/templates/{id}`, POST `/templates/{id}/duplicate` |
 | `follow_ups.py` | GET/POST `/follow-ups`, PUT/DELETE `/follow-ups/{id}`, POST `/follow-ups/{id}/complete` |
 | `targets.py` | GET/PUT `/targets` |
 | `dashboard.py` | GET `/dashboard` |

@@ -30,8 +30,8 @@ interface NavItem {
   icon: Icon;
 }
 
-// The app's information architecture (DESIGN §7). Only Dashboard has a real page in slice 1; the
-// rest route to a placeholder until later slices.
+// The app's information architecture (DESIGN §7). Dashboard, Pipeline, Venues, Contacts, History,
+// and Templates are built; Emails, Targets, and Talks still route to the placeholder (later slices).
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: IconLayoutDashboard },
   { label: 'Pipeline', to: '/pipeline', icon: IconColumns },

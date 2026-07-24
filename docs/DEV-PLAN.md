@@ -4,7 +4,7 @@ Execution plan for building the app described in `DESIGN.md`, on the schema in `
 the structure in `ARCHITECTURE.md`. Slice numbering follows `DESIGN.md` §6 — **do not renumber**,
 other docs reference these numbers.
 
-> **Status: nothing built.** The repo currently contains `docs/` and `samples/` only.
+> **Status: slices 1–4 shipped (backend + frontend); slices 5–8 remain.** Migrations `0001`–`0005` applied.
 
 ---
 
@@ -294,7 +294,8 @@ independently shippable, and shipping them together makes the first failure ambi
 
 **Migration `0007_email.sql`** — `email_threads`, `email_messages`, `imap_folder_cursors`
 (the cursor table ships here even though 6b uses it, to keep email schema in one migration).
-**Plus `materials`** (attachments; resolves the other half of §6's "as needed").
+`materials` (attachments) is **not** folded in here — it ships in its own `0009_materials.sql`
+(DATABASE.md §6).
 
 **Backend** — `common/secrets.py` (module-scope cached — **first runtime secret in the family**),
 `common/mail.py` (raw MIME, stable `Message-ID`, `In-Reply-To`/`References` on reply; **SES client
