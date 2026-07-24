@@ -2,8 +2,9 @@
 
 An outreach is a single **outbound** touch, logged against a contact and decoupled from pipeline
 stage (DATABASE.md §"outreaches", DEV-PLAN slice 4 acceptance #6). The wire contract follows the
-project's Option-A rule: entities by id (``contact_id``, ``opportunity_id``, ``message_template_id``)
-and catalog vocabularies by ``short_name`` (``channel``, ``kind``). An outreach is a first-class
+project's Option-A rule: entities by id (``contact_id``, ``opportunity_id``,
+``message_template_id``) and catalog vocabularies by ``short_name`` (``channel``, ``kind``). An
+outreach is a first-class
 resource with two symmetric links — the required ``contact_id`` and the optional ``opportunity_id``
 — both carried in the body of a flat ``POST /outreaches`` (not nested under either parent), so a gig
 and a venue are equal *filter* axes over one journal rather than separate parents.
