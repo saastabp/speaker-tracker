@@ -36,7 +36,7 @@ def fetch_catalogs(conn: Connection) -> Catalogs:
     Returns
     -------
     models.catalogs.Catalogs
-        All ten vocabularies, each ordered by ``sort_order`` then ``short_name``.
+        All eleven vocabularies, each ordered by ``sort_order`` then ``short_name``.
     """
     return Catalogs(
         organization_types=_fetch(conn, "organization_types"),
@@ -48,6 +48,7 @@ def fetch_catalogs(conn: Connection) -> Catalogs:
         payment_statuses=_fetch(conn, "payment_statuses", "is_settled"),
         outreach_kinds=_fetch(conn, "outreach_kinds", "counts_toward_target"),
         outreach_channels=_fetch(conn, "outreach_channels"),
+        message_template_kinds=_fetch(conn, "message_template_kinds"),
         target_types=_fetch(conn, "target_types"),
     )
 
