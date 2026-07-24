@@ -1,7 +1,8 @@
-import { Button, Card, Group, Select, Stack, Text } from '@mantine/core';
+import { Button, Group, Select, Textarea } from '@mantine/core';
 import { IconCheck, IconCopy } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTemplates, type MessageTemplate } from '../api/templates';
+import { FieldLabel } from './FieldLabel';
 
 /** Fill the merge fields that resolve from the contact. Only `[Name]` is contact-derived today;
  *  other bracketed placeholders (e.g. `[Your signature]`) are left for the sender to complete. */
@@ -18,8 +19,9 @@ interface TemplatePickerProps {
   allowedChannels?: string[];
 }
 
-/** Pick a message template, preview it with merge fields filled from the contact, and copy the
- *  merged text to the clipboard for the DM paste flow (acceptance #3). */
+/** Pick a message template, preview it with merge fields filled from the contact in an editable
+ *  textarea, and copy the merged (possibly hand-edited) text to the clipboard for the DM paste
+ *  flow (acceptance #3). Renders the mockup's two `.frm` fields: Template select + Message. */
 export function TemplatePicker({
   contactName,
   onTemplateSelected,
@@ -27,77 +29,87 @@ export function TemplatePicker({
 }: TemplatePickerProps) {
   const templates = useTemplates();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
 
   const visible = (templates.data ?? []).filter(
     (t) => !allowedChannels || allowedChannels.includes(t.channel),
   );
-  const selected = visible.find((t) => String(t.id) === selectedId) ?? null;
-  const mergedBody = selected ? fillMerge(selected.body, contactName) : '';
-  const mergedSubject = selected?.subject ? fillMerge(selected.subject, contactName) : null;
 
   const options = visible.map((t) => ({
     value: String(t.id),
     label: `${t.name} (${t.channel})`,
   }));
 
+  // Refill the editable message from the merged template body whenever the picked template or the
+  // contact changes. This discards manual edits by design — you choose contact + template first,
+  // then tweak — and keeps `[Name]` in sync once the contact resolves.
+  useEffect(() => {
+    const tmpl = (templates.data ?? []).find((t) => String(t.id) === selectedId) ?? null;
+    if (tmpl) {
+      // Fall back to a neutral greeting name until a contact is picked, so the merged text reads
+      // "Hi there," rather than a dangling "Hi ,".
+      const mergeName = contactName.trim() || 'there';
+      const subject = tmpl.subject ? fillMerge(tmpl.subject, mergeName) : null;
+      const body = fillMerge(tmpl.body, mergeName);
+      setMessage(subject ? `Subject: ${subject}\n\n${body}` : body);
+    } else {
+      setMessage('');
+    }
+    setCopied(false);
+  }, [selectedId, contactName, templates.data]);
+
   function handleChange(value: string | null) {
     setSelectedId(value);
-    setCopied(false);
     onTemplateSelected(visible.find((t) => String(t.id) === value) ?? null);
   }
 
   async function handleCopy() {
-    const text = mergedSubject ? `Subject: ${mergedSubject}\n\n${mergedBody}` : mergedBody;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(message);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Clipboard can be blocked (permissions / insecure context); the preview is still selectable.
+      // Clipboard can be blocked (permissions / insecure context); the message is still selectable.
       setCopied(false);
     }
   }
 
   return (
-    <Stack gap="xs">
-      <Select
-        label="Start from a template"
-        placeholder="Optional — merge & copy, then paste into the DM or email"
-        data={options}
-        value={selectedId}
-        onChange={handleChange}
-        clearable
-        searchable
-      />
-      {selected && (
-        <Card withBorder radius="md" padding="sm" bg="var(--mantine-color-gray-0)">
-          <Group justify="space-between" mb={4}>
-            <Text size="xs" fw={600} c="dimmed">
-              Preview (merge fields filled from {contactName})
-            </Text>
-            <Button
-              size="xs"
-              variant="light"
-              leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-              onClick={handleCopy}
-            >
-              {copied ? 'Copied!' : 'Copy to clipboard'}
-            </Button>
-          </Group>
-          {mergedSubject && (
-            <Text size="sm" mb={4}>
-              <Text span fw={600}>
-                Subject:{' '}
-              </Text>
-              {mergedSubject}
-            </Text>
-          )}
-          <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-            {mergedBody}
-          </Text>
-        </Card>
-      )}
-    </Stack>
+    <>
+      <div>
+        <FieldLabel helper="merges & copies for a DM">Template</FieldLabel>
+        <Select
+          placeholder="Optional — start from a saved template"
+          data={options}
+          value={selectedId}
+          onChange={handleChange}
+          clearable
+          searchable
+        />
+      </div>
+
+      <div>
+        <FieldLabel helper="merged — edit before you copy">Message</FieldLabel>
+        <Textarea
+          value={message}
+          onChange={(event) => setMessage(event.currentTarget.value)}
+          autosize
+          minRows={4}
+          placeholder="Pick a template above, or write the note you'll paste into the DM"
+        />
+        <Group justify="flex-end" mt={4}>
+          <Button
+            size="xs"
+            variant="light"
+            leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+            onClick={handleCopy}
+            disabled={!message.trim()}
+          >
+            {copied ? 'Copied!' : 'Copy to clipboard'}
+          </Button>
+        </Group>
+      </div>
+    </>
   );
 }

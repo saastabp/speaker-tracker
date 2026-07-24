@@ -78,13 +78,16 @@ backend is touched. Check items off as they land.
 > `talk_title` + `organization_type` added to `_SUMMARY_SELECT`/model/api (deployed).
 > **DEFERRED:** Tier 3 (due/overdue, research N/3, warm-intro — need `follow_ups`/0009), removing
 > the free-text `title` field (revisit at the Opportunity detail page).
-> **Modals: SHIPPED & browser-verified (2026-07-23).** Log Outreach: channel → segmented (email
-> excluded), Kind kept, "Date"/"Opportunity" labels, "Log touch" + count hint, Template/merge/Copy
-> picker intact. New Opportunity: Format + Type → segmented, Currency removed, Compensation header +
-> pro-bono note, "Create opportunity" + Researching hint, approved labels. **DEFERRED in both:** the
-> follow-up blocks (need `follow_ups`/0009); New-Opportunity payment-status / starting-stage /
-> lead-contact selects (backend `OpportunityInput` additions — revisit at Opportunity detail);
-> `title` removal + event-date free-text (data-model, → Opportunity detail).
+> **Modals: REWORKED to the mockup & browser-verified (2026-07-24).** Log Outreach: uppercase
+> `FieldLabel`s throughout, Template + editable Message split (merge fills `[Name]`, "there"
+> fallback, Copy-to-clipboard), picker always visible (un-gated), channel segmented (email
+> excluded), Kind kept. New Opportunity: `FieldLabel`s + mockup order, **title derived from venue +
+> talk** (free-text field dropped), **Starting stage / Lead contact / Payment status** now built —
+> via a new backend `OpportunityCreateInput` + create-seed (atomic: one `status_events` row at the
+> chosen stage, lead linked `is_primary`, non-terminal-stage guard; 59 backend tests green). Payment
+> status shown only for paid comp. Shared `FieldLabel` + `BRAND_MUTED`/`BRAND_FAINT` added to
+> `theme.ts`. **Still DEFERRED:** the follow-up blocks in both (need `follow_ups`/0009); event-date
+> free-text coarse dates (kept the native picker — data-model).
 
 ### Board (vs mL444–490)
 **High**
@@ -107,37 +110,37 @@ backend is touched. Check items off as they land.
 
 ### New / Edit Opportunity modal (vs mL1200–1239)
 **High**
-- [ ] DEFER — Follow-up block (switch + date + note) — needs `follow_ups` (0008) — mL1228–1233
-- [ ] FIX — "Payment status" segmented control (Unbilled/Invoiced/Partial/Paid) — mL1224–1226
-- [ ] FIX — "Starting stage" select (default Researching) — mL1213
-- [ ] FIX — "Lead contact" select — mL1214
-- [ ] FIX/DISCUSS — Remove free-text "Title" field; mockup derives title from venue + talk (data-model touch) — mL1204
+- [ ] DEFER — Follow-up block (switch + date + note) — needs `follow_ups` (0009) — mL1228–1233
+- [x] FIX — "Payment status" segmented control (Unbilled/Invoiced/Partial/Paid) — create-only, paid comp — mL1224–1226
+- [x] FIX — "Starting stage" select (default Researching) — mL1213
+- [x] FIX — "Lead contact" select — mL1214
+- [x] FIX/DISCUSS — Remove free-text "Title" field; derived from venue + talk on submit (Brian: derive on frontend) — mL1204
 
 **Medium**
-- [ ] FIX — "Compensation" section header + Pro-bono explanatory note — mL1217/1227
-- [ ] FIX (remove) — "Currency" field (app is USD-only) — impl only
-- [ ] FIX — Comp "Type" as segmented control (Paid/Pro bono/Trade) vs dropdown — mL1219–1221
-- [ ] FIX — Footer hint "Starts in Researching — drag it across the board…" — mL1235
+- [x] FIX — "Compensation" section header + Pro-bono explanatory note — mL1217/1227
+- [x] FIX (remove) — "Currency" field (app is USD-only) — impl only
+- [x] FIX — Comp "Type" as segmented control (Paid/Pro bono/Trade) vs dropdown — mL1219–1221
+- [x] FIX — Footer hint "Starts in Researching — drag it across the board…" — mL1235
 
 **Low**
-- [ ] FIX — Labels: "Venue / organization", "Talk / offer", "Angle for this gig" — mL1204/1206/1216
-- [ ] FIX — Field pairing/order (Talk+Event date; Format standalone segmented) — mL1205–1211
-- [ ] FIX — Event date free-text "e.g. Oct 2026" (coarse dates) vs native picker — mL1207
+- [x] FIX — Labels: "Venue / organization", "Talk / offer", "Angle for this gig" — mL1204/1206/1216
+- [x] FIX — Field pairing/order (Talk+Event date; Format standalone segmented) — mL1205–1211
+- [ ] DEFER — Event date free-text "e.g. Oct 2026" (coarse dates) vs native picker — kept native picker (data-model) — mL1207
 
 ### Log Outreach modal (vs mL1106–1132)
 **High**
-- [ ] DEFER — Follow-up block — needs `follow_ups` (0008) — mL1122–1127
+- [ ] DEFER — Follow-up block — needs `follow_ups` (0009) — mL1122–1127
 
 **Medium**
-- [ ] KEEP — Email channel removed (owned by composer; slice-4 decision) — mL1112
-- [ ] KEEP — "Kind" segmented control (initial/correspondence; contact-scoped inference; slice-4) — impl only
-- [ ] FIX — Submit button "Log touch" (now "Log outreach") — mL1129
-- [ ] FIX — Footer hint "Counts toward this week's 8-touch target" — mL1129
+- [x] KEEP — Email channel removed (owned by composer; slice-4 decision) — mL1112
+- [x] KEEP — "Kind" segmented control (initial/correspondence; contact-scoped inference; slice-4) — impl only
+- [x] FIX — Submit button "Log touch" — mL1129
+- [ ] FIX — Footer hint "Counts toward this week's 8-touch target" — kept generic "…this week's outreach target" (avoid hardcoding the count) — mL1129
 
 **Low**
-- [ ] FIX — Labels "Opportunity" (now "About a gig"), "Date" (now "When") — mL1119/1118
-- [ ] FIX — Channel as segmented control vs dropdown — mL1111–1113
-- [ ] TODO — Verify `TemplatePicker` reproduces the editable merged-message textarea + copy-to-clipboard — mL1114–1116
+- [x] FIX — Labels "Opportunity" / "Date" — mL1119/1118
+- [x] FIX — Channel as segmented control vs dropdown — mL1111–1113
+- [x] TODO — `TemplatePicker` split into Template select + editable merged Message textarea + copy-to-clipboard — mL1114–1116
 
 ---
 

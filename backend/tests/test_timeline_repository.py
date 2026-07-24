@@ -11,7 +11,11 @@ from datetime import datetime
 
 import pytest
 
-from models.opportunities import OpportunityContactInput, OpportunityInput, OpportunityNoteInput
+from models.opportunities import (
+    OpportunityContactInput,
+    OpportunityCreateInput,
+    OpportunityNoteInput,
+)
 from models.outreach import OutreachInput
 from repositories import opportunities as opp
 from repositories import opportunity_contacts as oc
@@ -43,7 +47,7 @@ def timeline_db(seeded_db):
     opp1 = opp.create_opportunity(
         conn,
         user_id,
-        OpportunityInput(
+        OpportunityCreateInput(
             title="Gig One", organization_id=org, opportunity_format="workshop", comp_type="paid"
         ),
     )
@@ -77,7 +81,7 @@ def timeline_db(seeded_db):
     opp2 = opp.create_opportunity(
         conn,
         user_id,
-        OpportunityInput(
+        OpportunityCreateInput(
             title="Gig Two", organization_id=org, opportunity_format="keynote", comp_type="paid"
         ),
     )

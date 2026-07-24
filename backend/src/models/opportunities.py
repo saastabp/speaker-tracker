@@ -60,6 +60,31 @@ class OpportunityInput(BaseModel):
     outcome: str | None = None
 
 
+class OpportunityCreateInput(OpportunityInput):
+    """Create-only extension of :class:`OpportunityInput` carrying optional lifecycle *seeds*.
+
+    ``OpportunityInput`` (reused by PUT) is deliberately lifecycle-free; create alone may seed where
+    a gig starts, so a back-filled opportunity lands in the stage it is actually in — with its first
+    ``status_events`` row recorded there (not a phantom ``researching`` → stage move) — and can name
+    its lead contact in the same call. All three are optional; omitting them reproduces the previous
+    behaviour (start in ``researching``, payment status derived from the comp type, no lead).
+
+    Parameters
+    ----------
+    starting_status : str or None
+        ``opportunity_statuses`` short_name to start in; must be a non-terminal board stage. None
+        starts in ``researching``.
+    payment_status : str or None
+        ``payment_statuses`` short_name to start in. None derives it from ``comp_type``.
+    lead_contact_id : int or None
+        A contact to link as the lead on this gig (``is_primary``). None links no one.
+    """
+
+    starting_status: str | None = None
+    payment_status: str | None = None
+    lead_contact_id: int | None = None
+
+
 class OpportunityStatusPatch(BaseModel):
     """Move an opportunity to a new board stage (``PATCH /{id}/status``).
 

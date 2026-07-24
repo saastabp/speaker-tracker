@@ -24,7 +24,7 @@ from pymysql.connections import Connection
 from common import errors
 from core.funnel import is_board_stage, is_close_status
 from core.opportunities import initial_payment_status, is_closed, is_real_move
-from models.opportunities import OpportunityInput
+from models.opportunities import OpportunityCreateInput, OpportunityInput
 
 #: Every opportunity starts here (piece 2 create default); the first status_events row records it.
 _INITIAL_STATUS = "researching"
@@ -171,6 +171,17 @@ def _validate_talk(conn: Connection, user_id: int, talk_id: int | None) -> None:
         )
         if cur.fetchone() is None:
             raise errors.InvalidInput("unknown talk")
+
+
+def _validate_contact(conn: Connection, user_id: int, contact_id: int) -> None:
+    """Raise InvalidInput unless `contact_id` is a live contact owned by the user."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM contacts WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+            (contact_id, user_id),
+        )
+        if cur.fetchone() is None:
+            raise errors.InvalidInput("unknown contact")
 
 
 def list_opportunities(
@@ -333,14 +344,17 @@ def get_status_events(conn: Connection, user_id: int, opp_id: int) -> list[dict]
         return list(cur.fetchall())
 
 
-def create_opportunity(conn: Connection, user_id: int, data: OpportunityInput) -> int:
-    """Insert an opportunity in ``researching`` and return its new id.
+def create_opportunity(conn: Connection, user_id: int, data: OpportunityCreateInput) -> int:
+    """Insert an opportunity at its starting stage and return its new id.
 
-    Resolves the four catalog short_names to their ids, derives the initial payment status from the
-    comp type (:func:`core.opportunities.initial_payment_status`), and seeds ``angle`` from the
-    venue's ``how_to_approach`` when the caller did not supply one. The opportunity row and its
-    first ``status_events`` row (status ``researching``) are written together in the caller's
-    transaction; ``researching`` is non-terminal, so ``closed_at`` starts NULL.
+    Resolves the catalog short_names to their ids, seeds the starting board stage
+    (``starting_status``, default ``researching``), the payment status (``payment_status``, default
+    derived from the comp type via :func:`core.opportunities.initial_payment_status`), and — when
+    given — links a lead contact (``is_primary``). ``angle`` is seeded from the venue's
+    ``how_to_approach`` when the caller did not supply one. The opportunity row, its first
+    ``status_events`` row (at the starting stage), and the optional lead link are written together
+    in the caller's transaction. The starting stage must be non-terminal, so it is never a closing
+    stage and ``closed_at`` starts NULL.
 
     Parameters
     ----------
@@ -348,8 +362,9 @@ def create_opportunity(conn: Connection, user_id: int, data: OpportunityInput) -
         A live connection (inside a transaction).
     user_id : int
         The owning user.
-    data : models.opportunities.OpportunityInput
-        The validated writable fields (catalogs as short_names, entities as ids).
+    data : models.opportunities.OpportunityCreateInput
+        The validated writable fields plus optional lifecycle seeds (catalogs as short_names,
+        entities as ids).
 
     Returns
     -------
@@ -359,14 +374,21 @@ def create_opportunity(conn: Connection, user_id: int, data: OpportunityInput) -
     Raises
     ------
     common.errors.InvalidInput
-        When the organization or talk is not the user's, or a catalog short_name is unknown.
+        When the organization, talk, or lead contact is not the user's; a catalog short_name is
+        unknown; or ``starting_status`` is a terminal stage.
     """
     how_to_approach = _validate_organization(conn, user_id, data.organization_id)
     _validate_talk(conn, user_id, data.talk_id)
     format_id = _resolve_format_id(conn, data.opportunity_format)
     comp_type_id = _resolve_comp_type_id(conn, data.comp_type)
-    status = _resolve_status(conn, _INITIAL_STATUS)
-    payment = _resolve_payment_status(conn, initial_payment_status(data.comp_type))
+    status = _resolve_status(conn, data.starting_status or _INITIAL_STATUS)
+    if status["is_terminal"]:
+        raise errors.InvalidInput("cannot start an opportunity in a terminal stage")
+    payment = _resolve_payment_status(
+        conn, data.payment_status or initial_payment_status(data.comp_type)
+    )
+    if data.lead_contact_id is not None:
+        _validate_contact(conn, user_id, data.lead_contact_id)
     angle = data.angle if (data.angle and data.angle.strip()) else how_to_approach
     columns = [
         ("user_id", user_id),
@@ -395,6 +417,12 @@ def create_opportunity(conn: Connection, user_id: int, data: OpportunityInput) -
             "INSERT INTO status_events (user_id, opportunity_id, status_id) VALUES (%s, %s, %s)",
             (user_id, opp_id, status["id"]),
         )
+        if data.lead_contact_id is not None:
+            cur.execute(
+                "INSERT INTO opportunity_contacts (opportunity_id, contact_id, is_primary) "
+                "VALUES (%s, %s, TRUE)",
+                (opp_id, data.lead_contact_id),
+            )
     return opp_id
 
 

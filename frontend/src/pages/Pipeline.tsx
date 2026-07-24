@@ -34,7 +34,7 @@ import {
   useCreateOpportunity,
   useOpportunities,
   usePatchStatus,
-  type OpportunityInput,
+  type OpportunityCreateInput,
   type OpportunitySummary,
 } from '../api/opportunities';
 import { CloseOpportunityModal, type CloseTarget } from '../components/CloseOpportunityModal';
@@ -393,7 +393,7 @@ export function Pipeline() {
     }
   }
 
-  async function handleCreate(values: OpportunityInput) {
+  async function handleCreate(values: OpportunityCreateInput) {
     await createOpp.mutateAsync(values);
   }
 

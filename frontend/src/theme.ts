@@ -38,6 +38,12 @@ export const BRAND_LINE = '#E7DCC9';
 /** Warm panel fill behind grouped surfaces — pipeline columns, insets (mockup `--surface-2`). */
 export const BRAND_PANEL = '#F2EADE';
 
+/** Uppercase field-label grey (mockup `--muted`). */
+export const BRAND_MUTED = '#555555';
+
+/** Lighter helper / placeholder grey (mockup `--faint`). */
+export const BRAND_FAINT = '#948B7D';
+
 const SANS =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 

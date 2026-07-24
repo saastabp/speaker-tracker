@@ -17,7 +17,7 @@ from common import errors
 from models.opportunities import (
     OpportunityContactInput,
     OpportunityContactUpdate,
-    OpportunityInput,
+    OpportunityCreateInput,
     OpportunityNoteInput,
 )
 from repositories import opportunities as opp
@@ -46,7 +46,7 @@ def pipeline_db(seeded_db):
     return conn, user_id, {"org": org, "jane": jane, "ann": ann, "talk": talk}
 
 
-def _opp(org: int, **kw) -> OpportunityInput:
+def _opp(org: int, **kw) -> OpportunityCreateInput:
     base = {
         "title": "Gig",
         "organization_id": org,
@@ -54,7 +54,7 @@ def _opp(org: int, **kw) -> OpportunityInput:
         "comp_type": "paid",
     }
     base.update(kw)
-    return OpportunityInput(**base)
+    return OpportunityCreateInput(**base)
 
 
 # --- create / read -------------------------------------------------------------------------------
@@ -99,6 +99,62 @@ def test_create_rejects_bad_references(pipeline_db, field, value, message) -> No
     conn, user_id, ids = pipeline_db
     with pytest.raises(errors.InvalidInput, match=message):
         opp.create_opportunity(conn, user_id, _opp(ids["org"], **{field: value}))
+
+
+def test_create_seeds_starting_stage(pipeline_db) -> None:
+    # A back-filled gig starts in the chosen non-terminal stage, with its ONE initial status event
+    # recorded there — not a phantom researching→stage move.
+    conn, user_id, ids = pipeline_db
+    oid = opp.create_opportunity(conn, user_id, _opp(ids["org"], starting_status="pitched"))
+    row = opp.get_opportunity(conn, user_id, oid)
+    assert row["current_status"] == "pitched"
+    assert row["closed_at"] is None
+    events = opp.get_status_events(conn, user_id, oid)
+    assert [(e["status"], e["note"]) for e in events] == [("pitched", None)]
+
+
+def test_create_seeds_payment_status(pipeline_db) -> None:
+    conn, user_id, ids = pipeline_db
+    oid = opp.create_opportunity(conn, user_id, _opp(ids["org"], payment_status="invoiced"))
+    assert opp.get_opportunity(conn, user_id, oid)["payment_status"] == "invoiced"
+
+
+def test_create_links_lead_contact(pipeline_db) -> None:
+    conn, user_id, ids = pipeline_db
+    oid = opp.create_opportunity(conn, user_id, _opp(ids["org"], lead_contact_id=ids["jane"]))
+    linked = opp.get_opportunity_contacts(conn, user_id, oid)
+    assert [(r["name"], bool(r["is_primary"])) for r in linked] == [("Jane", True)]
+
+
+@pytest.mark.parametrize("bad", ["delivered", "cancelled", "lost"])
+def test_create_rejects_terminal_starting_stage(pipeline_db, bad) -> None:
+    conn, user_id, ids = pipeline_db
+    with pytest.raises(errors.InvalidInput, match="terminal stage"):
+        opp.create_opportunity(conn, user_id, _opp(ids["org"], starting_status=bad))
+
+
+def test_create_rejects_unknown_starting_stage(pipeline_db) -> None:
+    conn, user_id, ids = pipeline_db
+    with pytest.raises(errors.InvalidInput, match="unknown status"):
+        opp.create_opportunity(conn, user_id, _opp(ids["org"], starting_status="nope"))
+
+
+def test_create_rejects_unknown_lead_contact(pipeline_db) -> None:
+    conn, user_id, ids = pipeline_db
+    with pytest.raises(errors.InvalidInput, match="unknown contact"):
+        opp.create_opportunity(conn, user_id, _opp(ids["org"], lead_contact_id=777777))
+
+
+def test_create_rejects_foreign_lead_contact(pipeline_db) -> None:
+    # A contact owned by another user cannot be seeded as the lead (tenancy, not just existence).
+    conn, user_id, ids = pipeline_db
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO users (cognito_sub, email) VALUES ('u3', 'u3@x')")
+        other = cur.lastrowid
+        cur.execute("INSERT INTO contacts (user_id, name) VALUES (%s, 'Foreign')", (other,))
+        foreign = cur.lastrowid
+    with pytest.raises(errors.InvalidInput, match="unknown contact"):
+        opp.create_opportunity(conn, user_id, _opp(ids["org"], lead_contact_id=foreign))
 
 
 def test_list_board_history_and_status_filter(pipeline_db) -> None:

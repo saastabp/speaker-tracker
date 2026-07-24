@@ -24,6 +24,15 @@ export interface OpportunityInput {
   outcome?: string | null;
 }
 
+/** Create-only superset of OpportunityInput carrying optional lifecycle seeds (backend
+ *  OpportunityCreateInput). Omitting each reproduces the default: start in researching, payment
+ *  status derived from comp_type, no lead. Not accepted by PUT (update stays lifecycle-free). */
+export interface OpportunityCreateInput extends OpportunityInput {
+  starting_status?: string | null; // opportunity_statuses short_name (non-terminal)
+  payment_status?: string | null; // payment_statuses short_name
+  lead_contact_id?: number | null; // contact linked as lead (is_primary) on this gig
+}
+
 export interface OpportunitySummary {
   id: number;
   title: string;
@@ -137,7 +146,7 @@ export function useCreateOpportunity() {
   const api = useApi();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: OpportunityInput) =>
+    mutationFn: (data: OpportunityCreateInput) =>
       api<Opportunity>('/opportunities', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() }),
   });

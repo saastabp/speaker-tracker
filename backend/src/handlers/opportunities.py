@@ -23,6 +23,7 @@ from handlers.responses import opportunity_response
 from models.funnel import FunnelStage
 from models.opportunities import (
     OpportunityCloseInput,
+    OpportunityCreateInput,
     OpportunityInput,
     OpportunityPaymentPatch,
     OpportunityStatusPatch,
@@ -85,12 +86,17 @@ def list_opportunities() -> dict:
 
 @router.post("/opportunities")
 def create_opportunity() -> dict:
-    """Create an opportunity (in ``researching``) and return its detail."""
+    """Create an opportunity (seeding its starting stage / payment / lead) and return its detail."""
     request = authenticate(router.current_event.raw_event)
-    data = OpportunityInput.model_validate(router.current_event.json_body or {})
+    data = OpportunityCreateInput.model_validate(router.current_event.json_body or {})
     with transaction(request.connection) as conn:
         opp_id = opps_repo.create_opportunity(conn, request.user_id, data)
-    logger.info("Created opportunity id=%s user_id=%s", opp_id, request.user_id)
+    logger.info(
+        "Created opportunity id=%s starting_status=%s user_id=%s",
+        opp_id,
+        data.starting_status or "researching",
+        request.user_id,
+    )
     return opportunity_response(request.connection, request.user_id, opp_id)
 
 

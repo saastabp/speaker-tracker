@@ -17,6 +17,7 @@ import { ApiError } from '../api/client';
 import { useContacts } from '../api/contacts';
 import { useContactOutreaches, useCreateOutreach } from '../api/outreaches';
 import { useOpportunities } from '../api/opportunities';
+import { FieldLabel } from './FieldLabel';
 import { TemplatePicker } from './TemplatePicker';
 
 // Email is owned by the composer (it auto-logs an outreach on send), so it is not a manual
@@ -147,21 +148,20 @@ export function LogOutreachModal({
             </Alert>
           )}
 
-          <Select
-            label="Contact"
-            placeholder="Who did you reach out to?"
-            data={contactOptions}
-            value={selectedId != null ? String(selectedId) : null}
-            onChange={(value) => setSelectedId(value ? Number(value) : null)}
-            disabled={locked}
-            withAsterisk
-            searchable
-          />
+          <div>
+            <FieldLabel>Contact</FieldLabel>
+            <Select
+              placeholder="Who did you reach out to?"
+              data={contactOptions}
+              value={selectedId != null ? String(selectedId) : null}
+              onChange={(value) => setSelectedId(value ? Number(value) : null)}
+              disabled={locked}
+              searchable
+            />
+          </div>
 
           <div>
-            <Text size="sm" fw={500} mb={4}>
-              Channel
-            </Text>
+            <FieldLabel>Channel</FieldLabel>
             <SegmentedControl
               data={channelOptions}
               value={channel}
@@ -170,9 +170,7 @@ export function LogOutreachModal({
           </div>
 
           <div>
-            <Text size="sm" fw={500} mb={4}>
-              Kind
-            </Text>
+            <FieldLabel>Kind</FieldLabel>
             <SegmentedControl
               data={kindOptions}
               value={kind}
@@ -186,46 +184,49 @@ export function LogOutreachModal({
             </Text>
           </div>
 
-          {selectedId != null && (
-            <TemplatePicker
-              contactName={resolvedName}
-              allowedChannels={manualChannels}
-              onTemplateSelected={(template) => {
-                setTemplateId(template?.id ?? null);
-                if (template) {
-                  setChannel(template.channel);
-                }
-              }}
-            />
-          )}
+          <TemplatePicker
+            contactName={resolvedName}
+            allowedChannels={manualChannels}
+            onTemplateSelected={(template) => {
+              setTemplateId(template?.id ?? null);
+              if (template) {
+                setChannel(template.channel);
+              }
+            }}
+          />
 
           <Group grow align="flex-start">
-            <TextInput
-              label="Date"
-              type="date"
-              description="Defaults to now"
-              value={occurredOn}
-              onChange={(event) => setOccurredOn(event.currentTarget.value)}
-            />
-            <Select
-              label="Opportunity"
-              placeholder="Optional — link this touch to a gig"
-              data={oppOptions}
-              value={opportunityId}
-              onChange={setOpportunityId}
-              clearable
-              searchable
-            />
+            <div>
+              <FieldLabel>Date</FieldLabel>
+              <TextInput
+                type="date"
+                value={occurredOn}
+                onChange={(event) => setOccurredOn(event.currentTarget.value)}
+              />
+            </div>
+            <div>
+              <FieldLabel helper="optional">Opportunity</FieldLabel>
+              <Select
+                placeholder="Link this touch to a gig"
+                data={oppOptions}
+                value={opportunityId}
+                onChange={setOpportunityId}
+                clearable
+                searchable
+              />
+            </div>
           </Group>
 
-          <Textarea
-            label="Note"
-            placeholder="Optional — what you said or how it went"
-            autosize
-            minRows={2}
-            value={note}
-            onChange={(event) => setNote(event.currentTarget.value)}
-          />
+          <div>
+            <FieldLabel>Note</FieldLabel>
+            <Textarea
+              placeholder="Optional — what you said or how it went"
+              autosize
+              minRows={2}
+              value={note}
+              onChange={(event) => setNote(event.currentTarget.value)}
+            />
+          </div>
 
           <Group justify="space-between" mt="sm">
             <Group>

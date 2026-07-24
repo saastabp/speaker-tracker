@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from models.opportunities import OpportunityInput
+from models.opportunities import OpportunityCreateInput
 from models.outreach import OutreachInput
 from models.targets import TargetInput
 from repositories import dashboard
@@ -60,7 +60,7 @@ def _opp(conn, user_id: int, org_id: int, **kw) -> int:
         "comp_type": "paid",
     }
     base.update(kw)
-    return opp.create_opportunity(conn, user_id, OpportunityInput(**base))
+    return opp.create_opportunity(conn, user_id, OpportunityCreateInput(**base))
 
 
 def _set_last_event(conn, opp_id: int, when: datetime) -> None:
