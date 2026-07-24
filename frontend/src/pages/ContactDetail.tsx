@@ -11,10 +11,11 @@ import {
   Switch,
   Text,
   TextInput,
+  Timeline,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArrowLeft, IconPencil, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconMessagePlus, IconPencil, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
@@ -28,9 +29,26 @@ import {
   useUpdateContact,
   type ContactInput,
 } from '../api/contacts';
+import { useContactOutreaches, useContactTimeline, type TimelineItem } from '../api/outreaches';
 import { useOrganizations } from '../api/organizations';
 import { AffiliationRow } from '../components/AffiliationRow';
 import { ContactFormModal } from '../components/ContactFormModal';
+import { LogOutreachModal } from '../components/LogOutreachModal';
+
+function formatWhen(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
+function label(
+  items: { short_name: string; description: string }[] | undefined,
+  shortName: string | null,
+): string {
+  if (!shortName) {
+    return '';
+  }
+  return items?.find((i) => i.short_name === shortName)?.description ?? shortName;
+}
 
 export function ContactDetail() {
   const { id } = useParams();
@@ -38,6 +56,8 @@ export function ContactDetail() {
   const contact = useContact(contactId);
   const catalogs = useCatalogs();
   const venues = useOrganizations();
+  const outreaches = useContactOutreaches(contactId);
+  const timeline = useContactTimeline(contactId);
   const update = useUpdateContact(contactId);
   const remove = useDeleteContact();
   const addAffiliation = useAddAffiliation(contactId);
@@ -45,6 +65,7 @@ export function ContactDetail() {
   const detachAffiliation = useDetachAffiliation();
   const navigate = useNavigate();
   const [editOpen, editHandlers] = useDisclosure(false);
+  const [logOpen, logHandlers] = useDisclosure(false);
   const [newVenue, setNewVenue] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newPrimary, setNewPrimary] = useState(false);
@@ -66,6 +87,19 @@ export function ContactDetail() {
 
   const affiliatedIds = new Set(c.organizations.map((org) => org.organization_id));
   const availableVenues = (venues.data ?? []).filter((venue) => !affiliatedIds.has(venue.id));
+  const hasPriorOutreach = (outreaches.data?.length ?? 0) > 0;
+
+  function timelineTitle(item: TimelineItem): string {
+    if (item.item_type === 'outreach') {
+      const channel = label(catalogs.data?.outreach_channels, item.channel);
+      const kind = label(catalogs.data?.outreach_kinds, item.kind);
+      return `Outreach · ${channel}${kind ? ` · ${kind}` : ''}`;
+    }
+    if (item.item_type === 'status_event') {
+      return `Moved to ${label(catalogs.data?.opportunity_statuses, item.status)}`;
+    }
+    return 'Note';
+  }
 
   async function handleUpdate(values: ContactInput) {
     await update.mutateAsync(values);
@@ -112,6 +146,9 @@ export function ContactDetail() {
           {warmthLabel && <Badge variant="light">{warmthLabel}</Badge>}
         </Group>
         <Group>
+          <Button leftSection={<IconMessagePlus size={16} />} onClick={logHandlers.open}>
+            Log outreach
+          </Button>
           <Button
             variant="default"
             leftSection={<IconPencil size={16} />}
@@ -228,6 +265,42 @@ export function ContactDetail() {
         )}
       </Card>
 
+      <Card withBorder radius="md">
+        <Text fw={600} mb="sm">
+          Activity
+        </Text>
+        {timeline.isPending ? (
+          <Loader size="sm" />
+        ) : (timeline.data?.length ?? 0) === 0 ? (
+          <Text c="dimmed" size="sm">
+            No outreach or gig activity yet. Log your first touch above.
+          </Text>
+        ) : (
+          <Timeline bulletSize={14} lineWidth={2}>
+            {(timeline.data ?? []).map((item) => (
+              <Timeline.Item
+                key={`${item.item_type}-${item.source_id}`}
+                title={timelineTitle(item)}
+              >
+                {item.text && (
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                    {item.text}
+                  </Text>
+                )}
+                {item.opportunity_title && (
+                  <Anchor component={Link} to={`/pipeline/${item.opportunity_id}`} size="xs">
+                    {item.opportunity_title}
+                  </Anchor>
+                )}
+                <Text size="xs" c="dimmed">
+                  {formatWhen(item.occurred_at)}
+                </Text>
+              </Timeline.Item>
+            ))}
+          </Timeline>
+        )}
+      </Card>
+
       {c.notes && (
         <Card withBorder radius="md">
           <Text fw={600} mb="xs">
@@ -246,6 +319,14 @@ export function ContactDetail() {
         submitLabel="Save"
         initialValues={c}
         onSubmit={handleUpdate}
+      />
+
+      <LogOutreachModal
+        opened={logOpen}
+        onClose={logHandlers.close}
+        contactId={contactId}
+        contactName={c.name}
+        hasPriorOutreach={hasPriorOutreach}
       />
     </Stack>
   );
