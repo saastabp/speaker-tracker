@@ -85,6 +85,20 @@ const ROUTES: RouteDef[] = [
     path: '/opportunities/{id}/notes/{noteId}',
     authRequired: true,
   },
+
+  // Slice 4 — outreach journal + contact timeline (handlers/outreaches.py).
+  { method: apigwv2.HttpMethod.POST, path: '/outreaches', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/outreaches/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/contacts/{id}/outreaches', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/contacts/{id}/timeline', authRequired: true },
+
+  // Slice 4 — message templates (handlers/message_templates.py).
+  { method: apigwv2.HttpMethod.GET, path: '/templates', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/templates', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/templates/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/templates/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/templates/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/templates/{id}/duplicate', authRequired: true },
 ];
 
 export interface ApiStackProps extends StackProps {
