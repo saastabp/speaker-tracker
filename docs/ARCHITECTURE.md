@@ -4,8 +4,8 @@ Authoritative map of how the pieces fit: the React SPA, one CloudFront distribut
 SPA and API, the Python Lambda handlers, the layered backend, the WorkMail/SES/IMAP email
 subsystem, and the CDK stacks that deploy them.
 
-> **Status: implemented through slice 4.** The request path, layers, and CDK stacks here are built
-> and satisfied by slices 1–4; the slices 5–8 endpoint rows below remain target. Derived from `DESIGN.md` §3 and
+> **Status: implemented through slice 5.** The request path, layers, and CDK stacks here are built
+> and satisfied by slices 1–5; the slices 6–8 endpoint rows below remain target. Derived from `DESIGN.md` §3 and
 > `CODING-GUIDELINES.md` §1. Where this doc and a sibling repo disagree, the disagreement is
 > deliberate and called out inline.
 
@@ -221,7 +221,7 @@ table.
 | `outreaches.py` | POST `/outreaches`, DELETE `/outreaches/{id}`, GET `/contacts/{id}/outreaches`, GET `/contacts/{id}/timeline` |
 | `message_templates.py` | GET/POST `/templates`, GET/PUT/DELETE `/templates/{id}`, POST `/templates/{id}/duplicate` |
 | `follow_ups.py` | GET/POST `/follow-ups`, PUT/DELETE `/follow-ups/{id}`, POST `/follow-ups/{id}/complete` |
-| `targets.py` | GET/PUT `/targets` |
+| `targets.py` | GET/PUT `/targets`, DELETE `/targets/{targetType}/{cadence}` |
 | `dashboard.py` | GET `/dashboard` |
 | `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, PATCH `/emails/threads/{id}` (read / close), POST `/emails/send`, POST `/emails/threads/{id}/reply` |
 | `email_imports.py` | GET `/emails/pending-import`, POST `/emails/pending-import/{id}/link` |

@@ -12,8 +12,8 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: implemented through migration `0005` (slices 1–4).** This document is the schema
-> contract; migrations `0001`–`0005` satisfy it, while slices 5–8 (`0006`–`0009`) remain target
+> **Status: implemented through migration `0006` (slices 1–5).** This document is the schema
+> contract; migrations `0001`–`0006` satisfy it, while slices 6–8 (`0007`–`0009`) remain target
 > schema. Derived from `DESIGN.md` §4/§5 and supersedes any older sketch.
 
 **Conventions** (inherited from the sibling apps, see `CODING-GUIDELINES.md` §2):

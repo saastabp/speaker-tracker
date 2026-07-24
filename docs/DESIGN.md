@@ -2,7 +2,7 @@
 
 > Working design doc for a bespoke, behind-auth CRM that funnels **live speaking and
 > podcast-guest gigs** for Donna King (360 Balanced Living). Not for public consumption.
-> Status: **implemented through slice 4** — slices 1–4 shipped (backend + frontend); slices 5–8 remain designed-not-built.
+> Status: **implemented through slice 5** — slices 1–5 shipped (backend + frontend); slices 6–8 remain designed-not-built.
 
 ## 1. Purpose & scope
 

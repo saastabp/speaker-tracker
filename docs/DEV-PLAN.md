@@ -4,7 +4,7 @@ Execution plan for building the app described in `DESIGN.md`, on the schema in `
 the structure in `ARCHITECTURE.md`. Slice numbering follows `DESIGN.md` §6 — **do not renumber**,
 other docs reference these numbers.
 
-> **Status: slices 1–4 shipped (backend + frontend); slices 5–8 remain.** Migrations `0001`–`0005` applied.
+> **Status: slices 1–5 shipped (backend + frontend); slices 6–8 remain.** Migrations `0001`–`0006` applied.
 
 ---
 
