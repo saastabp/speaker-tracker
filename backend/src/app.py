@@ -24,6 +24,7 @@ from handlers import (
     contact_organizations,
     contacts,
     health,
+    message_templates,
     opportunities,
     opportunity_contacts,
     opportunity_notes,
@@ -37,6 +38,7 @@ app.include_router(catalogs.router)
 app.include_router(contacts.router)
 app.include_router(contact_organizations.router)
 app.include_router(health.router)
+app.include_router(message_templates.router)
 app.include_router(opportunities.router)
 app.include_router(opportunity_contacts.router)
 app.include_router(opportunity_notes.router)
