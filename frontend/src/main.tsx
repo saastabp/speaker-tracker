@@ -16,6 +16,7 @@ import { History } from './pages/History';
 import { OpportunityDetail } from './pages/OpportunityDetail';
 import { Pipeline } from './pages/Pipeline';
 import { Placeholder } from './pages/Placeholder';
+import { Templates } from './pages/Templates';
 import { VenueDetail } from './pages/VenueDetail';
 import { Venues } from './pages/Venues';
 import { theme } from './theme';
@@ -42,6 +43,7 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
                   <Route path="venues/:id" element={<VenueDetail />} />
                   <Route path="contacts" element={<Contacts />} />
                   <Route path="contacts/:id" element={<ContactDetail />} />
+                  <Route path="templates" element={<Templates />} />
                   <Route path="*" element={<Placeholder />} />
                 </Route>
               </Routes>
