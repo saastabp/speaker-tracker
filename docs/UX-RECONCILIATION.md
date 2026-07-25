@@ -311,39 +311,49 @@ backend is touched. Check items off as they land.
 
 ## 5. History  (`pages/History.tsx` + history-detail)
 
+> **✅ List + read-only detail SHIPPED & browser-verified (2026-07-25), frontend-only.** List
+> (`History.tsx`): "History" + stat line (closed/delivered/cancelled/lost · $ collected · pro bono),
+> `FilterBar` (search + outcome + comp + dynamic-year pills), columns (Gig w/ talk·format sub /
+> Outcome / Date=event / Format / Comp / Amount / Payment — coloured chips), client-side Export CSV,
+> row-click → detail. Venue column dropped. Detail = **read-only mode of `OpportunityDetail`** when
+> `closed_at` set: hides Edit/Close/Delete + the editable Payment card, adds "· read-only record" +
+> read-only Payment/Paid-on rows in Details. **DEFERRED (backend):** Duplicate + Reopen actions,
+> Invoiced #/date fields; dedicated read-only record component (chose read-only mode instead). NOTE:
+> Notes + Link-contact stay editable on closed gigs (scope was Edit/Delete/Payment only).
+
 ### List (vs mL562–585)
 **High**
-- [ ] FIX — Summary stat line ("9 closed gigs · 6 delivered · 2 cancelled · 1 lost · $1,850 collected · 3 pro bono") — mL564
-- [ ] FIX — Outcome/comp/year filter pills (All outcomes/Delivered/Cancelled/Lost/Paid/Pro bono/2026) — mL569  *(shared filter row)*
-- [ ] FIX — Search box ("Search closed gigs…") — mL568  *(shared)*
+- [x] FIX — Summary stat line (closed · delivered · cancelled · lost · $ collected · pro bono) — mL564
+- [x] FIX — Outcome/comp/year filter pills (All outcomes/Delivered/Cancelled/Lost/Paid/Pro bono + dynamic years) — mL569  *(shared `FilterBar`)*
+- [x] FIX — Search box ("Search closed gigs…") — mL568
 
 **Medium**
-- [ ] FIX — "Export CSV" button — mL565
-- [ ] FIX — "Format" column (Keynote/Workshop/Podcast/Expo) — mL572
-- [ ] FIX — "Comp" column (Paid/Pro bono/Trade chip) — mL572
-- [ ] FIX — "Date" column = event date (currently shows closed_at) — mL572/574
+- [x] FIX — "Export CSV" button (client-side) — mL565
+- [x] FIX — "Format" column — mL572
+- [x] FIX — "Comp" column (Paid/Pro bono/Trade chip) — mL572
+- [x] FIX — "Date" column = event date — mL572/574
 
 **Low**
-- [ ] FIX — Column "Gig" (now "Title") + two-line cell w/ "Talk · format" sub-line — mL572/574
-- [ ] FIX — Column "Amount" (now "Fee") — mL572
-- [ ] FIX — Column "Paid" (now "Payment") — mL572
-- [ ] FIX (remove) — "Venue" column (not in mockup) — impl only
+- [x] FIX — Column "Gig" + two-line cell w/ "Talk · format" sub-line — mL572/574
+- [x] FIX — Column "Amount" — mL572
+- [x] FIX — Column "Payment" (chip) — mL572
+- [x] FIX (remove) — "Venue" column (not in mockup) — impl only
 
 ### Detail (read-only closed-gig record — vs mL588–649)
 **High**
-- [ ] FIX/DISCUSS — Serve a **read-only record** view (Duplicate/Reopen only), not the editable pipeline detail. Decide: separate component vs read-only mode of OpportunityDetail — mL591–592
+- [x] FIX/DISCUSS — Read-only record via a **read-only mode of `OpportunityDetail`** (Brian's call) — hides Edit/Close/Delete + editable Payment when `closed_at` set — mL591–592
 
 **Medium**
-- [ ] FIX — Header status/payment chip row (Delivered / Paid · $ / ✓ Paid date / read-only) — mL591
-- [ ] FIX — "Duplicate" and "Reopen" buttons — mL592
-- [ ] FIX — "Record" card (Closed date + Source) — mL640–646
-- [ ] FIX — "Invoiced" field (invoice date + number) in compensation card — mL612
+- [x] FIX — Header status/payment chip row (Delivered / comp / payment) + "· read-only record" — mL591
+- [ ] DEFER — "Duplicate" and "Reopen" buttons (Reopen needs backend) — mL592
+- [ ] PARTIAL — "Record": Closed-date shown (Payment/Paid-on read-only in Details); Source DEFERRED (backend) — mL640–646
+- [ ] DEFER — "Invoiced" field (invoice date + number) — no columns (backend) — mL612
 
 **Low**
-- [ ] FIX — Heading "Compensation & payment" (now "Money & payment") — mL607
-- [ ] FIX — "Paid on" carries payment method ("· check") — mL613
-- [ ] FIX — "Venue & contact" card (venue line + organizer w/ Warm chip) vs "People on this gig" — mL628–632
-- [ ] FIX — "Outcome notes" card — mL635–638
+- [x] KEEP — Money heading (read-only Payment rows in Details; editable "Payment" card only for open gigs) — mL607
+- [ ] DEFER — "Paid on" payment method ("· check") — no column (backend) — mL613
+- [x] KEEP — "Venue" + "On this gig" cards (from the Opportunity-detail rebuild) vs mockup's combined "Venue & contact" — mL628–632
+- [ ] PARTIAL — "Outcome notes" — `outcome` shows in Details when present; no dedicated card — mL635–638
 
 ---
 

@@ -257,6 +257,9 @@ export function OpportunityDetail() {
 
   const backTo = o.closed_at ? '/history' : '/pipeline';
   const backLabel = o.closed_at ? 'History' : 'Pipeline';
+  // Closed gigs (reached from History) are a read-only record: no descriptive edits, no editable
+  // payment. Reopen / Duplicate + invoice fields are deferred (need backend).
+  const readOnly = Boolean(o.closed_at);
   const heading = o.title;
   const crumbTail = `${o.organization_name} — ${o.title}`;
 
@@ -314,26 +317,35 @@ export function OpportunityDetail() {
                 {o.event_date}
               </Text>
             )}
+            {readOnly && (
+              <Text size="sm" c="dimmed">
+                · read-only record
+              </Text>
+            )}
           </Group>
         </div>
-        <Group>
-          <Button variant="default" leftSection={<IconPencil size={16} />} onClick={editHandlers.open}>
-            Edit
-          </Button>
-          {!o.closed_at && (
+        {!readOnly && (
+          <Group>
+            <Button
+              variant="default"
+              leftSection={<IconPencil size={16} />}
+              onClick={editHandlers.open}
+            >
+              Edit
+            </Button>
             <Button variant="light" color="terracotta" onClick={closeHandlers.open}>
               Close…
             </Button>
-          )}
-          <Button
-            variant="light"
-            color="red"
-            leftSection={<IconTrash size={16} />}
-            onClick={handleDelete}
-          >
-            Delete
-          </Button>
-        </Group>
+            <Button
+              variant="light"
+              color="red"
+              leftSection={<IconTrash size={16} />}
+              onClick={handleDelete}
+            >
+              Delete
+            </Button>
+          </Group>
+        )}
       </Group>
 
       <Grid gutter="md" align="flex-start">
@@ -343,9 +355,11 @@ export function OpportunityDetail() {
             <Card withBorder radius="md">
               <CardTitle
                 action={
-                  <Anchor size="sm" onClick={editHandlers.open} style={{ cursor: 'pointer' }}>
-                    Edit
-                  </Anchor>
+                  !readOnly && (
+                    <Anchor size="sm" onClick={editHandlers.open} style={{ cursor: 'pointer' }}>
+                      Edit
+                    </Anchor>
+                  )
                 }
               >
                 Details
@@ -363,12 +377,14 @@ export function OpportunityDetail() {
                   </Badge>
                 </div>
                 <KV label="Compensation">{compChip}</KV>
+                {readOnly && <KV label="Payment">{paymentLabel}</KV>}
+                {readOnly && o.paid_on && <KV label="Paid on">{o.paid_on}</KV>}
                 <KV label="Angle">{o.angle?.trim() ? o.angle : '—'}</KV>
                 {o.outcome?.trim() && <KV label="Outcome">{o.outcome}</KV>}
               </div>
             </Card>
 
-            <PaymentPanel opp={o} />
+            {!readOnly && <PaymentPanel opp={o} />}
 
             <Card withBorder radius="md">
               <CardTitle action={<Text size="xs" c="dimmed">dated log for this gig</Text>}>
