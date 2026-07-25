@@ -1,18 +1,6 @@
-import {
-  ActionIcon,
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Loader,
-  Stack,
-  Table,
-  Text,
-  Title,
-  Tooltip,
-} from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Loader, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconAlertTriangle, IconCopy, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconAlertTriangle, IconPlus } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useCatalogs } from '../api/catalogs';
 import {
@@ -25,6 +13,7 @@ import {
   type MessageTemplateInput,
 } from '../api/templates';
 import { TemplateFormModal } from '../components/TemplateFormModal';
+import { BRAND_PANEL } from '../theme';
 
 export function Templates() {
   const templates = useTemplates();
@@ -47,12 +36,10 @@ export function Templates() {
     setEditing(null);
     formHandlers.open();
   }
-
   function openEdit(template: MessageTemplate) {
     setEditing(template);
     formHandlers.open();
   }
-
   function closeForm() {
     formHandlers.close();
     setEditing(null);
@@ -65,7 +52,6 @@ export function Templates() {
       await create.mutateAsync(values);
     }
   }
-
   function handleDelete(template: MessageTemplate) {
     if (window.confirm(`Delete “${template.name}”?`)) {
       remove.mutate(template.id);
@@ -74,19 +60,20 @@ export function Templates() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <Title order={2} c="navy.9">
-          Templates
-        </Title>
+      <Group justify="space-between" align="flex-start">
+        <div>
+          <Title order={2} c="navy.9">
+            Message Templates
+          </Title>
+          <Text c="dimmed" size="sm">
+            Edit shared templates in place, or duplicate to keep your own variant. Merge fields like
+            [Name] fill in when you use one.
+          </Text>
+        </div>
         <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-          New Template
+          New template
         </Button>
       </Group>
-
-      <Text c="dimmed" size="sm">
-        Reusable outreach copy. Shared templates are edited in place; Duplicate makes a personal copy
-        you can tweak.
-      </Text>
 
       {templates.isLoading && (
         <Group>
@@ -99,75 +86,73 @@ export function Templates() {
           {templates.error.message}
         </Alert>
       )}
+      {templates.data?.length === 0 && <Text c="dimmed">No templates yet.</Text>}
 
       {templates.data && templates.data.length > 0 && (
-        <Table highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Name</Table.Th>
-              <Table.Th>Purpose</Table.Th>
-              <Table.Th>Channel</Table.Th>
-              <Table.Th>Scope</Table.Th>
-              <Table.Th ta="right">Actions</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {templates.data.map((template) => (
-              <Table.Tr key={template.id}>
-                <Table.Td>{template.name}</Table.Td>
-                <Table.Td>{kindLabel(template.kind)}</Table.Td>
-                <Table.Td>{channelLabel(template.channel)}</Table.Td>
-                <Table.Td>
-                  {template.is_shared ? (
-                    <Badge variant="light">Shared</Badge>
-                  ) : (
-                    <Badge variant="light" color="gray">
-                      Personal
-                    </Badge>
-                  )}
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="xs" justify="flex-end" wrap="nowrap">
-                    <Tooltip label="Edit">
-                      <ActionIcon variant="subtle" onClick={() => openEdit(template)}>
-                        <IconPencil size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                    <Tooltip label="Duplicate">
-                      <ActionIcon
-                        variant="subtle"
-                        onClick={() => duplicate.mutate(template.id)}
-                        loading={duplicate.isPending && duplicate.variables === template.id}
-                      >
-                        <IconCopy size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                    {!template.is_shared && (
-                      <Tooltip label="Delete">
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          onClick={() => handleDelete(template)}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
-                      </Tooltip>
-                    )}
-                  </Group>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+          {templates.data.map((template) => (
+            <Card key={template.id} withBorder radius="md" padding="md">
+              <Group justify="space-between" mb={4} wrap="nowrap">
+                <Text fw={600} c="navy.9" lineClamp={1}>
+                  {template.name}
+                </Text>
+                {template.is_shared ? (
+                  <Badge color="gray" variant="light">
+                    Shared
+                  </Badge>
+                ) : (
+                  <Badge color="good" variant="light">
+                    Your copy
+                  </Badge>
+                )}
+              </Group>
+              <Text size="xs" c="dimmed" mb="sm">
+                {kindLabel(template.kind)} · {channelLabel(template.channel)}
+              </Text>
+              <Text
+                size="sm"
+                lineClamp={5}
+                p="sm"
+                style={{ background: BRAND_PANEL, borderRadius: 8, whiteSpace: 'pre-wrap' }}
+              >
+                {template.body}
+              </Text>
+              <Group gap="xs" mt="md">
+                <Button size="xs" variant="default" onClick={() => openEdit(template)}>
+                  Edit
+                </Button>
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={() => duplicate.mutate(template.id)}
+                  loading={duplicate.isPending && duplicate.variables === template.id}
+                >
+                  Duplicate
+                </Button>
+                {!template.is_shared && (
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    onClick={() => handleDelete(template)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </Group>
+            </Card>
+          ))}
+        </SimpleGrid>
       )}
 
       <TemplateFormModal
         opened={formOpen}
         onClose={closeForm}
-        title={editing ? 'Edit Template' : 'New Template'}
-        submitLabel={editing ? 'Save' : 'Create'}
+        title={editing ? 'Edit template' : 'New template'}
+        submitLabel={editing ? 'Save template' : 'Create template'}
         initialValues={editing ?? undefined}
         onSubmit={handleSubmit}
+        onDuplicate={editing ? () => duplicate.mutateAsync(editing.id) : undefined}
       />
     </Stack>
   );

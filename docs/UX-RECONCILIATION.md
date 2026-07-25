@@ -359,38 +359,48 @@ backend is touched. Check items off as they land.
 
 ## 6. Templates  (`pages/Templates.tsx` + `TemplateFormModal`)
 
+> **✅ Page + modal SHIPPED & browser-verified (2026-07-25), frontend-only.** Page: rebuilt from a
+> data table to a responsive **card grid** (`SimpleGrid` 1→2→3 cols) — each card = name + scope chip
+> (Shared / "Your copy"), a `kind · channel` meta line, a warm body-preview box (line-clamped), and
+> Edit / Duplicate / Delete (Delete on personal only). "Message Templates" heading + mockup subhead +
+> "+ New template". Modal: FieldLabels, kind-hint callout (`[Name]` note + shared-template warning),
+> "Duplicate as my copy" footer action (shared only, wired to `useDuplicateTemplate`), "Save
+> template", "Shared template · editable in place" hint. **DEFERRED (no API fields):** per-card
+> audience/description paragraph + "Used N× · last …" usage metadata. **KEEP:** split Purpose+Channel
+> selects + Subject field.
+
 ### Page (vs mL989–1023)
 **High**
-- [ ] FIX — Rebuild as **card grid** (rich per-template card) vs data table — mL994–1022
-- [ ] FIX — Per-template body / merge-field preview ("Hi [Name], I've been following…") — mL999/1008/1017
-- [ ] FIX — Per-template audience/description paragraph — mL998/1007/1016
+- [x] FIX — Rebuild as **card grid** (rich per-template card) vs data table — mL994–1022
+- [x] FIX — Per-template body / merge-field preview — mL999/1008/1017
+- [ ] DEFER — Per-template audience/description paragraph — no field (backend); show `kind · channel` meta instead — mL998/1007/1016
 
 **Medium**
-- [ ] FIX — Per-template usage metadata ("Used 7 times · last Jul 12") — mL1000/1009/1018
-- [ ] KEEP — Delete action (personal templates only) — reasonable — impl only
-- [ ] FIX — Scope chip "Your copy" (now "Personal") — mL1005
+- [ ] DEFER — Per-template usage metadata ("Used 7 times · last …") — no field (backend) — mL1000/1009/1018
+- [x] KEEP — Delete action (personal templates only) — reasonable — impl only
+- [x] FIX — Scope chip "Your copy" (was "Personal") — mL1005
 
 **Low**
-- [ ] FIX — Heading "Message Templates" — mL991
-- [ ] FIX — Button "+ New template" — mL992
-- [ ] FIX — Subhead wording — mL991
-- [ ] FIX — Edit/Duplicate as labeled text buttons vs icon-only — mL1001
-- [ ] KEEP? — Explicit Purpose/Channel columns (table-only artifact; moot after card rebuild) — impl only
+- [x] FIX — Heading "Message Templates" — mL991
+- [x] FIX — Button "+ New template" — mL992
+- [x] FIX — Subhead wording — mL991
+- [x] FIX — Edit/Duplicate as labeled text buttons vs icon-only — mL1001
+- [x] KEEP — Explicit Purpose/Channel (now the card meta line; splits kept in the modal) — impl only
 
 ### Modal (vs mL1280–1291)
 **High**
-- [ ] FIX — "Duplicate as my copy" action in footer — mL1291
-- [ ] FIX — `kind-hint` block (merge-field note + shared-template warning) — mL1289
+- [x] FIX — "Duplicate as my copy" action in footer (shared templates) — mL1291
+- [x] FIX — `kind-hint` block (merge-field note + shared-template warning) — mL1289
 
 **Medium**
-- [ ] KEEP — Split Purpose + Channel selects vs mockup's single "Use for" (matches the channel/purpose data model) — mL1286
-- [ ] KEEP — "Subject" field (EXTRA; needed for email templates) — impl only
+- [x] KEEP — Split Purpose + Channel selects vs mockup's single "Use for" (matches the channel/purpose data model) — mL1286
+- [x] KEEP — "Subject" field (EXTRA; needed for email templates) — impl only
 
 **Low**
-- [ ] FIX — Footer status hint "Shared template · editable in place" — mL1291
-- [ ] FIX — Save button "Save template" — mL1291
-- [ ] FIX — Body helper wording — mL1288
-- [ ] KEEP? — Footer "Cancel" button — impl only
+- [x] FIX — Footer status hint "Shared template · editable in place" — mL1291
+- [x] FIX — Save button "Save template" — mL1291
+- [x] FIX — Body helper wording — mL1288
+- [x] KEEP — Footer "Cancel" button — impl only
 
 ---
 
