@@ -4,7 +4,7 @@ import {
   Button,
   Group,
   Modal,
-  Select,
+  SegmentedControl,
   Stack,
   Text,
   Textarea,
@@ -17,6 +17,7 @@ import { Link } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
 import { useContacts, type ContactInput } from '../api/contacts';
+import { FieldLabel } from './FieldLabel';
 
 const EMPTY: ContactInput = {
   name: '',
@@ -95,9 +96,15 @@ export function ContactFormModal({
     validate: { name: (value) => (value.trim() ? null : 'Name is required') },
   });
 
+  // Refresh on open; default Warmth to the first tier (the segmented control has no empty state).
   useEffect(() => {
     if (opened) {
-      form.setValues(normalize(initialValues));
+      const values = normalize(initialValues);
+      if (!values.warmth_tier) {
+        const first = catalogs.data?.warmth_tiers?.[0]?.short_name;
+        if (first) values.warmth_tier = first;
+      }
+      form.setValues(values);
       setError(null);
     }
   }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -130,31 +137,54 @@ export function ContactFormModal({
               {error}
             </Alert>
           )}
-          <TextInput label="Name" withAsterisk {...form.getInputProps('name')} />
+
+          <div>
+            <FieldLabel>Name</FieldLabel>
+            <TextInput {...form.getInputProps('name')} />
+          </div>
           {dedupe && <DuplicateHints name={form.values.name} />}
-          <Group grow>
-            <TextInput label="Email" {...form.getInputProps('email')} />
-            <TextInput label="Phone" {...form.getInputProps('phone')} />
+
+          <Group grow align="flex-start">
+            <div>
+              <FieldLabel>Email</FieldLabel>
+              <TextInput {...form.getInputProps('email')} />
+            </div>
+            <div>
+              <FieldLabel helper="optional">Phone</FieldLabel>
+              <TextInput placeholder="(808) …" {...form.getInputProps('phone')} />
+            </div>
           </Group>
-          <Select
-            label="Warmth"
-            placeholder="Not set"
-            data={warmthOptions}
-            clearable
-            {...form.getInputProps('warmth_tier')}
-          />
-          <TextInput
-            label="Source"
-            description="How you met, or where they came from"
-            {...form.getInputProps('source')}
-          />
-          <Textarea
-            label="How you know them"
-            autosize
-            minRows={2}
-            {...form.getInputProps('how_you_know')}
-          />
-          <Textarea label="Notes" autosize minRows={2} {...form.getInputProps('notes')} />
+
+          <div>
+            <FieldLabel>Warmth</FieldLabel>
+            <SegmentedControl
+              data={warmthOptions}
+              value={form.values.warmth_tier ?? ''}
+              onChange={(value) => form.setFieldValue('warmth_tier', value)}
+            />
+          </div>
+
+          <div>
+            <FieldLabel helper="optional">Warm intro / mutual connection</FieldLabel>
+            <TextInput
+              placeholder="e.g. Jay Nakamura (BNI) offered an introduction"
+              {...form.getInputProps('how_you_know')}
+            />
+          </div>
+
+          <div>
+            <FieldLabel helper="optional">Source</FieldLabel>
+            <TextInput
+              placeholder="How you met, or where they came from"
+              {...form.getInputProps('source')}
+            />
+          </div>
+
+          <div>
+            <FieldLabel helper="optional">Notes</FieldLabel>
+            <Textarea autosize minRows={2} {...form.getInputProps('notes')} />
+          </div>
+
           <Group justify="flex-end" mt="sm">
             <Button variant="default" onClick={onClose}>
               Cancel

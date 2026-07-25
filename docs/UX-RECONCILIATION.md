@@ -242,57 +242,70 @@ backend is touched. Check items off as they land.
 
 ## 4. Contacts  (`pages/Contacts.tsx` + `ContactDetail.tsx` + `ContactFormModal`)
 
+> **✅ List + detail + modal SHIPPED & browser-verified (2026-07-24), frontend-only.** List:
+> "Contacts" + "N people · M power partners", `FilterBar` (search + Everyone/Power-partners), ★ +
+> "Power partner" sub-label, colour warmth chips, Venues count, Email column dropped, row-click.
+> Detail: breadcrumb, header (★ + power-partner/warmth chips), two-column grid — Affiliations (kept
+> `AffiliationRow`, "+ Add affiliation" toggles the form) / Activity (existing contact timeline) /
+> Notes + Reach (email/phone) / Relationship (power-partner + warmth explanations) / Details (Warm
+> intro / Source / Added). Modal: FieldLabels, Warmth → segmented, how-you-know relabeled "Warm
+> intro / mutual connection", kept dedupe + Source. New `contactChips.ts` (`warmthColor`).
+> **DEFERRED:** Role·Org + Source + Last-touch columns + Needs-follow-up pill (summary/`follow_ups`);
+> Opportunities-across-orgs (no contact→opps); Emails + Compose (6a); LinkedIn/Instagram (no
+> columns); modal org-attach + power-partner toggle + dedicated dedupe-search. **KEEP:** editable
+> `AffiliationRow`, Delete, Source field, name-triggered dedupe hints.
+
 ### List (vs mL745–767)
 **High**
-- [ ] FIX — Search box — mL751  *(shared filter row)*
-- [ ] FIX — Filter pills (Everyone / Power partners / Needs follow-up) — mL752  *(shared)*
-- [ ] FIX — "Role · Organization" column w/ "+N orgs" overflow chip (now bare "Venues" count) — mL755/759
+- [x] FIX — Search box — mL751  *(shared `FilterBar`)*
+- [x] FIX — Filter pills (Everyone / Power partners; Needs-follow-up DEFERRED — `follow_ups`) — mL752
+- [ ] DEFER — "Role · Organization" column w/ "+N orgs" overflow — summary has only org count (backend) — mL755/759
 
 **Medium**
-- [ ] FIX — "Source" column — mL755
-- [ ] FIX — "Last touch" column — mL755
-- [ ] DEFER — "Next follow-up" column (needs `follow_ups`) — mL755/761/763
+- [ ] DEFER — "Source" column — not in the contact summary (backend) — mL755
+- [ ] DEFER — "Last touch" column — not in the contact summary (backend) — mL755
+- [ ] DEFER — "Next follow-up" column (needs `follow_ups`/0009) — mL755/761/763
 
 **Low**
-- [ ] FIX (remove) — "Email" column (not in mockup) — impl only
-- [ ] FIX — Header subtitle "7 people · 2 power partners" — mL747
-- [ ] FIX — Power-partner "Power partner" sub-label under name — mL757/759
-- [ ] FIX — Add button "+ Add contact" — mL748
+- [x] FIX (remove) — "Email" column (not in mockup) — impl only
+- [x] FIX — Header subtitle "N people · M power partners" — mL747
+- [x] FIX — Power-partner "Power partner" sub-label under name — mL757/759
+- [x] FIX — Add button "+ Add contact" — mL748
 
 ### Detail (vs mL769–847)
 **High**
-- [ ] FIX — "Opportunities across orgs" card (role per gig + Introducer/Primary + status chips) — mL785–797
-- [ ] FIX — "Relationship" card (power-partner marker + warmth explanation) — mL823–829
+- [ ] DEFER — "Opportunities across orgs" card — no contact→opps list (backend) — mL785–797
+- [x] FIX — "Relationship" card (power-partner marker + warmth explanation) — mL823–829
 - [ ] DEFER — "Compose email" primary action (6a) — mL773
 
 **Medium**
 - [ ] DEFER — "Emails" card (per-contact thread list) (6a) — mL798–803
-- [ ] DEFER — "Next follow-up" card (needs `follow_ups`) — mL830–836
-- [ ] FIX — Power-partner marker on header + header chips ("Wears three hats…") — mL772
-- [ ] FIX — "Reach her" block: add LinkedIn + Instagram — mL816–821
+- [ ] DEFER — "Next follow-up" card (needs `follow_ups`/0009) — mL830–836
+- [x] FIX — Power-partner marker (★) on header + power-partner/warmth chips — mL772
+- [ ] PARTIAL — "Reach" block: Email + Phone done; LinkedIn + Instagram DEFERRED (no columns — backend) — mL816–821
 
 **Low**
-- [ ] FIX — Details card "Added" date — mL838–843
-- [ ] FIX — Action "Log touch" (now "Log outreach") — mL773
-- [ ] KEEP — Edit/Delete header buttons (reasonable) — impl only
-- [ ] FIX — Affiliations "+ Add affiliation" button (progressive disclosure) vs always-inline row — mL778
+- [x] FIX — Details card "Added" date (+ Source, Warm intro) — mL838–843
+- [x] FIX — Action "Log outreach" (opens `LogOutreachModal`, contact preselected) — mL773
+- [x] KEEP — Edit/Delete header buttons (reasonable) — impl only
+- [x] FIX — Affiliations "+ Add affiliation" button (progressive disclosure) — mL778
 
 ### Modal (vs mL1158–1197)
 **High**
-- [ ] FIX — Power-partner toggle (★) + explanatory description — mL1188–1191
-- [ ] FIX — Multi-hat org attach ("Add this org to her" + note) — mL1163–1170
-- [ ] FIX — "Organization" select + "Role / title at this org" fields — mL1174/1176
+- [ ] DEFER — Power-partner toggle (★) + description — power-partner is per-affiliation, set on detail — mL1188–1191
+- [ ] DEFER — Multi-hat org attach ("Add this org to her") — affiliations added on the detail page — mL1163–1170
+- [ ] DEFER — "Organization" select + "Role / title at this org" — org-attach on create (backend/flow) — mL1174/1176
 
 **Medium**
-- [ ] FIX — "Warm intro / mutual connection" field — mL1192
-- [ ] FIX — Warmth as Cold/Warming/Warm segmented control vs dropdown — mL1185–1187
-- [ ] FIX — Dedupe as dedicated "Find existing person first" search vs passive Name-triggered alert — mL1162
+- [x] FIX — "Warm intro / mutual connection" field (relabeled `how_you_know`) — mL1192
+- [x] FIX — Warmth as Cold/Lukewarm/Warm segmented control vs dropdown — mL1185–1187
+- [ ] KEEP — Dedupe as name-triggered hint (dedicated "find first" search DEFERRED — UX rework) — mL1162
 
 **Low**
-- [ ] FIX — LinkedIn + Instagram fields — mL1182–1183
-- [ ] KEEP? — "Source" text field (EXTRA in modal; mockup has it on detail) — impl only
-- [ ] FIX — "…or create a new person" section divider — mL1171
-- [ ] FIX — Submit button "Add contact" — mL1195
+- [ ] DEFER — LinkedIn + Instagram fields — no columns (backend) — mL1182–1183
+- [x] KEEP — "Source" text field (EXTRA in modal; mockup has it on detail) — impl only
+- [ ] N/A — "…or create a new person" divider — moot without the find-first/create split — mL1171
+- [x] FIX — Submit button "Add contact" — mL1195
 
 ---
 
