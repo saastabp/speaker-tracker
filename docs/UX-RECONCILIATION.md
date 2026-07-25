@@ -1,8 +1,13 @@
 # Speaker Tracker — UX Reconciliation
 
-> **Status: open — reconciliation pass on branch `ux-reconciliation` (started 2026-07-23).**
-> The implemented SPA drifted from the Donna-approved mockup. This is the tracked worklist to
-> bring each page back into line before resuming slice 6a.
+> **Status: essentially complete — all pages reconciled (branch `ux-reconciliation`, 2026-07-23 →
+> 07-25).** §1 Dashboard, §2 Pipeline (board + modals), §2b Opportunity detail, §3 Venues, §4
+> Contacts, §5 History, §6 Templates, §7 Targets — all shipped & browser-verified; §8 Nav was
+> reconciled early via `AppShell`. Per-section banners record what shipped, what was deferred (mostly
+> backend-dependent: `follow_ups`/0009, slice-6a email composer, summary fields the API lacks), and
+> the few WON'T-DO decisions. App-wide: mockup radius/brand-border theme + shared `FieldLabel` /
+> `FilterBar` / `detailCards` / `opportunityChips` / `venueChips` / `contactChips`. Remaining open
+> items are all tagged DEFER/PARTIAL and belong to later slices.
 
 **Source of truth:** `samples/speaker-tracker-mockup.html` (Donna-approved) + the mockup-render
 screenshots. Line refs below (`mL###`) point into that HTML file.
@@ -406,20 +411,29 @@ backend is touched. Check items off as they land.
 
 ## 7. Targets  (`pages/Targets.tsx` vs mL1026–1068)
 
+> **✅ Visual polish SHIPPED & browser-verified (2026-07-25), frontend-only.** The mockup's
+> progress-list rebuild was **REJECTED by Brian** (2026-07-25): Targets is the *setting* surface only
+> — actual-vs-goal **progress already lives on the Dashboard**, so a per-row meter would duplicate it;
+> and **"+ New target" isn't supportable** (targets are a fixed catalog, each tied to a specific
+> Dashboard aggregation — you can't add an arbitrary one without building the backend rollup). Kept
+> the target×cadence editable matrix (functionally fine); polished it to the app standard: wrapped in
+> a rounded `Card`, uppercase/tracked column headers, navy target labels, setting-focused subtitle
+> ("…Progress is tracked on the Dashboard"). Inputs inherit the brand theme.
+
 **High**
-- [ ] FIX/DISCUSS — Rebuild as a **progress-tracking list** (one cadence per target + progress meter + actual/goal + Edit) rather than the target×cadence entry matrix — mL1031–1068
-- [ ] FIX — Actual-vs-target **progress meter** per row (good/warm color states) — mL1036–1064
-- [ ] FIX — "Actual / Goal" numeric column (e.g. 4/5, 6/8) — mL1037–1065
+- [x] WON'T-DO — Progress-tracking-list rebuild — duplicates the Dashboard; Targets is setting-only (Brian) — mL1031–1068
+- [x] WON'T-DO — Actual-vs-target progress meter per row — on the Dashboard already — mL1036–1064
+- [x] WON'T-DO — "Actual / Goal" numeric column — on the Dashboard already — mL1037–1065
 
 **Medium**
-- [ ] FIX — "+ New target" button — mL1029
-- [ ] FIX — Per-row "Edit" button vs inline-editable cells — mL1038–1066
-- [ ] FIX — Single cadence chip per target vs three editable cadence columns — mL1035–1063
-- [ ] FIX — Subtitle "Goals that fit two hours a week — one hour Monday, one hour Friday" — mL1028
+- [x] WON'T-DO — "+ New target" button — targets are a fixed catalog tied to backend aggregations — mL1029
+- [x] KEEP — Inline-editable cells (save on blur) instead of a per-row Edit button — impl only
+- [x] KEEP — Three editable cadence columns (the setting matrix) vs a single cadence chip — mL1035–1063
+- [x] KEEP — Setting-focused subtitle instead of the mockup's two-hours-a-week framing — mL1028
 
 **Low**
-- [ ] FIX — Two-line target labels (name + helper copy) for the five signed-off targets — mL1034–1062
-- [ ] FIX — Column headers (Target / Cadence / Progress / Actual · Goal) — mL1032
+- [ ] PARTIAL — Two-line target labels — names wrap; no separate helper copy (no field) — mL1034–1062
+- [x] FIX — Column headers polished (Target / Weekly / Monthly / Quarterly, uppercase) — mL1032
 
 ---
 
