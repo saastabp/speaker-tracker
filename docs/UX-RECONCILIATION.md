@@ -168,60 +168,73 @@ backend is touched. Check items off as they land.
 
 ## 3. Venues  (`pages/Venues.tsx` + `VenueDetail.tsx` + `VenueFormModal`)
 
+> **✅ List + detail + modal SHIPPED & browser-verified (2026-07-24), frontend-only.** Shared
+> `FilterBar` (search + pill filters — reused by Contacts/History). List: "Venues & Organizations"
+> heading + count, search + type/Ready pills, colour type chips, why-it-fits, Ready dot, Location
+> demoted to org subtitle. Detail: breadcrumb, header (type chip + website + ready), two-column grid
+> — Research–Kindling / Opportunities (client-side filter of `useOpportunities` by org) / Contacts
+> (kept `AffiliationRow`) / Details (Type/Location/Added); Log-touch opens the outreach modal.
+> Modal: FieldLabels, mockup field order, Research–Kindling divider, kind-hint callout, "Save,
+> finish research later". Promoted shared `components/detailCards.tsx` + `venueChips.ts`.
+> **DEFERRED (backend):** Last-touch + research fraction (venue summary lacks both); Activity panel
+> (no org-scoped timeline); Source field (column exists in 0002, not in model/API); warmth chips +
+> on-this-gig contacts + Compose email (6a) + Next-follow-up (0009). **KEEP:** editable
+> `AffiliationRow`, Delete, Log-outreach + Email-domain + Notes (impl extras).
+
 ### List (vs mL652–674)
 **High**
-- [ ] FIX — Search box ("Search venues…") — mL658  *(shared filter row)*
-- [ ] FIX — Filter pills (All types / Resorts / Networks / Podcasts / Ready only) — mL659  *(shared)*
-- [ ] FIX — "Last touch" column — mL662
+- [x] FIX — Search box ("Search venues…") — mL658  *(shared `FilterBar`)*
+- [x] FIX — Filter pills (data-driven type pills present in the list + Ready only) — mL659  *(shared)*
+- [ ] DEFER — "Last touch" column — venue summary has no last-outreach timestamp (backend) — mL662
 
 **Medium**
-- [ ] FIX — Research column: show partial progress fraction (2/3) for not-ready rows — mL668–671
-- [ ] FIX — Organization cell subtitle line ("Statewide · est. 1978") — mL664
-- [ ] FIX — Type as color-coded chip vs plain text — mL664–671
+- [ ] DEFER — Research column partial fraction (2/3) — summary has only `research_ready` bool (backend) — mL668–671
+- [x] FIX — Organization cell subtitle line (location) — mL664
+- [x] FIX — Type as color-coded chip vs plain text — mL664–671
 
 **Low**
-- [ ] FIX — Column header "Organization" (now "Name") — mL662
-- [ ] FIX — Page heading "Venues & Organizations" + count subhead ("8 tracked · 5 outreach-ready") — mL654
-- [ ] FIX — Column order (Organization, Type, Why it fits, Research, Contacts, Last touch) — mL662
-- [ ] FIX (remove) — "Location" column (not in mockup list) — impl only
-- [ ] KEEP? — "Log outreach" button in list header — impl only
-- [ ] FIX — Add button "+ Add venue" — mL655
+- [x] FIX — Column header "Organization" (was "Name") — mL662
+- [x] FIX — Page heading "Venues & Organizations" + count subhead — mL654
+- [x] FIX — Column order (Organization, Type, Why it fits, Research, Contacts) — mL662
+- [x] FIX (remove) — "Location" column (now the org subtitle) — impl only
+- [x] KEEP — "Log outreach" button in list header — impl only
+- [x] FIX — Add button "+ Add venue" — mL655
 
 ### Detail (vs mL677–742)
 **High**
-- [ ] FIX — "Opportunities" panel (opp row, stage chip, on-this-gig contact chips) — mL691–705
-- [ ] FIX — "Activity" panel (outreach + stage-change timeline) — mL706–714
+- [x] FIX — "Opportunities" panel (opp row + stage chip; on-this-gig contact chips DEFERRED — need opp detail) — mL691–705
+- [ ] DEFER — "Activity" panel — no org-scoped timeline endpoint (backend) — mL706–714
 - [ ] DEFER — "Compose email" action (6a) — mL681
-- [ ] DEFER — "Log touch" action — needs follow-up/outreach entry point; wire when reconciling outreach — mL681
+- [x] FIX — "Log touch" action (opens `LogOutreachModal`) — mL681
 
 **Medium**
-- [ ] DEFER — "Next follow-up" panel (needs `follow_ups`) — mL724–730
-- [ ] FIX — "Details" panel (Type / Location / Source / Added key-value grid) — mL731–739
-- [ ] FIX — Research card header "Edit" affordance — mL686
-- [ ] FIX — Research card title "Research — Kindling" — mL686
-- [ ] FIX — Contacts panel: warmth chips + power-partner star — mL720–721
+- [ ] DEFER — "Next follow-up" panel (needs `follow_ups`/0009) — mL724–730
+- [x] FIX — "Details" panel (Type / Location / Added; Source DEFERRED — backend) — mL731–739
+- [x] FIX — Research card header "Edit" affordance — mL686
+- [x] FIX — Research card title "Research — Kindling" — mL686
+- [ ] PARTIAL — Contacts panel: power-partner star kept (`AffiliationRow`); warmth chips DEFERRED (affiliation has no warmth — backend) — mL720–721
 
 **Low**
-- [ ] FIX — Header: colored type chip + description + website + Outreach-ready inline — mL680
-- [ ] FIX — Ready badge label "Outreach-ready" — mL680
-- [ ] FIX — Breadcrumb "Venues & Orgs › <name>" — mL678
-- [ ] KEEP — "Delete" button (reasonable real-app addition) — impl only
+- [x] FIX — Header: colored type chip + website + Outreach-ready inline (prose description omitted — no field) — mL680
+- [x] FIX — Ready badge label "Outreach-ready" — mL680
+- [x] FIX — Breadcrumb "Venues & Orgs › <name>" — mL678
+- [x] KEEP — "Delete" button (reasonable real-app addition) — impl only
 
 ### Modal (vs mL1134–1155)
 **High**
-- [ ] FIX — "Source" select field — mL1145
-- [ ] DEFER/FIX — Research-readiness hint callout (references the target — safe to add as static copy) — mL1151
+- [ ] DEFER — "Source" field — column exists (0002) but not in model/API; needs backend + deploy — mL1145
+- [x] FIX — Research-readiness hint callout (static copy) — mL1151
 
 **Medium**
-- [ ] FIX — "Research — Kindling" section divider before the three fields — mL1147
-- [ ] KEEP? — "Notes" field (EXTRA) — impl only
-- [ ] KEEP? — "Email domain" field (EXTRA) — impl only
+- [x] FIX — "Research — Kindling" section divider before the three fields — mL1147
+- [x] KEEP — "Notes" field (EXTRA) — impl only
+- [x] KEEP — "Email domain" field (EXTRA) — impl only
 
 **Low**
-- [ ] FIX — Name label "Organization name" — mL1138
-- [ ] FIX — Website "optional" tag — mL1144
-- [ ] FIX — Field order (Name; Type/Location; Website/Source) — mL1138–1146
-- [ ] FIX — Secondary footer action "Save, finish research later" — mL1153
+- [x] FIX — Name label "Organization name" — mL1138
+- [x] FIX — Website "optional" tag — mL1144
+- [x] FIX — Field order (Name; Type/Location; Website/Email-domain — Source deferred) — mL1138–1146
+- [x] FIX — Secondary footer action "Save, finish research later" — mL1153
 
 *(Kindling fields What it is / Why it fits / How to approach are present in both — OK.)*
 

@@ -1,9 +1,11 @@
-import { Alert, Button, Group, Modal, Select, Stack, Textarea, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, Select, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useState } from 'react';
 import { useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
 import type { OrganizationInput } from '../api/organizations';
+import { BRAND_LINE, BRAND_PANEL } from '../theme';
+import { FieldLabel } from './FieldLabel';
 
 const EMPTY: OrganizationInput = {
   organization_type: '',
@@ -54,6 +56,7 @@ export function VenueFormModal({
   const catalogs = useCatalogs();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const isCreate = !initialValues;
 
   const form = useForm<OrganizationInput>({
     initialValues: normalize(initialValues),
@@ -98,45 +101,98 @@ export function VenueFormModal({
               {error}
             </Alert>
           )}
-          <Select
-            label="Type"
-            placeholder="Select a type"
-            data={typeOptions}
-            withAsterisk
-            searchable
-            {...form.getInputProps('organization_type')}
-          />
-          <TextInput label="Name" withAsterisk {...form.getInputProps('name')} />
-          <Group grow>
-            <TextInput label="Location" {...form.getInputProps('location')} />
-            <TextInput label="Website" {...form.getInputProps('website_url')} />
+
+          <div>
+            <FieldLabel>Organization name</FieldLabel>
+            <TextInput {...form.getInputProps('name')} />
+          </div>
+
+          <Group grow align="flex-start">
+            <div>
+              <FieldLabel>Type</FieldLabel>
+              <Select
+                placeholder="Select a type"
+                data={typeOptions}
+                searchable
+                {...form.getInputProps('organization_type')}
+              />
+            </div>
+            <div>
+              <FieldLabel>Location</FieldLabel>
+              <TextInput {...form.getInputProps('location')} />
+            </div>
           </Group>
-          <TextInput
-            label="Email domain"
-            description="Matches inbound email later, e.g. venue.com"
-            {...form.getInputProps('email_domain')}
-          />
-          <Textarea label="What it is" autosize minRows={2} {...form.getInputProps('what_it_is')} />
-          <Textarea
-            label="Why it fits"
-            autosize
-            minRows={2}
-            {...form.getInputProps('why_it_fits')}
-          />
-          <Textarea
-            label="How to approach"
-            autosize
-            minRows={2}
-            {...form.getInputProps('how_to_approach')}
-          />
-          <Textarea label="Notes" autosize minRows={2} {...form.getInputProps('notes')} />
+
+          <Group grow align="flex-start">
+            <div>
+              <FieldLabel helper="optional">Website</FieldLabel>
+              <TextInput placeholder="https://…" {...form.getInputProps('website_url')} />
+            </div>
+            <div>
+              <FieldLabel helper="optional">Email domain</FieldLabel>
+              <TextInput placeholder="venue.com" {...form.getInputProps('email_domain')} />
+            </div>
+          </Group>
+
+          <Text
+            fw={700}
+            size="xs"
+            tt="uppercase"
+            c="terracotta.7"
+            mt="xs"
+            pb={6}
+            style={{ letterSpacing: '0.05em', borderBottom: `1px solid ${BRAND_LINE}` }}
+          >
+            Research — Kindling
+          </Text>
+
+          <div>
+            <FieldLabel>What it is</FieldLabel>
+            <Textarea autosize minRows={2} {...form.getInputProps('what_it_is')} />
+          </div>
+          <div>
+            <FieldLabel>Why it fits</FieldLabel>
+            <Textarea autosize minRows={2} {...form.getInputProps('why_it_fits')} />
+          </div>
+          <div>
+            <FieldLabel>How to approach</FieldLabel>
+            <Textarea
+              autosize
+              minRows={2}
+              placeholder="What's the play? (attend an event first, warm intro, who to ask for…)"
+              {...form.getInputProps('how_to_approach')}
+            />
+          </div>
+          <div>
+            <FieldLabel helper="optional">Notes</FieldLabel>
+            <Textarea autosize minRows={2} {...form.getInputProps('notes')} />
+          </div>
+
+          <Text size="xs" c="dimmed" p="sm" style={{ background: BRAND_PANEL, borderRadius: 8 }}>
+            Fill in all three research fields and add at least one contact to count this venue toward
+            the new-venues-researched target.
+          </Text>
+
           <Group justify="flex-end" mt="sm">
-            <Button variant="default" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={submitting}>
-              {submitLabel}
-            </Button>
+            {isCreate ? (
+              <>
+                <Button type="submit" variant="default" loading={submitting}>
+                  Save, finish research later
+                </Button>
+                <Button type="submit" loading={submitting}>
+                  {submitLabel}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="default" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button type="submit" loading={submitting}>
+                  {submitLabel}
+                </Button>
+              </>
+            )}
           </Group>
         </Stack>
       </form>

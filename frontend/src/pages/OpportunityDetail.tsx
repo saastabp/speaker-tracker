@@ -20,7 +20,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
@@ -40,10 +40,11 @@ import {
   type OpportunityInput,
 } from '../api/opportunities';
 import { useOrganization } from '../api/organizations';
+import { CardTitle, KV, initials } from '../components/detailCards';
 import { CloseOpportunityModal } from '../components/CloseOpportunityModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
 import { formatMoney, paymentColor, stageColor } from '../opportunityChips';
-import { BRAND_FAINT, BRAND_LINE } from '../theme';
+import { BRAND_FAINT } from '../theme';
 
 type Catalog = { short_name: string; description: string }[] | undefined;
 const label = (list: Catalog, sn: string) =>
@@ -52,49 +53,6 @@ const label = (list: Catalog, sn: string) =>
 function formatWhen(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-}
-
-/** First+second word initials, e.g. "Kauai Beach Resort & Spa" → "KB", "Iris Kealoha" → "IK". */
-function initials(name: string): string {
-  const words = name
-    .trim()
-    .split(/\s+/)
-    .filter((w) => /[a-z0-9]/i.test(w));
-  if (words.length === 0) return '?';
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return (words[0][0] + words[1][0]).toUpperCase();
-}
-
-/** Card header: sentence-case heading + optional right-side action/hint, over a hairline. */
-function CardTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
-  return (
-    <Group
-      justify="space-between"
-      align="center"
-      pb={8}
-      mb="sm"
-      style={{ borderBottom: `1px solid ${BRAND_LINE}` }}
-    >
-      <Text fw={600} c="navy.9">
-        {children}
-      </Text>
-      {action}
-    </Group>
-  );
-}
-
-/** One row of the Details key-value grid. */
-function KV({ label: k, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <Text size="sm" c={BRAND_FAINT}>
-        {k}
-      </Text>
-      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-        {children}
-      </Text>
-    </>
-  );
 }
 
 /** A linked contact with an editable per-gig role and lead flag, plus an avatar. */
