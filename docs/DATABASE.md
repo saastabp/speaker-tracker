@@ -47,6 +47,7 @@ erDiagram
     users ||--o{ follow_ups : owns
     users ||--o{ targets : owns
     users ||--o{ talks : owns
+    users ||--o{ signatures : owns
     users ||--o{ message_templates : "owns (NULL = shared)"
 
     organizations ||--o{ contact_organizations : "affiliations"
@@ -237,6 +238,14 @@ erDiagram
         int length_minutes
         text one_liner
         int sort_order
+        timestamp deleted_at
+    }
+    signatures {
+        bigint id PK
+        bigint user_id FK
+        varchar name
+        mediumtext body_html "styled HTML"
+        bool is_default "one default per user"
         timestamp deleted_at
     }
     materials {
@@ -450,6 +459,14 @@ table and its `message_template_kinds` catalog arrive in `0005`, not `0001`.
 The Guest Workshop menu. `materials.s3_key` is uploaded via presigned PUT; `talk_id` is nullable
 so a general one-sheet can exist independent of a specific talk.
 
+### `signatures`
+Per-user, fully-styled (HTML) email signature, composed in the Tiptap editor and appended by the
+composer. `body_html` holds the editor output. `is_default` marks the composer's default; a **single
+default per user is enforced in the repo** (setting one clears the others, the primary-contact
+pattern), so `name` + `is_default` already support multiple signatures later with no migration.
+Email-only — DM templates carry no signature, so the `[Your signature]` placeholder is dropped from
+the seed `message_templates` in slice 6a. Added in `0008_email.sql`.
+
 ### `imap_folder_cursors`
 Per-folder poll watermark, `UNIQUE(user_id, folder_name)`. Each poll fetches only UIDs above
 `last_seen_uid`, which is what makes a 1-minute interval cheap — most polls touch zero messages.
@@ -646,7 +663,7 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 | `0005_outreach.sql` | `outreaches`, `message_templates` (+ `channel_id → outreach_channels`), the `message_template_kinds` purpose catalog + seed of the strategy-doc templates | 4 |
 | `0006_targets.sql` | `targets` | 5 |
 | `0007_target_labels.sql` | updates `target_types` display labels to the approved mockup wording (no schema change) | UX reconciliation |
-| `0008_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors` | 6a |
+| `0008_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors`, `signatures`, + the deferred `outreaches.email_message_id` FK (ALTER, from 0005) | 6a |
 | `0009_followups.sql` | `follow_ups` | 7 |
 | `0010_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a / Talks |
 

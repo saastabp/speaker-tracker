@@ -31,6 +31,7 @@ from handlers import (
     opportunity_notes,
     organizations,
     outreaches,
+    signatures,
     talks,
     targets,
 )
@@ -47,6 +48,7 @@ app.include_router(opportunity_contacts.router)
 app.include_router(opportunity_notes.router)
 app.include_router(organizations.router)
 app.include_router(outreaches.router)
+app.include_router(signatures.router)
 app.include_router(talks.router)
 app.include_router(targets.router)
 

@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import '@mantine/core/styles.css';
+import '@mantine/tiptap/styles.css';
 
 import { AuthProvider } from './auth/AuthProvider';
 import { DeepLinkRestorer } from './auth/DeepLinkRestorer';
@@ -12,6 +13,7 @@ import { AppShell } from './components/AppShell';
 import { ContactDetail } from './pages/ContactDetail';
 import { Contacts } from './pages/Contacts';
 import { Dashboard } from './pages/Dashboard';
+import { Emails } from './pages/Emails';
 import { History } from './pages/History';
 import { OpportunityDetail } from './pages/OpportunityDetail';
 import { Pipeline } from './pages/Pipeline';
@@ -46,6 +48,7 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
                   <Route path="contacts/:id" element={<ContactDetail />} />
                   <Route path="templates" element={<Templates />} />
                   <Route path="targets" element={<Targets />} />
+                  <Route path="emails" element={<Emails />} />
                   <Route path="*" element={<Placeholder />} />
                 </Route>
               </Routes>
