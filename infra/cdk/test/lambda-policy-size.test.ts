@@ -2,6 +2,7 @@ import { App } from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { ApiStack } from '../lib/api-stack';
+import { TEST_EMAIL_CONFIG } from './fixtures';
 
 const ENV = { account: '111111111111', region: 'us-west-2' };
 
@@ -37,6 +38,7 @@ const apiStack = () =>
     dbName: 'speakertracker_sandbox',
     logRetention: logs.RetentionDays.ONE_MONTH,
     reservedConcurrency: {},
+    email: TEST_EMAIL_CONFIG,
   });
 
 /**

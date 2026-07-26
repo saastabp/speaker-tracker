@@ -3,6 +3,7 @@ import { Template } from 'aws-cdk-lib/assertions';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { ApiStack } from '../lib/api-stack';
 import { AuthStack } from '../lib/auth-stack';
+import { TEST_EMAIL_CONFIG } from './fixtures';
 
 const ENV = { account: '111111111111', region: 'us-west-2' };
 
@@ -22,6 +23,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
       dbName: 'speakertracker_sandbox',
       logRetention: logs.RetentionDays.ONE_MONTH,
       reservedConcurrency: {},
+      email: TEST_EMAIL_CONFIG,
     });
     const template = Template.fromStack(stack);
 
@@ -49,6 +51,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
       dbName: 'speakertracker',
       logRetention: logs.RetentionDays.THREE_MONTHS,
       reservedConcurrency: { api: 5, migrate: 1 },
+      email: TEST_EMAIL_CONFIG,
       auth: { userPool: auth.userPool, userPoolClient: auth.userPoolClient },
     });
     const template = Template.fromStack(stack);

@@ -1,10 +1,12 @@
-import { Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { ArnFormat, Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as triggers from 'aws-cdk-lib/triggers';
 import { Construct } from 'constructs';
 import { SharedDatabase } from './shared-db';
@@ -110,6 +112,17 @@ const ROUTES: RouteDef[] = [
   },
   { method: apigwv2.HttpMethod.GET, path: '/dashboard', authRequired: true },
 
+  // Slice 6a — email send path and thread reads (handlers/emails.py). Everything under /emails
+  // so the whole feature is one block here and one router module there.
+  { method: apigwv2.HttpMethod.POST, path: '/emails/send', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/emails/attachments', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/emails/threads', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/emails/threads/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/emails/threads/{id}/replies', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/emails/threads/{id}/read', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/emails/threads/{id}/close', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/emails/threads/{id}/reopen', authRequired: true },
+
   // Slice 6a — email signatures (handlers/signatures.py).
   { method: apigwv2.HttpMethod.GET, path: '/signatures', authRequired: true },
   { method: apigwv2.HttpMethod.GET, path: '/signatures/default', authRequired: true },
@@ -133,6 +146,18 @@ export interface ApiStackProps extends StackProps {
     readonly userPool: cognito.IUserPool;
     readonly userPoolClient: cognito.IUserPoolClient;
   };
+  /** Email wiring (slice 6a). Passed as props, not imported from config, so the stack stays
+   *  env-agnostic and testable — only `bin/app.ts` reads `config.ts`. */
+  readonly email: {
+    /** SES domain identity to send as. **Referenced, never created** — it is shared with other
+     *  senders on the domain, so a CDK-owned identity could delete their verification. */
+    readonly sesIdentityArn: string;
+    readonly imapHost: string;
+    /** Secrets Manager name; the secret itself is created (empty) by the Messaging stack. */
+    readonly imapSecretName: string;
+    readonly mailFromAddress: string;
+    readonly mailFromName: string;
+  };
 }
 
 /**
@@ -147,6 +172,20 @@ export class ApiStack extends Stack {
 
     const db = new SharedDatabase(this, 'Db', { dbUser: DB_USER, dbName: props.dbName });
 
+    // Application content: sent raw MIME (email/raw/), composer attachments (email/attachments/),
+    // and later the materials library (materials/) — see common/storage.py for the prefixes the
+    // IAM grants below are scoped to. The bucket lives here rather than in the Messaging stack
+    // because the API Lambda is its only consumer for both email and materials, and materials are
+    // not messaging; keeping it here means the materials slice needs no cross-stack reference.
+    const contentBucket = new s3.Bucket(this, 'ContentBucket', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      // Sandbox is disposable and gets torn down; prod correspondence is not.
+      removalPolicy: props.envType === 'prod' ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+      autoDeleteObjects: props.envType !== 'prod',
+    });
+
     const environment: Record<string, string> = {
       ENV_TYPE: props.envType,
       AUTH_MODE: props.authMode,
@@ -155,6 +194,16 @@ export class ApiStack extends Stack {
       POWERTOOLS_TRACE_DISABLED: 'true',
       POWERTOOLS_LOG_LEVEL: 'INFO',
       ...db.lambdaEnv(),
+    };
+
+    // Email settings reach the runtime as plain env vars (common/{storage,secrets,imap,mail}.py).
+    // The IMAP *password* is not here — it is fetched from Secrets Manager at runtime.
+    const emailEnvironment: Record<string, string> = {
+      CONTENT_BUCKET: contentBucket.bucketName,
+      IMAP_SECRET_ID: props.email.imapSecretName,
+      IMAP_HOST: props.email.imapHost,
+      MAIL_FROM_ADDRESS: props.email.mailFromAddress,
+      MAIL_FROM_NAME: props.email.mailFromName,
     };
 
     // Shared code bundle; CDK stages it once per unique content hash.
@@ -168,10 +217,44 @@ export class ApiStack extends Stack {
       memorySize: 1024,
       timeout: Duration.seconds(15),
       reservedConcurrentExecutions: props.reservedConcurrency.api,
-      environment,
+      environment: { ...environment, ...emailEnvironment },
       logRetention: props.logRetention,
     });
     db.grantConnect(apiFn);
+
+    // Email permissions — the API function only; the migrate function has no business sending
+    // mail or reading the mailbox credential.
+    //
+    // Prefix-scoped to `email/*`, matching common/storage.py's constants: a key built outside the
+    // documented prefixes is then denied at runtime rather than silently working. `materials/*`
+    // is deliberately absent until that slice exists.
+    contentBucket.grantReadWrite(apiFn, 'email/*');
+
+    // SendRawEmail is authorized against the *identity*, so the resource is the identity ARN
+    // rather than '*'. The identity is referenced by ARN and never created here.
+    apiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendRawEmail'],
+        resources: [props.email.sesIdentityArn],
+      }),
+    );
+
+    // The trailing `-*` is required, not sloppiness: Secrets Manager appends a random six-character
+    // suffix to a secret's ARN, so an exact-name ARN would never match and every fetch would be
+    // denied.
+    apiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [
+          Stack.of(this).formatArn({
+            service: 'secretsmanager',
+            resource: 'secret',
+            resourceName: `${props.email.imapSecretName}-*`,
+            arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+          }),
+        ],
+      }),
+    );
 
     // Migrations run on their own short-lived, dedicated connection — never the API's
     // reused one (the GET_LOCK advisory lock is only safe while the session is short-lived).
