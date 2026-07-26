@@ -323,8 +323,12 @@ and CloudFormation.
 
 **Acceptance**
 1. A sent email arrives with correct DKIM and appears in **Donna's Outlook Sent folder**.
-2. Sending writes `email_messages` + `email_threads` + `outreaches` **in one transaction**; a forced
-   SES failure leaves **no** partial rows.
+2. Sending records **intent first**: `email_messages` (`sent_at` NULL) + `email_threads` +
+   `outreaches` are written **in one transaction before** the SES call; a second transaction sets
+   `sent_at` once SES accepts. A forced SES failure runs the **compensating delete** and leaves
+   **no** rows. A crash between the SES call and the confirm leaves the message *pending*
+   (`direction='out' AND sent_at IS NULL`) rather than losing it — 6b's Sent-folder poller
+   reconciles it on `Message-ID`.
 3. A reply sets `In-Reply-To` and `References` to the stored `Message-ID`.
 4. `Speaker Tracker/Import` and `/Processed` are **auto-created and subscribed** on first connect,
    and **visible in Outlook** without manual subscription.

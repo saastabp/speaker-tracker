@@ -20,6 +20,12 @@ from pymysql.connections import Connection
 from common import errors
 from core.outreach import resolve_outreach_kind
 from models.outreach import OutreachInput
+from repositories._ownership import (
+    has_prior_outbound_touch,
+    validate_contact,
+    validate_message_template,
+    validate_opportunity,
+)
 
 #: Response columns for an outreach, catalogs joined back to short_names. ``contacts`` is joined
 #: without a ``deleted_at`` filter so a touch still resolves its contact's name after the contact is
@@ -65,58 +71,6 @@ def _resolve_kind_id(conn: Connection, short_name: str) -> int:
     return row["id"]
 
 
-def _validate_contact(conn: Connection, user_id: int, contact_id: int) -> None:
-    """Raise InvalidInput unless ``contact_id`` is a live contact owned by ``user_id``."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM contacts WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
-            (contact_id, user_id),
-        )
-        if cur.fetchone() is None:
-            raise errors.InvalidInput("unknown contact")
-
-
-def _validate_opportunity(conn: Connection, user_id: int, opportunity_id: int | None) -> None:
-    """Raise InvalidInput if ``opportunity_id`` is set but not a live opportunity of ``user_id``."""
-    if opportunity_id is None:
-        return
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM opportunities WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
-            (opportunity_id, user_id),
-        )
-        if cur.fetchone() is None:
-            raise errors.InvalidInput("unknown opportunity")
-
-
-def _validate_message_template(conn: Connection, user_id: int, template_id: int | None) -> None:
-    """Raise InvalidInput if ``template_id`` is given but not visible to ``user_id``.
-
-    Visible means the caller's own template or a shared reference row (``user_id IS NULL``).
-    """
-    if template_id is None:
-        return
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM message_templates "
-            "WHERE id = %s AND (user_id = %s OR user_id IS NULL) AND deleted_at IS NULL",
-            (template_id, user_id),
-        )
-        if cur.fetchone() is None:
-            raise errors.InvalidInput("unknown message_template")
-
-
-def _has_prior_outbound_touch(conn: Connection, user_id: int, contact_id: int) -> bool:
-    """Return whether a non-deleted outreach to this contact already exists (for kind inference)."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM outreaches "
-            "WHERE user_id = %s AND contact_id = %s AND deleted_at IS NULL LIMIT 1",
-            (user_id, contact_id),
-        )
-        return cur.fetchone() is not None
-
-
 def create_outreach(conn: Connection, user_id: int, data: OutreachInput) -> int:
     """Insert an outbound touch and return its new id.
 
@@ -147,11 +101,11 @@ def create_outreach(conn: Connection, user_id: int, data: OutreachInput) -> int:
         When the contact, opportunity, or template is not the caller's (or a shared template), or a
         ``channel`` / ``kind`` short_name is unknown.
     """
-    _validate_contact(conn, user_id, data.contact_id)
-    _validate_opportunity(conn, user_id, data.opportunity_id)
-    _validate_message_template(conn, user_id, data.message_template_id)
+    validate_contact(conn, user_id, data.contact_id)
+    validate_opportunity(conn, user_id, data.opportunity_id)
+    validate_message_template(conn, user_id, data.message_template_id)
     channel_id = _resolve_channel_id(conn, data.channel)
-    has_prior = _has_prior_outbound_touch(conn, user_id, data.contact_id)
+    has_prior = has_prior_outbound_touch(conn, user_id, data.contact_id)
     kind_id = _resolve_kind_id(conn, resolve_outreach_kind(has_prior, data.kind))
     with conn.cursor() as cur:
         cur.execute(

@@ -109,6 +109,13 @@ const ROUTES: RouteDef[] = [
     authRequired: true,
   },
   { method: apigwv2.HttpMethod.GET, path: '/dashboard', authRequired: true },
+
+  // Slice 6a — email signatures (handlers/signatures.py).
+  { method: apigwv2.HttpMethod.GET, path: '/signatures', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/signatures/default', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/signatures', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/signatures/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/signatures/{id}', authRequired: true },
 ];
 
 export interface ApiStackProps extends StackProps {
