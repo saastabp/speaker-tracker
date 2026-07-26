@@ -16,6 +16,7 @@
     ]
   },
   "//": "context = aws-cdk-lib recommended-feature-flags.json, adopted in full pre-deploy (best-practice defaults; zero drift since nothing is deployed yet). Regenerate from that file on a CDK upgrade.",
+  "//defaultCrossStackReferences": "DELIBERATE DEVIATION from the recommended value ('weak') — do not restore it when regenerating the flags. 'weak' emits Fn::GetStackOutput, which CloudFormation resolves at deploy time, so the CONSUMER template never changes when the producer's output changes. On 2026-07-25 that silently broke sandbox: sandbox-Api was deleted and recreated with a new apiId, sandbox-Frontend's template was byte-identical so CFN saw no diff, and the CloudFront /api/* origin kept pointing at the dead gateway — every API call 502'd with a healthy backend and a deploy that reported success. 'weak' also drops the export lock, which is why deleting the producer was possible at all. 'strong' restores Fn::ImportValue for same-region refs, so CFN REFUSES to delete a producer whose exports are in use — a loud failure instead of a silent stale origin. Note the aws-cdk-lib README claims same-region refs are always strong; core/lib/private/refs.js applies the flag unconditionally, so that is not true. Guarded by test/cross-stack-refs.test.ts.",
   "context": {
     "@aws-cdk/aws-signer:signingProfileNamePassedToCfn": true,
     "@aws-cdk/aws-ecs-patterns:secGroupsDisablesImplicitOpenListener": true,
@@ -104,6 +105,6 @@
     "@aws-cdk/aws-batch:defaultToAL2023": true,
     "@aws-cdk/aws-eks:defaultToAL2023": true,
     "@aws-cdk/core:annotationsInValidationReport": true,
-    "@aws-cdk/core:defaultCrossStackReferences": "weak"
+    "@aws-cdk/core:defaultCrossStackReferences": "strong"
   }
 }
