@@ -193,7 +193,18 @@ export class ApiStack extends Stack {
       apiName: `${props.appName}-${props.envType}-api`,
     });
 
-    const integration = new HttpLambdaIntegration('ApiIntegration', apiFn);
+    // `scopePermissionToRoute: false` is load-bearing, not a style choice. The default (true)
+    // emits one AWS::Lambda::Permission **per route**, each pinned to that route's path, and they
+    // all accumulate in the function's resource policy — which AWS caps at 20,480 bytes. At ~356
+    // bytes a statement, 58 routes overflowed it and the deploy failed with "The final policy size
+    // (20662) is bigger than the limit (20480)". With this off, CDK emits a single api-scoped
+    // permission (`<apiId>/*/*/*`) shared by every route, so the policy no longer grows with the
+    // route table. The grant stays pinned to this API's id; since one function already serves every
+    // route, it confers nothing the per-route statements did not. Unknown paths are still rejected
+    // by the gateway, because that comes from the explicit ROUTES table above, not from permissions.
+    const integration = new HttpLambdaIntegration('ApiIntegration', apiFn, {
+      scopePermissionToRoute: false,
+    });
     const noAuth = new apigwv2.HttpNoneAuthorizer();
     // Cognito ID token: issuer = pool provider URL, audience = app client id (§6.1).
     const jwtAuthorizer = props.auth
