@@ -16,7 +16,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconMessagePlus, IconPencil, IconStar, IconTrash } from '@tabler/icons-react';
+import { IconMail, IconMessagePlus, IconPencil, IconStar, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
@@ -35,6 +35,7 @@ import { useOrganizations } from '../api/organizations';
 import { AffiliationRow } from '../components/AffiliationRow';
 import { CardTitle, KV } from '../components/detailCards';
 import { ContactFormModal } from '../components/ContactFormModal';
+import { EmailComposer } from '../components/EmailComposer';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { warmthColor } from '../contactChips';
 
@@ -73,6 +74,7 @@ export function ContactDetail() {
   const navigate = useNavigate();
   const [editOpen, editHandlers] = useDisclosure(false);
   const [logOpen, logHandlers] = useDisclosure(false);
+  const [composeOpen, composeHandlers] = useDisclosure(false);
   const [showAdd, setShowAdd] = useState(false);
   const [newVenue, setNewVenue] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
@@ -168,8 +170,18 @@ export function ContactDetail() {
           </Group>
         </div>
         <Group>
-          <Button leftSection={<IconMessagePlus size={16} />} onClick={logHandlers.open}>
+          <Button
+            variant="default"
+            leftSection={<IconMessagePlus size={16} />}
+            onClick={logHandlers.open}
+          >
             Log outreach
+          </Button>
+          {/* Composing here — rather than handing the address to Outlook — is what keeps the send
+              in the CRM: the composer writes an `outreaches` row, so the touch reaches the journal,
+              the contact timeline and the dashboard targets. */}
+          <Button leftSection={<IconMail size={16} />} onClick={composeHandlers.open}>
+            Compose email
           </Button>
           <Button variant="default" leftSection={<IconPencil size={16} />} onClick={editHandlers.open}>
             Edit
@@ -333,7 +345,11 @@ export function ContactDetail() {
               <CardTitle>Reach</CardTitle>
               <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px' }}>
                 <KV label="Email">
-                  {c.email ? <Anchor href={`mailto:${c.email}`}>{c.email}</Anchor> : '—'}
+                  {/* Plain text, deliberately not a mailto: link. A mailto: hands the send to
+                      Outlook, which writes no `outreaches` row — the touch would then be invisible
+                      to the journal, the timeline and the targets. "Compose email" above is the
+                      way out of this page. */}
+                  {c.email ? c.email : '—'}
                 </KV>
                 <KV label="Phone">{c.phone?.trim() ? c.phone : '—'}</KV>
               </div>
@@ -395,6 +411,14 @@ export function ContactDetail() {
         onClose={logHandlers.close}
         contactId={contactId}
         contactName={c.name}
+      />
+      <EmailComposer
+        opened={composeOpen}
+        onClose={composeHandlers.close}
+        contactId={contactId}
+        contactName={c.name}
+        contactEmail={c.email}
+        onSent={(threadId) => navigate(`/emails/${threadId}`)}
       />
     </Stack>
   );

@@ -38,8 +38,14 @@ interface NavSection {
 }
 
 // Information architecture per the approved mockup (DESIGN §7): an ungrouped top cluster, then
-// Relationships / Outreach / Growth. Emails and Talks route to the placeholder until their slices
-// land; Compose arrives with slice 6a.
+// Relationships / Outreach / Growth. "Talks & Materials" has no route yet and falls through to the
+// catch-all Placeholder until its slice lands.
+//
+// The mockup's **Compose** entry is deliberately absent — declined 2026-07-26, not pending. It
+// would be a second route to the Compose button already on the Emails page, and since the composer
+// here is a modal rather than the mockup's dedicated page, a nav item could only open it by
+// handing off through a query param. Compose from the person instead: ContactDetail carries the
+// button, which is also where the recipient is unambiguous.
 const NAV_SECTIONS: NavSection[] = [
   {
     items: [
