@@ -330,11 +330,15 @@ and CloudFormation.
    (`direction='out' AND sent_at IS NULL`) rather than losing it — 6b's Sent-folder poller
    reconciles it on `Message-ID`.
 3. A reply sets `In-Reply-To` and `References` to the stored `Message-ID`.
-4. `Speaker Tracker/Import` and `/Processed` are **auto-created and subscribed** on first connect,
-   and **visible in Outlook** without manual subscription.
-5. Deleting the Import folder and re-polling **recreates** it.
-6. Attachments upload by presigned PUT and arrive intact.
-7. The follow-up rider is **off by default**.
+4. Attachments upload by presigned PUT and arrive intact.
+5. *(was #4/#5 — the `Speaker Tracker/Import` + `/Processed` folder criteria)* **Moved to 6b.**
+   The folder helpers (`common/imap.py`: SPECIAL-USE discovery, delimiter detection, idempotent
+   create + `SUBSCRIBE`) ship here and are unit-tested, but **6a never calls them** — the send path
+   only appends to Sent. The criteria are poller behaviour ("on first connect", "re-polling
+   recreates it"), so they are verified in 6b where the poller exists.
+6. *(was #7 — the follow-up rider)* **Deferred with `follow_ups`.** That table arrives in a later
+   migration, so 6a ships with no rider at all rather than a control wired to nothing. Record this
+   as deferred, not verified.
 
 **Verify manually:** send to a real address, reply from it, confirm threading in the recipient's
 client — not just in the app.
@@ -372,6 +376,16 @@ unread/awaiting indicators; explicit **thread close** ("no reply needed").
     running on schedule, finds nothing, and inbound threading stops with no error anywhere. Brian
     being sole admin of Donna's account makes an unrelated password rotation *more* likely, not
     less.
+12. *(moved from 6a)* `Speaker Tracker/Import` and `/Processed` are **auto-created and subscribed**
+    on the poller's first connect, and **visible in Outlook** without manual subscription —
+    `SUBSCRIBE` is what makes them appear; creating them is not enough.
+13. *(moved from 6a)* Deleting the Import folder and re-polling **recreates** it.
+
+*(#12/#13 were filed under 6a, but the helpers there are never called by the send path — they are
+poller behaviour. `common/imap.py` already ships `ensure_app_folders`, SPECIAL-USE discovery and
+server-delimiter detection, unit-tested; 6b wires them to the poll loop. Verified live against the
+real mailbox on 2026-07-26: the Sent folder is `Sent Items` — discovered by its `\Sent` flag, since
+no folder named `Sent` exists — and the hierarchy delimiter is `/`.)*
 
 **Verify manually:** the full loop — send from the app, reply from an external client, confirm it
 lands on the opportunity; then drag a stranger's email into Import and complete the contact creation.
