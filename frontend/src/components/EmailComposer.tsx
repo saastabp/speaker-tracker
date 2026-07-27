@@ -167,6 +167,17 @@ export function EmailComposer({
     !send.isPending &&
     !upload.isPending;
 
+  // Why Send is disabled, in the order the fields appear. A dead button with no explanation reads
+  // as a broken app: filling in the recipient is the obvious move, and it alone is not enough.
+  const blockedBecause = (): string | null => {
+    if (effectiveContactId === null) return 'Choose a contact to send.';
+    if (recipients.length === 0) return 'Add a recipient to send.';
+    if (subject.trim().length === 0) return 'Add a subject to send.';
+    if (upload.isPending) return 'Waiting for the attachment to finish uploading…';
+    return null;
+  };
+  const blocker = blockedBecause();
+
   async function handleSend() {
     setError(null);
     try {
@@ -217,7 +228,7 @@ export function EmailComposer({
         )}
 
         <div>
-          <FieldLabel>To</FieldLabel>
+          <FieldLabel helper="required">To</FieldLabel>
           <TextInput
             value={to}
             onChange={(e) => setTo(e.currentTarget.value)}
@@ -231,7 +242,7 @@ export function EmailComposer({
         </div>
 
         <div>
-          <FieldLabel>Subject</FieldLabel>
+          <FieldLabel helper="required">Subject</FieldLabel>
           <TextInput value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
         </div>
 
@@ -296,8 +307,8 @@ export function EmailComposer({
         )}
 
         <Group justify="space-between" mt="xs">
-          <Text size="xs" c="dimmed">
-            Sends via WorkMail (SES) and logs an outreach touch.
+          <Text size="xs" c={blocker ? 'orange.7' : 'dimmed'}>
+            {blocker ?? 'Sends via WorkMail (SES) and logs an outreach touch.'}
           </Text>
           <Group gap="xs">
             <Button variant="subtle" onClick={onClose} disabled={send.isPending}>
