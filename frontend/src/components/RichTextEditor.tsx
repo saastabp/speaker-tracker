@@ -1,7 +1,7 @@
 import { ColorInput, FileButton, Popover, Select } from '@mantine/core';
 import { Link, RichTextEditor as MantineRichTextEditor } from '@mantine/tiptap';
-import { IconPaint, IconPhoto } from '@tabler/icons-react';
 import Image from '@tiptap/extension-image';
+import { IconPaint, IconPhoto } from '@tabler/icons-react';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import TextAlign from '@tiptap/extension-text-align';
@@ -18,12 +18,23 @@ import { BRAND_GOLD, BRAND_MUTED, BRAND_NAVY, BRAND_TERRACOTTA } from '../theme'
  *  sometimes wants it and the guide's warm grey is a deliberate default, not a prohibition. */
 const SWATCHES = [BRAND_NAVY, BRAND_TERRACOTTA, BRAND_GOLD, BRAND_MUTED, '#000000'];
 
-/** Longest edge an inserted image is scaled down to, in CSS pixels.
+/** Longest edge the stored **bitmap** is scaled down to, in CSS pixels.
  *
- *  Donna's signature logo displays at roughly 265px wide, so 800 leaves ~3x headroom for high-DPI
- *  screens while keeping the base64 payload — which rides in `signatures.body_html` and in every
- *  message carrying the signature — to a sane size. Raise it if a wider banner is ever needed. */
+ *  This is resolution, not display size — the two are deliberately different. Keeping the bitmap
+ *  larger than it is shown is what makes it crisp on high-DPI screens; 800 leaves roughly 3x
+ *  headroom over a typical signature logo while keeping the base64 payload — which rides in
+ *  `signatures.body_html` and in every message carrying the signature — to a sane size. */
 const MAX_IMAGE_WIDTH_PX = 800;
+
+/** Width an image is *displayed* at when first inserted.
+ *
+ *  Separate from the bitmap width above: inserting at full bitmap size is how a logo ends up
+ *  800px wide in the signature. Donna's current signature shows its logo at roughly 265px, so
+ *  this lands close to right immediately, and the drag handle adjusts from there. */
+const DEFAULT_IMAGE_DISPLAY_WIDTH_PX = 280;
+
+/** Smallest width a resize drag can produce, so an image cannot be shrunk to an unclickable speck. */
+const MIN_IMAGE_WIDTH_PX = 40;
 
 /** Refuse an image whose encoded data URI exceeds this. A signature repeats on every send, so a
  *  heavy logo is a per-email cost, not a one-off. */
@@ -33,38 +44,27 @@ const MAX_IMAGE_BYTES = 200 * 1024;
 const FONT_SIZES = ['12px', '14px', '16px', '18px', '24px', '32px'];
 
 /**
- * Image with explicit `width`/`height` attributes.
+ * Read an image file, downscale the bitmap, and return it with the size to *display* it at.
  *
- * Tiptap's stock Image emits only `src`/`alt`/`title`. Outlook for Windows renders with the Word
- * engine, which honours the **HTML** `width`/`height` attributes but frequently ignores CSS
- * `width` — so without these an 800px logo renders 800px wide in Outlook and blows out the
- * signature. That is the most common broken-signature-logo symptom.
+ * Returns two different widths on purpose: the data URI holds a bitmap of up to
+ * {@link MAX_IMAGE_WIDTH_PX}, while `width`/`height` are the smaller
+ * {@link DEFAULT_IMAGE_DISPLAY_WIDTH_PX} the reader sees. Inserting at bitmap size is what made a
+ * logo arrive 800px wide.
  */
-const SizedImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      width: { default: null },
-      height: { default: null },
-    };
-  },
-});
-
-/** Scale an image file down to {@link MAX_IMAGE_WIDTH_PX} and return it as a data URI. */
 async function fileToScaledDataUri(
   file: File,
 ): Promise<{ src: string; width: number; height: number }> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, MAX_IMAGE_WIDTH_PX / bitmap.width);
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
+  const bitmapWidth = Math.round(bitmap.width * scale);
+  const bitmapHeight = Math.round(bitmap.height * scale);
 
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = bitmapWidth;
+  canvas.height = bitmapHeight;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('could not read the image');
-  ctx.drawImage(bitmap, 0, 0, width, height);
+  ctx.drawImage(bitmap, 0, 0, bitmapWidth, bitmapHeight);
 
   // PNG keeps logo edges crisp and preserves transparency; JPEG would halo a logo against white.
   const src = canvas.toDataURL('image/png');
@@ -75,6 +75,10 @@ async function fileToScaledDataUri(
       } KB).`,
     );
   }
+
+  // Never upscale a small image just to hit the default width.
+  const width = Math.min(DEFAULT_IMAGE_DISPLAY_WIDTH_PX, bitmapWidth);
+  const height = Math.round((bitmapHeight * width) / bitmapWidth);
   return { src, width, height };
 }
 
@@ -193,7 +197,19 @@ export function RichTextField({ value, onChange }: RichTextFieldProps) {
       Subscript,
       Superscript,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      SizedImage.configure({ inline: false }),
+      // `allowBase64` is load-bearing, not a nicety: it defaults to FALSE, which makes the parse
+      // rule `img[src]:not([src^="data:"])`, so a stored data: image is **silently dropped** when
+      // HTML is loaded back in. Inserting still looks fine — setImage builds the node directly and
+      // never goes through the parser — so the loss only appears on reload, with no error. Every
+      // image here is a data: URI, so turning this off would discard them.
+      //
+      // `resize` gives the drag handles; v3's Image already carries width/height attributes and a
+      // resizable node view, so neither needs hand-rolling.
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+        resize: { enabled: true, minWidth: MIN_IMAGE_WIDTH_PX, alwaysPreserveAspectRatio: true },
+      }),
     ],
     content: value,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),

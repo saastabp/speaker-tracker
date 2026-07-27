@@ -87,6 +87,13 @@ _DATA_IMAGE_SRC_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: A `src="cid:<token>"` attribute, for turning a stored message back into something a browser can
+#: render (`cid:` resolves only inside a mail client).
+_CID_IMAGE_SRC_RE = re.compile(
+    r'(?P<prefix>src\s*=\s*(?P<quote>["\']))cid:(?P<cid>[^"\']+)(?P<suffix>(?P=quote))',
+    re.IGNORECASE,
+)
+
 
 class Attachment(NamedTuple):
     """One attachment, already fetched from S3.
@@ -292,12 +299,23 @@ def parse_raw_message(raw: bytes) -> ParsedMessage:
     body_text: str | None = None
     attachments: list[AttachmentInfo] = []
 
+    inline_by_cid: dict[str, str] = {}
+
     for index, part in enumerate(message.walk()):
         if part.is_multipart():
             continue
 
         disposition = (part.get_content_disposition() or "").lower()
         content_type = part.get_content_type()
+        content_id = (part.get("Content-ID") or "").strip().strip("<>")
+
+        # An inline part with a Content-ID is a referenced image, not an attachment to list. Keep
+        # it aside as a data: URI so the `cid:` references in the body can be resolved below.
+        if content_id and content_type.startswith("image/"):
+            payload = part.get_payload(decode=True) or b""
+            encoded = base64.b64encode(payload).decode("ascii")
+            inline_by_cid[content_id] = f"data:{content_type};base64,{encoded}"
+            continue
 
         if disposition == "attachment" or part.get_filename():
             payload = part.get_payload(decode=True) or b""
@@ -317,7 +335,38 @@ def parse_raw_message(raw: bytes) -> ParsedMessage:
         elif content_type == "text/plain" and body_text is None:
             body_text = _part_text(part)
 
+    # Gated on the body containing references, NOT on having parts to resolve them with: a message
+    # referencing a part we do not have is exactly the case worth warning about, and gating on
+    # `inline_by_cid` would skip it silently.
+    if body_html and "cid:" in body_html:
+        body_html = _resolve_cid_references(body_html, inline_by_cid)
+
     return ParsedMessage(body_html=body_html, body_text=body_text, attachments=attachments)
+
+
+def _resolve_cid_references(body_html: str, inline_by_cid: dict[str, str]) -> str:
+    """Swap ``cid:`` image sources back to ``data:`` URIs for display.
+
+    The exact inverse of what :func:`extract_inline_images` does on the way out, and the reason
+    this exists: ``cid:`` resolves **only inside a mail client**. A browser cannot fetch it, so the
+    stored MIME — which is what the recipient received, `cid:` references and all — renders with a
+    broken image in the app's own thread view unless the references are put back.
+
+    So the two representations stay split the way the design intends: ``data:`` at rest and on
+    screen, ``cid:`` on the wire. A reference with no matching part is left untouched rather than
+    blanked; that is inbound mail from another client whose part we do not have, and a visibly
+    broken image is more honest than silently deleting the tag.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        cid = match.group("cid").strip()
+        resolved = inline_by_cid.get(cid)
+        if resolved is None:
+            logger.warning("Message references cid:%s with no matching inline part", cid)
+            return match.group(0)
+        return f"{match.group('prefix')}{resolved}{match.group('suffix')}"
+
+    return _CID_IMAGE_SRC_RE.sub(replace, body_html)
 
 
 def _client():

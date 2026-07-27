@@ -56,6 +56,7 @@ const sandboxStacks = (contextOverrides: Record<string, unknown> = {}) => {
     logRetention: logs.RetentionDays.ONE_MONTH,
     reservedConcurrency: {},
     email: TEST_EMAIL_CONFIG,
+    contentCorsOrigins: ['https://example.test'],
   });
   const frontend = new FrontendStack(app, 'speaker-tracker-sandbox-Frontend', {
     env: ENV,

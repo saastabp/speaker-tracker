@@ -146,6 +146,9 @@ export interface ApiStackProps extends StackProps {
     readonly userPool: cognito.IUserPool;
     readonly userPoolClient: cognito.IUserPoolClient;
   };
+  /** Origins allowed to PUT composer attachments straight to the content bucket. Supplied by
+   *  `bin/app.ts` so this stack needs no reference to the Frontend's CloudFront domain. */
+  readonly contentCorsOrigins: string[];
   /** Email wiring (slice 6a). Passed as props, not imported from config, so the stack stays
    *  env-agnostic and testable — only `bin/app.ts` reads `config.ts`. */
   readonly email: {
@@ -184,6 +187,23 @@ export class ApiStack extends Stack {
       // Sandbox is disposable and gets torn down; prod correspondence is not.
       removalPolicy: props.envType === 'prod' ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
       autoDeleteObjects: props.envType !== 'prod',
+      // Composer attachments are PUT to a presigned URL **by the browser**, so the bucket is a
+      // cross-origin target and needs a CORS rule — without one the preflight fails and every
+      // attachment upload is blocked before it starts. This is the price of keeping attachment
+      // bytes out of the API; it is not optional plumbing.
+      //
+      // The origins are passed in rather than derived from the Frontend stack: reaching across
+      // stacks for the CloudFront domain is what silently broke the origin on 2026-07-25.
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT],
+          allowedOrigins: props.contentCorsOrigins,
+          // Content-Type is signed into the presigned URL and must be sent verbatim; the rest are
+          // whatever the browser adds to a PUT.
+          allowedHeaders: ['*'],
+          maxAge: 3000,
+        },
+      ],
     });
 
     const environment: Record<string, string> = {

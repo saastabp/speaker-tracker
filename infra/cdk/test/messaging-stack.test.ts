@@ -98,6 +98,7 @@ describe('Api stack email permissions', () => {
         logRetention: logs.RetentionDays.ONE_MONTH,
         reservedConcurrency: {},
         email: TEST_EMAIL_CONFIG,
+        contentCorsOrigins: ['https://example.test'],
       }),
     );
 
@@ -125,6 +126,22 @@ describe('Api stack email permissions', () => {
 
     expect(secret).toHaveLength(1);
     expect(JSON.stringify(secret[0].Resource)).toContain('speakertracker/imap-*');
+  });
+
+  test('the content bucket allows browser PUTs from the app origin', () => {
+    // Composer attachments are PUT to a presigned URL by the browser, which makes the bucket a
+    // cross-origin target. Without a CORS rule the preflight fails and every upload is blocked —
+    // a failure that only ever appears in a browser, never in synth or a unit test.
+    apiTemplate().hasResourceProperties('AWS::S3::Bucket', {
+      CorsConfiguration: {
+        CorsRules: [
+          Match.objectLike({
+            AllowedMethods: ['PUT'],
+            AllowedOrigins: ['https://example.test'],
+          }),
+        ],
+      },
+    });
   });
 
   test('the content bucket grant is prefix-scoped to email/*', () => {

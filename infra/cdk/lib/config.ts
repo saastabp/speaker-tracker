@@ -57,6 +57,17 @@ export const imapSecretName = (envType: 'sandbox' | 'prod'): string =>
 export const MAIL_FROM_ADDRESS = 'donna.king@360balancedliving.com';
 export const MAIL_FROM_NAME = 'Donna King';
 
+/** Origins allowed to PUT composer attachments directly to the content bucket.
+ *
+ *  Sandbox serves from a generated `*.cloudfront.net` domain that changes whenever the Frontend
+ *  stack is recreated, so it is matched by wildcard; localhost covers `npm run dev`. Prod is the
+ *  exact custom domain — nothing else should be uploading to it. A presigned URL is still required
+ *  in every case, so this widens who may *ask*, not who may write. */
+export const contentCorsOrigins = (envType: 'sandbox' | 'prod'): string[] =>
+  envType === 'prod'
+    ? [`https://${PROD_DOMAIN}`]
+    : ['https://*.cloudfront.net', 'http://localhost:5173', 'http://localhost:5174'];
+
 /** Per-environment knobs shared by the Api/Frontend stacks. */
 export interface EnvConfig {
   readonly envType: 'sandbox' | 'prod';

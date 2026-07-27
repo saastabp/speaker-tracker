@@ -39,6 +39,7 @@ const apiStack = () =>
     logRetention: logs.RetentionDays.ONE_MONTH,
     reservedConcurrency: {},
     email: TEST_EMAIL_CONFIG,
+    contentCorsOrigins: ['https://example.test'],
   });
 
 /**

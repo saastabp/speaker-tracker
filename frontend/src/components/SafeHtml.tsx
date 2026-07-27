@@ -68,16 +68,25 @@ export function SafeHtml({ html, className }: SafeHtmlProps) {
         ALLOWED_ATTR,
         FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input'],
         FORBID_ATTR: ['onerror', 'onload', 'onclick', 'formaction'],
-        // Blocks `javascript:` and every non-image `data:` URL, while allowing the three things
-        // email bodies legitimately reference:
+        // ⚠ This is DOMPurify's **default** regex with one alternative added — it is not a
+        // hand-written URI allowlist, and must not be replaced by one.
         //
-        // - `cid:` — inline parts, how a sent message references its own images;
-        // - `data:image/(png|jpeg|gif|webp)` — how the composer stores an image *before* sending,
-        //   and therefore what the editor and this view render. **`svg+xml` is excluded**: SVG can
-        //   carry script, so an inline SVG would be an XSS vector wearing a logo's clothes. The
-        //   backend refuses the same set in `common/mail.py`, so the two ends agree.
+        // DOMPurify applies ALLOWED_URI_REGEXP to the value of *every* attribute whose name is
+        // permitted and which is not in its small inert set (alt/class/id/style/title/…). So the
+        // pattern has to accept ordinary non-URI values too. The default's second alternative,
+        // `[^a-z]` ("starts with a non-letter"), is what lets `width="280"` and `colspan="2"`
+        // through. Replacing the whole regex with a strict scheme list silently stripped every
+        // width/height in the app — the email arrived correctly sized while our own thread view
+        // rendered logos at full bitmap size.
+        //
+        // The one addition is `data:image/(png|jpeg|gif|webp);base64,` — how the composer stores
+        // an image before sending, and therefore what this view renders. `data:` is otherwise
+        // blocked by the default (it fails all three alternatives), and **`svg+xml` stays
+        // blocked**: SVG can carry script, so an inline one would be an XSS vector wearing a
+        // logo's clothes. `common/mail.py` refuses the same set, so both ends agree.
+        // `javascript:` remains blocked, and `cid:` was already in the default scheme list.
         ALLOWED_URI_REGEXP:
-          /^(?:(?:https?|mailto|tel|cid):|data:image\/(?:png|jpeg|gif|webp);base64,)/i,
+          /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix):|data:image\/(?:png|jpeg|gif|webp);base64,|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
       }),
     [html],
   );

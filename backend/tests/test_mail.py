@@ -345,6 +345,52 @@ def test_no_data_uri_survives_whatever_the_payload(caplog: pytest.LogCaptureFixt
     assert b"data:image" not in raw
 
 
+def test_inline_image_round_trips_back_to_a_data_uri() -> None:
+    # cid: resolves only inside a mail client. The thread view is a browser, so a stored message
+    # must come back with the image inlined or the app shows a broken logo for mail the recipient
+    # sees perfectly well.
+    raw = build(body_html=signature_html())
+
+    parsed = mail.parse_raw_message(raw)
+
+    assert parsed.body_html is not None
+    assert "cid:" not in parsed.body_html
+    assert base64.b64encode(LOGO_BYTES).decode() in parsed.body_html
+    assert 'width="180"' in parsed.body_html
+
+
+def test_inline_image_is_not_listed_as_an_attachment() -> None:
+    # It is part of the body, not a file the reader should see in an attachment row.
+    parsed = mail.parse_raw_message(build(body_html=signature_html()))
+
+    assert parsed.attachments == []
+
+
+def test_inline_image_and_file_attachment_are_told_apart() -> None:
+    parsed = mail.parse_raw_message(build(body_html=signature_html(), attachments=[pdf()]))
+
+    assert [a.filename for a in parsed.attachments] == ["one-sheet.pdf"]
+    assert parsed.body_html is not None and "data:image/png;base64," in parsed.body_html
+
+
+def test_unresolvable_cid_is_left_alone_and_warned(caplog: pytest.LogCaptureFixture) -> None:
+    # Inbound mail from another client can reference a part we do not have. A visibly broken image
+    # is more honest than silently deleting the tag.
+    raw = (
+        b"From: a@x.com\r\nTo: b@x.com\r\nSubject: Hi\r\n"
+        b'Content-Type: multipart/related; boundary="B"\r\n\r\n'
+        b"--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+        b'<p>Hi</p><img src="cid:missing@elsewhere">\r\n'
+        b"--B--\r\n"
+    )
+
+    with caplog.at_level(logging.WARNING):
+        parsed = mail.parse_raw_message(raw)
+
+    assert "cid:missing@elsewhere" in (parsed.body_html or "")
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+
 def test_extract_inline_images_returns_html_unchanged_when_there_are_none() -> None:
     html = "<p>Nothing to extract</p>"
     rewritten, images = mail.extract_inline_images(html, domain="example.com")

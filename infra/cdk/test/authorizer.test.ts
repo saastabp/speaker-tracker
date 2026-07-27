@@ -24,6 +24,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
       logRetention: logs.RetentionDays.ONE_MONTH,
       reservedConcurrency: {},
       email: TEST_EMAIL_CONFIG,
+    contentCorsOrigins: ['https://example.test'],
     });
     const template = Template.fromStack(stack);
 
@@ -52,6 +53,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
       logRetention: logs.RetentionDays.THREE_MONTHS,
       reservedConcurrency: { api: 5, migrate: 1 },
       email: TEST_EMAIL_CONFIG,
+    contentCorsOrigins: ['https://example.test'],
       auth: { userPool: auth.userPool, userPoolClient: auth.userPoolClient },
     });
     const template = Template.fromStack(stack);
