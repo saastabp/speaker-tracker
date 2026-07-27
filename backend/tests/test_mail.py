@@ -14,6 +14,7 @@ Two properties carry real weight:
 
 from __future__ import annotations
 
+import base64
 import logging
 from email import message_from_bytes
 from email.message import Message
@@ -200,6 +201,166 @@ def test_reply_headers_survive_a_long_references_chain() -> None:
     message = message_from_bytes(build(in_reply_to="<m19@x.com>", references=chain))
 
     assert " ".join(message["References"].split()) == chain
+
+
+# --- inline images (the signature logo) -----------------------------------------------------------
+
+LOGO_BYTES = b"\x89PNG\r\n\x1a\n" + b"logo-pixels"
+LOGO_DATA_URI = f"data:image/png;base64,{base64.b64encode(LOGO_BYTES).decode()}"
+
+
+def signature_html(extra_attrs: str = 'width="180" height="60"') -> str:
+    """Body HTML with a signature logo, as the composer stores it."""
+    return f'<p>Hi Jane,</p><p>Warmly,<br>Donna</p><img src="{LOGO_DATA_URI}" {extra_attrs}>'
+
+
+def parts_of_type(message: Message, content_type: str) -> list[Message]:
+    return [p for p in message.walk() if p.get_content_type() == content_type]
+
+
+def test_data_uri_never_survives_into_the_sent_bytes() -> None:
+    # Gmail strips data: images and Outlook desktop will not render them, so a data URI on the wire
+    # is a broken logo for every recipient. This is the assertion that matters most here.
+    raw = build(body_html=signature_html())
+
+    assert b"data:image" not in raw
+
+
+def test_inline_image_becomes_a_related_part_referenced_by_cid() -> None:
+    raw = build(body_html=signature_html())
+    message = message_from_bytes(raw)
+
+    image = parts_of_type(message, "image/png")[0]
+    cid = image["Content-ID"]
+    assert cid is not None
+    # The HTML must reference exactly the id the part declares, brackets stripped.
+    html = text_of(parts_of_type(message, "text/html")[0])
+    assert f"cid:{cid.strip('<>')}" in html
+
+
+def test_related_wraps_the_html_part_not_the_whole_message() -> None:
+    # If the image were attached to the top-level message it would be a sibling of the alternative,
+    # and Outlook would list the logo as an attachment instead of rendering it in the body.
+    message = message_from_bytes(build(body_html=signature_html()))
+
+    assert message.get_content_type() == "multipart/alternative"
+    related = parts_of_type(message, "multipart/related")
+    assert len(related) == 1
+    assert {p.get_content_type() for p in related[0].get_payload()} == {"text/html", "image/png"}
+
+
+def test_inline_image_is_disposition_inline() -> None:
+    # `inline` is what makes Outlook render it in place rather than listing it as an attachment.
+    message = message_from_bytes(build(body_html=signature_html()))
+
+    assert parts_of_type(message, "image/png")[0].get_content_disposition() == "inline"
+
+
+def test_inline_image_bytes_round_trip() -> None:
+    message = message_from_bytes(build(body_html=signature_html()))
+
+    assert parts_of_type(message, "image/png")[0].get_payload(decode=True) == LOGO_BYTES
+
+
+def test_width_and_height_attributes_survive_the_rewrite() -> None:
+    # Outlook honours the width/height HTML attributes but frequently ignores CSS width — a logo
+    # that loses them renders at full native size and blows out the signature.
+    message = message_from_bytes(build(body_html=signature_html()))
+    html = text_of(parts_of_type(message, "text/html")[0])
+
+    assert 'width="180"' in html
+    assert 'height="60"' in html
+
+
+def test_logo_and_file_attachment_nest_correctly() -> None:
+    message = message_from_bytes(build(body_html=signature_html(), attachments=[pdf()]))
+
+    assert message.get_content_type() == "multipart/mixed"
+    # The PDF is a sibling of the alternative; the logo stays inside related, inline.
+    assert parts_of_type(message, "application/pdf")[0].get_content_disposition() == "attachment"
+    assert parts_of_type(message, "image/png")[0].get_content_disposition() == "inline"
+    assert len(parts_of_type(message, "multipart/related")) == 1
+
+
+def test_message_without_images_keeps_its_original_shape() -> None:
+    # No `related` layer when there is nothing to relate — plain sends must not regress.
+    message = message_from_bytes(build(body_html="<p>No images here</p>"))
+
+    assert message.get_content_type() == "multipart/alternative"
+    assert parts_of_type(message, "multipart/related") == []
+
+
+def test_several_inline_images_get_distinct_cids() -> None:
+    html = f'<img src="{LOGO_DATA_URI}"><img src="{LOGO_DATA_URI}">'
+    message = message_from_bytes(build(body_html=html))
+
+    cids = [p["Content-ID"] for p in parts_of_type(message, "image/png")]
+    assert len(cids) == 2
+    assert len(set(cids)) == 2, "each part needs its own Content-ID or clients mis-resolve them"
+
+
+def test_plaintext_alternative_carries_no_cid_token() -> None:
+    # The text part is derived from the original HTML, so a cid: token must never leak into what a
+    # text-only client shows the reader.
+    message = message_from_bytes(build(body_html=signature_html()))
+
+    assert "cid:" not in text_of(parts_of_type(message, "text/plain")[0])
+
+
+def test_svg_data_uri_is_refused_and_warned(caplog: pytest.LogCaptureFixture) -> None:
+    # SVG can carry script; inlining one would turn a logo into an XSS vector in a webmail client.
+    svg = "data:image/svg+xml;base64," + base64.b64encode(b"<svg/>").decode()
+
+    with caplog.at_level(logging.WARNING):
+        raw = build(body_html=f'<img src="{svg}">')
+
+    message = message_from_bytes(raw)
+    assert parts_of_type(message, "image/svg+xml") == []
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+
+def test_undecodable_base64_is_dropped_not_fatal(caplog: pytest.LogCaptureFixture) -> None:
+    # A malformed payload must not fail the send — the rest of the message is still deliverable —
+    # and the broken data: URI must not ride out onto the wire either.
+    with caplog.at_level(logging.WARNING):
+        raw = build(body_html='<p>Hi</p><img src="data:image/png;base64,!!!not-base64!!!">')
+
+    assert b"Hi" in raw
+    assert b"data:image" not in raw
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+
+def test_no_data_uri_survives_whatever_the_payload(caplog: pytest.LogCaptureFixture) -> None:
+    # The invariant, across every rejection path: valid, wrong type, and malformed together.
+    svg = "data:image/svg+xml;base64," + base64.b64encode(b"<svg/>").decode()
+    html = (
+        f'<img src="{LOGO_DATA_URI}">'
+        f'<img src="{svg}">'
+        '<img src="data:image/png;base64,%%%broken%%%">'
+    )
+
+    with caplog.at_level(logging.WARNING):
+        raw = build(body_html=html)
+
+    assert b"data:image" not in raw
+
+
+def test_extract_inline_images_returns_html_unchanged_when_there_are_none() -> None:
+    html = "<p>Nothing to extract</p>"
+    rewritten, images = mail.extract_inline_images(html, domain="example.com")
+
+    assert rewritten == html
+    assert images == []
+
+
+def test_cid_is_domain_qualified() -> None:
+    # Content-IDs are globally unique identifiers; qualifying with the sending domain keeps them
+    # from colliding with another sender's.
+    _rewritten, images = mail.extract_inline_images(
+        f'<img src="{LOGO_DATA_URI}">', domain="360balancedliving.com"
+    )
+
+    assert images[0].cid.endswith("@360balancedliving.com")
 
 
 # --- attachments --------------------------------------------------------------------------------

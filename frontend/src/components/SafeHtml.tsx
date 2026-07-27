@@ -68,8 +68,16 @@ export function SafeHtml({ html, className }: SafeHtmlProps) {
         ALLOWED_ATTR,
         FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input'],
         FORBID_ATTR: ['onerror', 'onload', 'onclick', 'formaction'],
-        // Block `javascript:` and `data:` URLs in href/src; only real web and mail links survive.
-        ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel|cid):/i,
+        // Blocks `javascript:` and every non-image `data:` URL, while allowing the three things
+        // email bodies legitimately reference:
+        //
+        // - `cid:` — inline parts, how a sent message references its own images;
+        // - `data:image/(png|jpeg|gif|webp)` — how the composer stores an image *before* sending,
+        //   and therefore what the editor and this view render. **`svg+xml` is excluded**: SVG can
+        //   carry script, so an inline SVG would be an XSS vector wearing a logo's clothes. The
+        //   backend refuses the same set in `common/mail.py`, so the two ends agree.
+        ALLOWED_URI_REGEXP:
+          /^(?:(?:https?|mailto|tel|cid):|data:image\/(?:png|jpeg|gif|webp);base64,)/i,
       }),
     [html],
   );

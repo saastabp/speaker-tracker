@@ -29,6 +29,17 @@ const warn: MantineColorsTuple = [
   '#c69a29', '#b07d1e', '#956819', '#785314', '#5a3e0f',
 ];
 
+// Flat brand hexes, for places that need a literal colour string rather than a Mantine shade —
+// currently the rich-text editor's swatches, where the value is written straight into email HTML
+// as an inline `style` and never resolved through the theme. Each matches the brand guide, and is
+// the anchor shade of the ramp above.
+/** Deep navy — nav rail, pull quotes, primary headline text. */
+export const BRAND_NAVY = '#1F3B4D';
+/** Terracotta — primary CTAs, banner backgrounds, bold inline emphasis. */
+export const BRAND_TERRACOTTA = '#C2483A';
+/** Gold — highlight/emphasis text, secondary accents, borders. */
+export const BRAND_GOLD = '#D9A02C';
+
 /** Cream page background (Mantine has no natural slot for it; applied on AppShell.Main). */
 export const BRAND_CREAM = '#FBF8F2';
 

@@ -32,9 +32,12 @@ before SES sees it — turns a confusing mid-send rejection into an actionable e
 
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 import re
 import time
+import uuid
 from email import message_from_bytes
 from email.message import EmailMessage, Message
 from email.utils import formataddr, formatdate
@@ -69,6 +72,21 @@ _LINE_BREAK_RE = re.compile(r"(?i)<br\s*/?>|</(?:li|tr)>")
 _WHITESPACE_RUN_RE = re.compile(r"[ \t]+")
 _BLANK_LINES_RE = re.compile(r"\n{3,}")
 
+#: Raster image types embedded inline. `svg+xml` is excluded on purpose — SVG can carry script.
+_INLINE_IMAGE_SUBTYPES = frozenset({"png", "jpeg", "jpg", "gif", "webp"})
+
+#: A `src="data:image/<subtype>;base64,<data>"` attribute, captured so the value can be swapped for
+#: a `cid:` reference while leaving the surrounding tag (width/height/style) untouched.
+#:
+#: The payload class is deliberately "anything but the closing quote" rather than the base64
+#: alphabet: a malformed payload must still *match*, so it can be caught and stripped. A stricter
+#: class simply fails to match, and the data: URI then rides out onto the wire unnoticed.
+_DATA_IMAGE_SRC_RE = re.compile(
+    r'(?P<prefix>src\s*=\s*(?P<quote>["\']))data:image/(?P<subtype>[a-z0-9.+-]+);base64,'
+    r"(?P<data>[^\"']*)(?P<suffix>(?P=quote))",
+    re.IGNORECASE,
+)
+
 
 class Attachment(NamedTuple):
     """One attachment, already fetched from S3.
@@ -87,6 +105,93 @@ class Attachment(NamedTuple):
     filename: str
     content_type: str
     content: bytes
+
+
+class InlineImage(NamedTuple):
+    """An image lifted out of the body HTML and turned into an inline MIME part.
+
+    Attributes
+    ----------
+    cid : str
+        Bare ``Content-ID`` token (no angle brackets), referenced from the HTML as ``cid:<token>``.
+    content_type : str
+        Full MIME type, e.g. ``image/png``.
+    content : bytes
+        Decoded image bytes.
+    """
+
+    cid: str
+    content_type: str
+    content: bytes
+
+
+def extract_inline_images(body_html: str, *, domain: str) -> tuple[str, list[InlineImage]]:
+    """Replace ``data:`` image sources with ``cid:`` references and return the extracted images.
+
+    The composer stores images — the signature logo above all — as ``data:`` URIs, because that is
+    what a browser renders natively in the editor and the thread view with no resolution plumbing
+    and no environment-specific URL baked into stored HTML. **Email is the opposite**: Gmail strips
+    ``data:`` images outright and Outlook desktop will not render them, so a message sent with the
+    data URI intact shows a broken logo to every recipient.
+
+    So the two representations are separated at exactly this boundary: ``data:`` is what is stored
+    and edited, ``cid:`` is what is transmitted. A ``cid:`` part displays immediately in the
+    recipient's client — including Outlook desktop, which is the mechanism it uses for its own
+    pasted images — with none of the "click to download pictures" blocking that remote ``https://``
+    images get.
+
+    Only raster types are accepted. ``image/svg+xml`` is deliberately excluded: SVG can carry
+    script, and an SVG that reached a webmail client would be an XSS vector rather than a logo.
+
+    Parameters
+    ----------
+    body_html : str
+        Composer HTML, possibly containing ``<img src="data:image/png;base64,…">``.
+    domain : str
+        Domain used to qualify generated Content-IDs, keeping them globally unique.
+
+    Returns
+    -------
+    tuple of (str, list of InlineImage)
+        The rewritten HTML and one entry per extracted image. When there are none, the HTML is
+        returned unchanged and the list is empty, so the caller can skip ``multipart/related``.
+
+    Examples
+    --------
+    >>> html = '<p>Hi</p><img src="data:image/png;base64,aGk=" width="180">'
+    >>> rewritten, images = extract_inline_images(html, domain="example.com")
+    >>> images[0].content_type, images[0].content
+    ('image/png', b'hi')
+    >>> 'data:' in rewritten
+    False
+    >>> rewritten.count('cid:')
+    1
+    """
+    images: list[InlineImage] = []
+
+    def drop_src(match: re.Match[str]) -> str:
+        """Emit an empty ``src``, so no ``data:`` URI reaches the wire in any circumstance."""
+        return f"{match.group('prefix')}{match.group('suffix')}"
+
+    def replace(match: re.Match[str]) -> str:
+        subtype = match.group("subtype").lower()
+        if subtype not in _INLINE_IMAGE_SUBTYPES:
+            # Not something we will embed — notably svg+xml, which can carry script. The source is
+            # dropped rather than passed through: a data: URI is useless in email either way, and
+            # letting it ride out would defeat the invariant this function exists to hold.
+            logger.warning("Refusing to inline a data: image of type image/%s", subtype)
+            return drop_src(match)
+        try:
+            content = base64.b64decode(match.group("data"), validate=True)
+        except (ValueError, binascii.Error):
+            logger.warning("Dropping an inline image whose base64 payload could not be decoded")
+            return drop_src(match)
+
+        cid = f"{uuid.uuid4().hex}@{domain}"
+        images.append(InlineImage(cid=cid, content_type=f"image/{subtype}", content=content))
+        return f"{match.group('prefix')}cid:{cid}{match.group('suffix')}"
+
+    return _DATA_IMAGE_SRC_RE.sub(replace, body_html), images
 
 
 class AttachmentInfo(NamedTuple):
@@ -247,6 +352,12 @@ def from_address() -> str:
     return formataddr((name, address)) if name else address
 
 
+def _domain_of(address: str) -> str:
+    """Extract the domain from a From value, for qualifying generated Content-IDs."""
+    bare = address.rsplit("<", 1)[-1].rstrip(">") if "<" in address else address
+    return bare.rsplit("@", 1)[-1].strip() or "localhost"
+
+
 def html_to_text(html: str) -> str:
     """Derive a plaintext alternative from composer HTML.
 
@@ -358,10 +469,32 @@ def build_raw_message(
     if references:
         message["References"] = references
 
+    # Images the composer stored as data: URIs become inline parts referenced by cid:. Done before
+    # the body is set, so the HTML that goes on the wire already carries the cid: references.
+    html, inline_images = extract_inline_images(body_html, domain=_domain_of(sender))
+
     # set_content + add_alternative produces multipart/alternative with text first, html second —
-    # the order clients expect, least-capable representation first.
+    # the order clients expect, least-capable representation first. The plaintext alternative is
+    # derived from the ORIGINAL html: html_to_text drops tags anyway, and running it on the
+    # rewritten copy would only risk leaking a cid: token into readable text.
     message.set_content(html_to_text(body_html))
-    message.add_alternative(body_html, subtype="html")
+    message.add_alternative(html, subtype="html")
+
+    for image in inline_images:
+        # Attaching to the html part specifically is what produces multipart/related *around the
+        # alternative* — the nesting mail clients expect. Attaching to the top-level message would
+        # instead make it a sibling of the alternative, and Outlook would list the logo as a
+        # separate attachment rather than rendering it in place.
+        _, subtype = image.content_type.split("/", 1)
+        html_part = message.get_payload()[-1]
+        html_part.add_related(
+            image.content,
+            maintype="image",
+            subtype=subtype,
+            cid=f"<{image.cid}>",
+            # inline, not attachment: Outlook renders it in the body instead of listing it.
+            disposition="inline",
+        )
 
     for attachment in attachments or []:
         maintype, _, subtype = attachment.content_type.partition("/")
