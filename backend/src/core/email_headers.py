@@ -12,15 +12,22 @@ acceptance #3, DATABASE.md §"email_messages"):
   string. Acceptance #3 (a reply threads correctly) rests on that: a reply's ``In-Reply-To`` points
   at an id we minted, and the poller matches inbound mail against the same column.
 - **Reply chaining** — ``In-Reply-To`` and ``References`` assembled per RFC 5322 §3.6.4.
+- **Address normalization** — a ``From``/``To``/``Cc`` value reduced to bare, lowercased addresses.
+  Added for 6b, which compares addresses on every polled message to decide whether it is in scope
+  at all; it lives here because parsing an address header is header work, and putting it in
+  ``core/email_scope`` would have ``core/email_threading`` importing from a sibling that exists for
+  an unrelated decision.
 
 This module is named ``email_headers`` and not ``email`` on purpose: ``src/`` is on ``sys.path``,
 so a ``core/email.py`` would shadow the stdlib ``email`` package that ``common/mail.py`` needs.
+Importing ``email.utils`` *from* this module is unaffected — the hazard is a file's own name.
 """
 
 from __future__ import annotations
 
 import re
 import uuid
+from email.utils import getaddresses, parseaddr
 from typing import NamedTuple
 
 #: Width of ``email_threads.subject_normalized`` (VARCHAR(255)). Normalization truncates to fit
@@ -247,6 +254,73 @@ def build_reply_headers(
         chain = [chain[0], *chain[-(MAX_REFERENCES - 1) :]]
 
     return ReplyHeaders(in_reply_to=parent, references=" ".join(chain))
+
+
+def normalize_address(value: str | None) -> str:
+    """Reduce a single address header value to a bare, lowercased address.
+
+    Use this for ``From``; :func:`addresses_in` handles comma-separated lists, which
+    :func:`email.utils.parseaddr` mis-parses.
+
+    Parameters
+    ----------
+    value : str or None
+        A ``From``-style header value, with or without a display name.
+
+    Returns
+    -------
+    str
+        The bare address, lowercased, or ``""`` when there is none to extract. Lowercasing the
+        domain is required and lowercasing the local part is technically lossy per RFC 5321 §2.4,
+        but every real mail host treats it case-insensitively, and matching a contact's stored
+        address must not fail because a sender capitalized their own name.
+
+    Examples
+    --------
+    >>> normalize_address('"Donna King" <Donna.King@360BalancedLiving.com>')
+    'donna.king@360balancedliving.com'
+    >>> normalize_address(None)
+    ''
+    """
+    if not value:
+        return ""
+    _, address = parseaddr(value)
+    return address.strip().lower()
+
+
+def addresses_in(*values: str | None) -> list[str]:
+    """Extract every normalized address from one or more address-*list* header values.
+
+    Parameters
+    ----------
+    *values : str or None
+        Header values, e.g. the ``To`` and ``Cc`` lines. ``None`` and empty values are ignored, so
+        a message with no ``Cc`` needs no special-casing at the call site.
+
+    Returns
+    -------
+    list of str
+        Lowercased bare addresses in header order, deduplicated. Order is preserved because a
+        caller choosing among several tracked recipients attributes the message to the first.
+
+    Examples
+    --------
+    >>> addresses_in('A <a@x.com>, b@x.com', 'A@x.com')
+    ['a@x.com', 'b@x.com']
+    >>> addresses_in(None, '')
+    []
+    """
+    present = [value for value in values if value]
+    if not present:
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for _, address in getaddresses(present):
+        normalized = address.strip().lower()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
 
 
 def _bracketed(message_id: str) -> str:

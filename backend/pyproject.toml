@@ -5,6 +5,7 @@ description = "Speaker Tracker — gig-acquisition CRM backend (AWS Lambda, Pyth
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "aws-lambda-powertools[tracer]>=3,<4",
+    "imapclient>=3.1,<4",
     "pydantic>=2,<3",
     "pymysql>=1.1,<2",
     "sqlparse>=0.5,<0.6",

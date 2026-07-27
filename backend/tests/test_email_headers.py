@@ -14,9 +14,11 @@ from core.email_headers import (
     MAX_REFERENCES,
     SUBJECT_MAX_LEN,
     ReplyHeaders,
+    addresses_in,
     build_reply_headers,
     format_message_ids,
     generate_message_id,
+    normalize_address,
     normalize_subject,
     parse_message_ids,
 )
@@ -185,3 +187,76 @@ def test_chain_at_the_cap_is_untouched() -> None:
     headers = build_reply_headers("<parent@x.com>", " ".join(ancestors))
 
     assert parse_message_ids(headers.references) == [*ancestors, "<parent@x.com>"]
+
+
+# --- normalize_address ----------------------------------------------------------------------
+
+
+def test_display_name_is_stripped_to_the_bare_address() -> None:
+    assert normalize_address('"Donna King" <donna.king@360balancedliving.com>') == (
+        "donna.king@360balancedliving.com"
+    )
+
+
+def test_address_is_lowercased() -> None:
+    # 6b matches inbound senders against contacts.email; a venue capitalizing its own name must
+    # not read as an untracked stranger and get silently skipped.
+    assert normalize_address("Events@KauaiRetreat.COM") == "events@kauairetreat.com"
+
+
+def test_surrounding_whitespace_is_trimmed() -> None:
+    # Folded headers routinely arrive with leading whitespace after unfolding.
+    assert normalize_address("  <a@x.com>  ") == "a@x.com"
+
+
+@pytest.mark.parametrize("raw", [None, "", "   ", "undisclosed-recipients:;"])
+def test_absent_or_empty_from_value_yields_empty_string(raw: str | None) -> None:
+    # "" can never be a dict-key hit, so a From we cannot read degrades to "untracked sender"
+    # rather than raising inside the poll loop.
+    assert normalize_address(raw) == ""
+
+
+def test_garbage_token_is_passed_through_rather_than_discarded() -> None:
+    # parseaddr returns an unrecognizable token as-is. Harmless — it cannot match a stored
+    # contacts.email — and preserving it keeps the value visible in the poller's log line instead
+    # of reporting an empty sender for a message that did have a From.
+    assert normalize_address("not-an-address-at-all") == "not-an-address-at-all"
+
+
+def test_bare_address_without_brackets_is_accepted() -> None:
+    assert normalize_address("a@x.com") == "a@x.com"
+
+
+# --- addresses_in ---------------------------------------------------------------------------
+
+
+def test_comma_separated_list_is_split() -> None:
+    # The reason this exists separately from normalize_address: parseaddr mangles a list, which
+    # would lose every recipient after the first.
+    assert addresses_in("A <a@x.com>, b@x.com") == ["a@x.com", "b@x.com"]
+
+
+def test_several_header_values_are_merged() -> None:
+    # To and Cc in one call, so the caller needs no special case for a message with no Cc.
+    assert addresses_in("a@x.com", "b@x.com, c@x.com") == ["a@x.com", "b@x.com", "c@x.com"]
+
+
+def test_duplicates_across_headers_are_removed_case_insensitively() -> None:
+    # Someone on both To and Cc is one recipient, not two.
+    assert addresses_in("A@x.com", "a@x.com") == ["a@x.com"]
+
+
+def test_header_order_is_preserved() -> None:
+    # Load-bearing: core.email_scope attributes an outbound message to the FIRST tracked recipient.
+    assert addresses_in("z@x.com, a@x.com, m@x.com") == ["z@x.com", "a@x.com", "m@x.com"]
+
+
+@pytest.mark.parametrize("values", [(None,), ("",), (None, ""), ()])
+def test_absent_headers_yield_empty_list(values: tuple[str | None, ...]) -> None:
+    assert addresses_in(*values) == []
+
+
+def test_group_syntax_does_not_produce_empty_entries() -> None:
+    # RFC 5322 group syntax ("undisclosed-recipients:;") parses to an empty address, which must be
+    # dropped rather than becoming a "" that matches nothing but still counts as a recipient.
+    assert addresses_in("undisclosed-recipients:;") == []
