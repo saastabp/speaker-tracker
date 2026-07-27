@@ -41,11 +41,16 @@ export interface TimelineItem {
   status: string | null; // status_event items only
 }
 
-const outreachKeys = {
+/** Exported so other modules whose writes touch the journal (e.g. sending an email, which logs an
+ *  outreach) invalidate via these factories rather than duplicating the key as a string literal —
+ *  a rename then fails to compile instead of silently leaving a stale timeline. */
+export const outreachKeys = {
+  all: ['outreaches'] as const,
   forContact: (contactId: number) => ['outreaches', 'contact', contactId] as const,
 };
 
-const timelineKeys = {
+export const timelineKeys = {
+  all: ['timeline'] as const,
   forContact: (contactId: number) => ['timeline', 'contact', contactId] as const,
 };
 

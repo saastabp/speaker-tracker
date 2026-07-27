@@ -5,8 +5,11 @@ import { useTemplates, type MessageTemplate } from '../api/templates';
 import { FieldLabel } from './FieldLabel';
 
 /** Fill the merge fields that resolve from the contact. Only `[Name]` is contact-derived today;
- *  other bracketed placeholders (e.g. `[Your signature]`) are left for the sender to complete. */
-function fillMerge(text: string, contactName: string): string {
+ *  other bracketed placeholders (e.g. `[Your signature]`) are left for the sender to complete.
+ *
+ *  Exported for the email composer, which merges the same templates before converting them to
+ *  HTML — the rule must not fork between the DM paste flow and the composer. */
+export function fillMerge(text: string, contactName: string): string {
   return text.split('[Name]').join(contactName);
 }
 

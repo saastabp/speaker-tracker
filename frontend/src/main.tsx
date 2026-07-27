@@ -14,6 +14,7 @@ import { ContactDetail } from './pages/ContactDetail';
 import { Contacts } from './pages/Contacts';
 import { Dashboard } from './pages/Dashboard';
 import { Emails } from './pages/Emails';
+import { EmailThread } from './pages/EmailThread';
 import { History } from './pages/History';
 import { OpportunityDetail } from './pages/OpportunityDetail';
 import { Pipeline } from './pages/Pipeline';
@@ -49,6 +50,7 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
                   <Route path="templates" element={<Templates />} />
                   <Route path="targets" element={<Targets />} />
                   <Route path="emails" element={<Emails />} />
+                  <Route path="emails/:id" element={<EmailThread />} />
                   <Route path="*" element={<Placeholder />} />
                 </Route>
               </Routes>

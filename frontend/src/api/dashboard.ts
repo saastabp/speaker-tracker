@@ -61,11 +61,18 @@ export interface Dashboard {
   coming_up: ComingUpEvent[];
 }
 
+/** Exported so writes elsewhere that move dashboard numbers (sending an email logs an outreach,
+ *  which counts toward the touch targets) invalidate via this factory rather than a string
+ *  literal — a rename then fails to compile instead of silently leaving stale counts. */
+export const dashboardKeys = {
+  all: ['dashboard'] as const,
+};
+
 /** Load the composite dashboard payload. */
 export function useDashboard(): UseQueryResult<Dashboard> {
   const api = useApi();
   return useQuery({
-    queryKey: ['dashboard'],
+    queryKey: dashboardKeys.all,
     queryFn: () => api<Dashboard>('/dashboard'),
   });
 }
