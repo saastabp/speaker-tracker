@@ -88,7 +88,13 @@ def bucket_name() -> str:
 
 
 def raw_message_key(user_id: int, message_id: str) -> str:
-    """Build the key for a sent message's raw MIME.
+    """Build the key for a message's raw MIME, sent or received.
+
+    Keyed on the ``Message-ID`` rather than the row id, so both halves of the email path land on
+    the same key without coordinating: the send path writes the bytes it hands to SES, and the
+    poller writes the bytes it fetched from IMAP. That also makes the write idempotent — a message
+    re-read after a ``UIDVALIDITY`` reset overwrites its own object with identical content instead
+    of accumulating copies.
 
     Parameters
     ----------

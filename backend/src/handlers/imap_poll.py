@@ -29,6 +29,13 @@ stops threading mail with no error anywhere):
   is logged at WARNING and left for the next minute. A minute of missed mail costs nothing; paging
   on transient network noise would train everyone to ignore the alarm that matters.
 
+**The raw MIME goes to S3, and that is not optional.** ``0008`` stores no body and no attachment
+metadata, so the object at ``email_messages.s3_key`` is the *only* copy of what arrived; without
+it a received message lists in its thread with an empty body. It is written after the message is
+judged in scope — persisting mail we just decided is none of our business would breach the same
+guarantee ``core.email_scope`` enforces — and before the row, so a stored row never points at an
+object that is not there.
+
 **Ordering that is not interchangeable.** Each message is ingested and committed *before* it is
 moved out of ``Import``. Moving first would put the message in ``Processed`` — which is never
 polled — with no row to show for it, and it would be gone for good. In the other order a failed
@@ -52,7 +59,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from imapclient import IMAPClient
 from pymysql.connections import Connection
 
-from common import imap, imap_poll, mail_parse
+from common import imap, imap_poll, mail_parse, storage
 from common.db import get_connection, transaction
 from common.logger import logger
 from common.secrets import get_imap_credentials
@@ -201,6 +208,18 @@ def _ingest_one(
         )
         return "skipped"
 
+    # Store the raw MIME *before* the row, so a stored message never points at an object that is
+    # not there, and *after* the ingest decision, so mail just classified as none of our business
+    # is never persisted — the never-the-whole-mailbox guarantee covers S3 as much as the database.
+    # Bodies and attachment metadata are not columns (0008), so this object is the only copy: a
+    # failure here raises, the message is not ingested, and the next poll retries it. Recording it
+    # bodyless instead would be permanent, since the dedupe key would then refuse a second attempt.
+    s3_key = storage.put_object(
+        storage.raw_message_key(user_id, headers.message_id),
+        fetched.raw,
+        content_type="message/rfc822",
+    )
+
     message = email_inbound.InboundMessage(
         message_id=headers.message_id,
         from_addr=headers.from_addr,
@@ -212,6 +231,7 @@ def _ingest_one(
         occurred_at=occurred_at,
         imap_folder=folder.name,
         imap_uid=fetched.uid,
+        s3_key=s3_key,
     )
     with transaction(conn):
         result = email_inbound.ingest_message(
