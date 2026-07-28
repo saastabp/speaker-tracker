@@ -253,3 +253,49 @@ def reopen_thread(conn: Connection, user_id: int, thread_id: int) -> bool:
             (thread_id, user_id),
         )
         return cur.rowcount > 0
+
+
+def close_threads_for_opportunity(conn: Connection, user_id: int, opportunity_id: int) -> int:
+    """Close a closed gig's open threads, and do nothing at all if the gig is still open (#9).
+
+    **Safe to call unconditionally after any opportunity write.** The guard is the join's
+    ``o.closed_at IS NOT NULL``, not the caller's knowledge of what just happened, and that is the
+    whole design. Three separate paths set ``opportunities.closed_at`` — ``patch_status``,
+    ``patch_payment`` (settling a delivered gig closes it), and ``close`` — so a hook that had to be
+    invoked *only when something closed* would need the right condition at three call sites and
+    would silently stop working the day a fourth appears. Here a caller cannot get it wrong by
+    calling too often; it can only get it wrong by not calling.
+
+    Reopening is deliberately not the mirror image. Correcting a payment reopens a gig (slice 3
+    acceptance #5), but its conversations are not reopened with it: a thread Donna closed by hand
+    and a thread closed by this function are indistinguishable afterwards, so auto-reopening would
+    resurrect conversations she deliberately ended. :func:`reopen_thread` covers the case where she
+    wants one back.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection, inside the caller's transaction — the thread closures and the
+        opportunity write must commit together or not at all.
+    user_id : int
+        The owning user. Applied to both tables, so a guessed `opportunity_id` closes nothing.
+    opportunity_id : int
+        The opportunity whose threads to close.
+
+    Returns
+    -------
+    int
+        How many threads were closed. Zero is the ordinary result — the gig is still open, or its
+        threads were already closed — and is worth logging rather than asserting on.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE email_threads t "
+            "JOIN opportunities o ON o.id = t.opportunity_id AND o.user_id = t.user_id "
+            "SET t.closed_at = CURRENT_TIMESTAMP "
+            "WHERE t.user_id = %s AND t.opportunity_id = %s "
+            "  AND t.closed_at IS NULL AND t.deleted_at IS NULL "
+            "  AND o.closed_at IS NOT NULL AND o.deleted_at IS NULL",
+            (user_id, opportunity_id),
+        )
+        return cur.rowcount

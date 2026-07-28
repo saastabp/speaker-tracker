@@ -175,10 +175,10 @@ def parse_message_ids(raw: str | None) -> list[str]:
     """
     if not raw or not raw.strip():
         return []
-    bracketed = _MESSAGE_ID_RE.findall(raw)
-    if bracketed:
-        return bracketed
-    return [_bracketed(token) for token in raw.split() if token]
+    found = _MESSAGE_ID_RE.findall(raw)
+    if found:
+        return found
+    return [bracketed(token) for token in raw.split() if token]
 
 
 def format_message_ids(message_ids: list[str]) -> str | None:
@@ -244,7 +244,7 @@ def build_reply_headers(
     """
     if not parent_message_id or not parent_message_id.strip():
         raise ValueError("parent_message_id is required to build reply headers")
-    parent = _bracketed(parent_message_id)
+    parent = bracketed(parent_message_id)
 
     chain: list[str] = []
     for message_id in [*parse_message_ids(parent_references), parent]:
@@ -323,8 +323,33 @@ def addresses_in(*values: str | None) -> list[str]:
     return result
 
 
-def _bracketed(message_id: str) -> str:
-    """Return `message_id` wrapped in angle brackets, adding them only if absent."""
+def bracketed(message_id: str) -> str:
+    """Return `message_id` in the canonical angle-bracketed form, adding brackets only if absent.
+
+    RFC 5322 §3.6.4 requires the brackets, but this is not merely tidiness: the stored
+    ``message_id`` is the ``UNIQUE(user_id, message_id)`` idempotency key that makes ingest safe to
+    repeat (DEV-PLAN slice 6b acceptance #5). A key is only unique if the same message always
+    reduces to the same string, so a sender that omits the brackets must not be able to produce a
+    second row for a message already stored. Canonicalizing on the way in makes that structural
+    rather than dependent on how well-behaved the sending client is.
+
+    Parameters
+    ----------
+    message_id : str
+        A msg-id with or without brackets, possibly whitespace-padded.
+
+    Returns
+    -------
+    str
+        The id wrapped in exactly one pair of angle brackets.
+
+    Examples
+    --------
+    >>> bracketed('abc@example.com')
+    '<abc@example.com>'
+    >>> bracketed('  <abc@example.com> ')
+    '<abc@example.com>'
+    """
     token = message_id.strip()
     if token.startswith("<") and token.endswith(">"):
         return token

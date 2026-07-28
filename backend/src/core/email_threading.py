@@ -147,12 +147,32 @@ def match_by_headers(
     return None
 
 
-def _as_naive_utc(value: dt.datetime) -> dt.datetime:
+def as_naive_utc(value: dt.datetime) -> dt.datetime:
     """Drop tzinfo, converting to UTC first, so DB and header timestamps are comparable.
 
     MySQL timestamps come back naive; a parsed ``Date`` header is aware. Subtracting one from the
     other raises ``TypeError`` — a crash the poller would only ever hit in production, on a real
     reply from a real venue.
+
+    The repository layer needs this too, and for a quieter reason: pymysql formats a ``datetime``
+    without consulting ``tzinfo``, so binding an aware value stores its *local* wall time with the
+    offset discarded. That is not a crash but a silent hours-off timestamp, so every aware value is
+    converted here before it can reach a query.
+
+    Parameters
+    ----------
+    value : datetime
+        Naive or aware.
+
+    Returns
+    -------
+    datetime
+        Naive, in UTC. A naive input is returned unchanged — it is already assumed to be UTC.
+
+    Examples
+    --------
+    >>> as_naive_utc(dt.datetime(2026, 7, 27, 12, 0, tzinfo=dt.timezone(dt.timedelta(hours=-4))))
+    datetime.datetime(2026, 7, 27, 16, 0)
     """
     if value.tzinfo is None:
         return value
@@ -201,7 +221,7 @@ def match_by_subject(
         return None
 
     window = dt.timedelta(days=window_days)
-    anchor = _as_naive_utc(occurred_at)
+    anchor = as_naive_utc(occurred_at)
     best_thread_id: int | None = None
     best_last: dt.datetime | None = None
     for candidate in candidates:
@@ -210,7 +230,7 @@ def match_by_subject(
         others = {address.strip().lower() for address in candidate.counterpart_addresses if address}
         if counterparts.isdisjoint(others):
             continue
-        last = _as_naive_utc(candidate.last_message_at)
+        last = as_naive_utc(candidate.last_message_at)
         if abs(anchor - last) > window:
             continue
         if best_last is None or last > best_last:
