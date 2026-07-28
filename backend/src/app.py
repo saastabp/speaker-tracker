@@ -24,6 +24,7 @@ from handlers import (
     contact_organizations,
     contacts,
     dashboard,
+    email_imports,
     emails,
     health,
     message_templates,
@@ -42,6 +43,7 @@ app.include_router(catalogs.router)
 app.include_router(contacts.router)
 app.include_router(contact_organizations.router)
 app.include_router(dashboard.router)
+app.include_router(email_imports.router)
 app.include_router(emails.router)
 app.include_router(health.router)
 app.include_router(message_templates.router)

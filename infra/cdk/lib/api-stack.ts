@@ -123,6 +123,13 @@ const ROUTES: RouteDef[] = [
   { method: apigwv2.HttpMethod.POST, path: '/emails/threads/{id}/close', authRequired: true },
   { method: apigwv2.HttpMethod.POST, path: '/emails/threads/{id}/reopen', authRequired: true },
 
+  // Slice 6b — the pending-import queue (handlers/email_imports.py). PUT rather than POST on both
+  // links: they set a property and re-sending the same value succeeds, unlike the close/reopen
+  // verbs above, whose second application is a 404.
+  { method: apigwv2.HttpMethod.GET, path: '/emails/imports', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/emails/threads/{id}/contact', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/emails/threads/{id}/opportunity', authRequired: true },
+
   // Slice 6a — email signatures (handlers/signatures.py).
   { method: apigwv2.HttpMethod.GET, path: '/signatures', authRequired: true },
   { method: apigwv2.HttpMethod.GET, path: '/signatures/default', authRequired: true },
