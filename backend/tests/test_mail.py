@@ -21,7 +21,7 @@ from email.message import Message
 
 import pytest
 
-from common import mail
+from common import mail, mail_parse
 
 SENDER = "Donna King <donna@360balancedliving.com>"
 MESSAGE_ID = "<abc123@360balancedliving.com>"
@@ -351,7 +351,7 @@ def test_inline_image_round_trips_back_to_a_data_uri() -> None:
     # sees perfectly well.
     raw = build(body_html=signature_html())
 
-    parsed = mail.parse_raw_message(raw)
+    parsed = mail_parse.parse_raw_message(raw)
 
     assert parsed.body_html is not None
     assert "cid:" not in parsed.body_html
@@ -361,13 +361,13 @@ def test_inline_image_round_trips_back_to_a_data_uri() -> None:
 
 def test_inline_image_is_not_listed_as_an_attachment() -> None:
     # It is part of the body, not a file the reader should see in an attachment row.
-    parsed = mail.parse_raw_message(build(body_html=signature_html()))
+    parsed = mail_parse.parse_raw_message(build(body_html=signature_html()))
 
     assert parsed.attachments == []
 
 
 def test_inline_image_and_file_attachment_are_told_apart() -> None:
-    parsed = mail.parse_raw_message(build(body_html=signature_html(), attachments=[pdf()]))
+    parsed = mail_parse.parse_raw_message(build(body_html=signature_html(), attachments=[pdf()]))
 
     assert [a.filename for a in parsed.attachments] == ["one-sheet.pdf"]
     assert parsed.body_html is not None and "data:image/png;base64," in parsed.body_html
@@ -385,7 +385,7 @@ def test_unresolvable_cid_is_left_alone_and_warned(caplog: pytest.LogCaptureFixt
     )
 
     with caplog.at_level(logging.WARNING):
-        parsed = mail.parse_raw_message(raw)
+        parsed = mail_parse.parse_raw_message(raw)
 
     assert "cid:missing@elsewhere" in (parsed.body_html or "")
     assert any(record.levelno == logging.WARNING for record in caplog.records)
@@ -508,7 +508,7 @@ def test_ses_region_is_pinned_to_the_identity_region() -> None:
 def test_parse_round_trips_a_message_we_built() -> None:
     # The strongest available check: what the thread view shows must equal what was sent.
     html = "<p>Hi Jane,</p><p>Are you booking speakers?</p>"
-    parsed = mail.parse_raw_message(build(body_html=html))
+    parsed = mail_parse.parse_raw_message(build(body_html=html))
 
     assert parsed.body_html == html
     assert parsed.body_text == mail.html_to_text(html)
@@ -520,7 +520,7 @@ def test_parse_recovers_attachment_metadata_without_the_bytes() -> None:
     content = b"%PDF-1.4" + bytes(range(256))
     raw = build(attachments=[pdf("one-sheet.pdf", content), pdf("menu.pdf", b"short")])
 
-    parsed = mail.parse_raw_message(raw)
+    parsed = mail_parse.parse_raw_message(raw)
 
     assert [(a.filename, a.content_type) for a in parsed.attachments] == [
         ("one-sheet.pdf", "application/pdf"),
@@ -532,7 +532,7 @@ def test_parse_recovers_attachment_metadata_without_the_bytes() -> None:
 
 
 def test_parse_keeps_the_body_when_attachments_are_present() -> None:
-    parsed = mail.parse_raw_message(build(attachments=[pdf()]))
+    parsed = mail_parse.parse_raw_message(build(attachments=[pdf()]))
 
     assert parsed.body_html is not None
     assert "Are you booking speakers?" in parsed.body_text
@@ -543,7 +543,7 @@ def test_parse_handles_a_plain_text_only_message() -> None:
     # function does not invent markup for it.
     raw = b"From: a@x.com\r\nTo: b@x.com\r\nSubject: Hi\r\n\r\nJust text.\r\n"
 
-    parsed = mail.parse_raw_message(raw)
+    parsed = mail_parse.parse_raw_message(raw)
 
     assert parsed.body_text == "Just text."
     assert parsed.body_html is None
@@ -556,7 +556,7 @@ def test_parse_handles_an_html_only_message() -> None:
         b"Content-Type: text/html; charset=utf-8\r\n\r\n<p>Only HTML.</p>\r\n"
     )
 
-    parsed = mail.parse_raw_message(raw)
+    parsed = mail_parse.parse_raw_message(raw)
 
     assert parsed.body_html == "<p>Only HTML.</p>"
     assert parsed.body_text is None
@@ -565,7 +565,7 @@ def test_parse_handles_an_html_only_message() -> None:
 def test_parse_prefers_the_first_body_of_each_type() -> None:
     # A quoted reply chain can carry several; the topmost is what this message actually says.
     outer = build(body_html="<p>Newest</p>")
-    parsed = mail.parse_raw_message(outer)
+    parsed = mail_parse.parse_raw_message(outer)
     assert parsed.body_html == "<p>Newest</p>"
 
 
@@ -577,7 +577,7 @@ def test_parse_tolerates_an_unknown_charset(caplog: pytest.LogCaptureFixture) ->
     )
 
     with caplog.at_level(logging.WARNING):
-        parsed = mail.parse_raw_message(raw)
+        parsed = mail_parse.parse_raw_message(raw)
 
     assert parsed.body_text == "Still readable."
     assert any(record.levelno == logging.WARNING for record in caplog.records)
@@ -593,7 +593,7 @@ def test_parse_names_an_attachment_that_has_no_filename() -> None:
         b"--B--\r\n"
     )
 
-    parsed = mail.parse_raw_message(raw)
+    parsed = mail_parse.parse_raw_message(raw)
 
     assert len(parsed.attachments) == 1
     assert parsed.attachments[0].filename.startswith("attachment-")
@@ -601,7 +601,7 @@ def test_parse_names_an_attachment_that_has_no_filename() -> None:
 
 
 def test_parse_of_an_empty_message_is_empty_not_an_error() -> None:
-    parsed = mail.parse_raw_message(b"")
+    parsed = mail_parse.parse_raw_message(b"")
 
     assert parsed.body_html is None
     assert parsed.attachments == []

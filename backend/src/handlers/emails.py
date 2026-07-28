@@ -31,7 +31,7 @@ import uuid
 
 from aws_lambda_powertools.event_handler.api_gateway import Router
 
-from common import errors, mail, storage
+from common import errors, mail, mail_parse, storage
 from common.db import transaction
 from common.imap import append_to_sent_best_effort
 from common.logger import logger
@@ -299,7 +299,7 @@ def _message_detail(row: dict) -> EmailMessageDetail:
         return detail
 
     try:
-        parsed = mail.parse_raw_message(storage.get_object_bytes(row["s3_key"]))
+        parsed = mail_parse.parse_raw_message(storage.get_object_bytes(row["s3_key"]))
     except Exception:
         logger.warning(
             "Could not read stored MIME; message listed without a body s3_key=%s message_id=%s",
