@@ -350,13 +350,20 @@ client — not just in the app.
 **Size: L. Highest-risk slice in the project.**
 
 **Backend** — `imap_poll.py` (EventBridge `rate(1 minute)`, **reserved concurrency 1**),
-`core/email_threading.py` (**pure**: header matching, subject normalization, fallback matching),
-`email_imports.py` (pending-import list + link-to-contact).
-`<env>-Messaging` gains the poller and its rule.
+`core/email_headers.py`, `core/email_threading.py`, `core/email_scope.py`, `core/imap_cursor.py`
+(**all pure**: header matching and address normalization, thread resolution, inbound scoping, UID
+cursor planning), `email_imports.py` (pending-import list + link-to-contact).
+`<env>-Api` gains the poller and its EventBridge rule — **not** `<env>-Messaging`. The poller needs
+the ContentBucket for raw inbound MIME, which lives in Api alongside `backendBundle()`,
+`SharedDatabase`, and the `migrate` precedent for a non-API function. Messaging stays secret-only,
+importing and exporting nothing.
 
 **Frontend** — "N emails awaiting import" badge → **Add Contact prefilled from the `From` header**
 (name, address, sender domain suggesting an existing org), routed through slice 2's dedupe;
-unread/awaiting indicators; explicit **thread close** ("no reply needed").
+unread/awaiting indicators; explicit **thread close** ("no reply needed"); and a
+**link-this-thread-to-a-gig** control. That last one is not optional: an inbound-first thread gets
+`opportunity_id = NULL` unconditionally (a lone open opportunity is no guarantee the mail is about
+it), so without a manual control such a thread can never reach an opportunity at all.
 
 **Acceptance**
 1. A reply from a tracked contact links to the right thread **and opportunity** within ~1 minute.
@@ -367,7 +374,11 @@ unread/awaiting indicators; explicit **thread close** ("no reply needed").
 5. **Re-dragging the same message creates no duplicate** (`UNIQUE(user_id, message_id)`).
 6. Changing the folder's **`UIDVALIDITY` resets the cursor** rather than skipping or re-importing.
 7. Two overlapping poll invocations cannot both process a message (reserved concurrency 1).
-8. Inbound mail creates **no `outreaches` row** — targets are unmoved by receiving email.
+8. Inbound mail creates **no `outreaches` row** — targets are unmoved by receiving email. Nor does
+   a message the poller discovers in `Sent` because it was composed in Outlook: **all outreach
+   counting originates inside the app.** A touch that appears in the journal without Donna having
+   logged or sent it from here is unexplainable from her side, and an unexplainable number is worse
+   than a low one.
 9. A thread whose opportunity closes is **auto-closed**; a closed thread raises no Needs-attention.
 10. The broken-`References` fallback (From + normalized subject + time window) threads correctly.
 11. **A wrong IMAP password raises an alarm, not a silent no-op.** Deliberately break the secret

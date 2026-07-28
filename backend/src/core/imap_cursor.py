@@ -50,6 +50,59 @@ class CursorPlan(NamedTuple):
     reason: str
 
 
+class PollSummary(NamedTuple):
+    """What one folder's poll did — the handler's return value and its exit-log payload.
+
+    Deliberately a ``NamedTuple`` and not a Pydantic model: this is an internal value, never a
+    request or a response, and ``models/`` is where the project keeps wire contracts. It is the
+    same kind of thing as :class:`CursorPlan` and :class:`core.email_scope.IngestDecision`.
+
+    The counters are not decoration. A poller that quietly does nothing is the failure mode this
+    slice is most exposed to, and these are what make "nothing happened" distinguishable from
+    "nothing was there" in CloudWatch, without attaching a debugger to a Lambda that runs once a
+    minute.
+
+    Attributes
+    ----------
+    folder : str
+        Folder polled, as named on the server (``INBOX``, ``Sent Items``, ``Import``) — the live
+        Sent folder is *not* called ``Sent``, so this records what was actually opened.
+    reason : str
+        The :class:`CursorPlan` reason this poll ran under.
+    floor_uid : int
+        The cursor this poll started above.
+    examined : int
+        UIDs actually processed, after :func:`cap_uids`.
+    remaining : int
+        UIDs above the floor that the cap deferred to the next poll. Non-zero means a rescan is
+        draining, which must never be inferable only from the absence of activity.
+    ingested : int
+        New ``email_messages`` rows written.
+    duplicates : int
+        Messages whose ``Message-ID`` was already stored — ``UNIQUE(user_id, message_id)`` doing
+        its job. Expected to be non-zero on a rescan and near zero otherwise.
+    skipped : int
+        Messages classified as not ours and left alone — the never-the-whole-mailbox guarantee,
+        counted so it can be seen working.
+    moved : int
+        Messages moved out of ``Import`` into ``Processed``.
+    last_seen_uid : int
+        Watermark written back to ``imap_folder_cursors``. Equals `floor_uid` when nothing was
+        processed.
+    """
+
+    folder: str
+    reason: str
+    floor_uid: int
+    examined: int
+    remaining: int
+    ingested: int
+    duplicates: int
+    skipped: int
+    moved: int
+    last_seen_uid: int
+
+
 def plan_cursor(
     *,
     stored_uid_validity: int | None,
