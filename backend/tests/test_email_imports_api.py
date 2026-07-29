@@ -260,12 +260,37 @@ def test_another_users_contact_is_a_400(api, db_connection) -> None:
     assert status == 400
 
 
-def test_a_missing_contact_id_is_rejected(api, db_connection) -> None:
+def test_sending_a_null_contact_detaches_and_returns_the_thread_to_the_queue(
+    api, db_connection
+) -> None:
+    """The correction for linking the wrong person.
+
+    ``contact_id`` was non-nullable when this route was written, on the grounds that a detached
+    thread would land back in a queue with no interface. Building that queue removed the objection.
+    """
+    user_id = _user_id(db_connection)
+    contact_id = _contact(db_connection, user_id)
+    thread_id = _pending_thread(db_connection, user_id)
+    path = f"/emails/threads/{thread_id}/contact"
+
+    api("PUT", path, {"contact_id": contact_id})
+    assert api("GET", "/emails/imports")[1]["imports"] == []
+
+    status, body = api("PUT", path, {"contact_id": None})
+    assert status == 200
+    assert body == {"thread_id": thread_id, "contact_id": None}
+    assert len(api("GET", "/emails/imports")[1]["imports"]) == 1
+
+
+def test_an_omitted_contact_id_also_detaches(api, db_connection) -> None:
+    """Symmetric with the opportunity route: the field defaults to ``None``, so an empty body is a
+    detach rather than a 400."""
     user_id = _user_id(db_connection)
     thread_id = _pending_thread(db_connection, user_id)
 
-    status, _body = api("PUT", f"/emails/threads/{thread_id}/contact", {})
-    assert status == 400
+    status, body = api("PUT", f"/emails/threads/{thread_id}/contact", {})
+    assert status == 200
+    assert body["contact_id"] is None
 
 
 def test_a_non_numeric_thread_id_is_a_404(api, db_connection) -> None:

@@ -53,11 +53,15 @@ def list_pending_imports() -> dict:
 
 @router.put("/emails/threads/<thread_id>/contact")
 def link_contact(thread_id: str) -> dict:
-    """Attach an existing contact to a thread and its unattributed messages.
+    """Attach an existing contact to a thread, or detach with ``{"contact_id": null}``.
 
     Messages already carrying a contact of their own are left alone: that value is derived at
     ingest from who actually sent the message, so a second tracked contact who replied into this
     thread keeps their own attribution rather than being rewritten as the person Donna links.
+
+    Detaching returns the thread to the pending-import queue, which is the correction for having
+    linked the wrong person — re-linking to a *different* contact always worked, but "none" is the
+    one someone who has just made a mistake actually reaches for.
     """
     request = authenticate(router.current_event.raw_event)
     thread_row_id = path_int(thread_id)

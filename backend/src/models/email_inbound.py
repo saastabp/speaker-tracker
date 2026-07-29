@@ -80,7 +80,7 @@ class PendingImportSummary(BaseModel):
 
 
 class LinkContactInput(BaseModel):
-    """Attach an existing contact to a pending thread.
+    """Attach an existing contact to a pending thread, or detach it.
 
     The link backfills the whole thread — the ``email_threads`` row and every ``email_messages``
     row under it — so the conversation appears on the contact's timeline from its first message,
@@ -88,12 +88,20 @@ class LinkContactInput(BaseModel):
 
     Attributes
     ----------
-    contact_id : int
-        An **existing** ``contacts.id``. Creating a contact is ``POST /contacts``, deliberately
-        not this endpoint; see the module docstring.
+    contact_id : int or None
+        An **existing** ``contacts.id``, or ``None`` to detach, which returns the thread to the
+        pending-import queue. Creating a contact is ``POST /contacts``, deliberately not this
+        endpoint; see the module docstring.
+
+        This was non-nullable when the model was first written, on the grounds that detaching
+        would put a thread back into a queue with no interface to show it. Building that queue
+        removed the objection: a detached thread simply reappears there, which is exactly what
+        should happen when Donna decides she linked the wrong person. Re-linking to a *different*
+        contact always worked; only "none" was unreachable, and that is the one correction someone
+        who has just made a mistake actually wants.
     """
 
-    contact_id: int
+    contact_id: int | None = None
 
 
 class LinkOpportunityInput(BaseModel):

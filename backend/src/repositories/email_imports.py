@@ -29,6 +29,7 @@ from email.utils import parseaddr
 
 from pymysql.connections import Connection
 
+from common.logger import logger
 from core.email_headers import normalize_address
 from repositories._ownership import validate_contact, validate_opportunity
 
@@ -66,6 +67,20 @@ def _suggested_organizations(conn: Connection, user_id: int, domains: set[str]) 
     Runs against ``ix_organizations_user_email_domain (user_id, email_domain)``, present in
     ``0002`` for exactly this flow. A stored ``email_domain`` is user-entered free text, so it is
     normalized on the way out rather than trusted to already be lowercase and bare.
+
+    **An ambiguous domain suggests nothing.** If two or more organizations claim the same domain,
+    that domain is not identifying anyone and the suggestion is withheld. The property this feature
+    actually needs is "does this domain uniquely identify this venue", and a shared domain answers
+    no — a conference centre and its catering arm, a parent company hosting several venues, or a
+    university address shared by thousands. Picking one deterministically would be a coin flip
+    presented as knowledge, and the whole point of the prefill is that Donna can trust it enough
+    not to check it.
+
+    That is also the honest defence against consumer domains. A ``gmail.com`` blocklist catches the
+    loud cases and misses the quiet ones — ``stanford.edu`` appears on no freemail list and is
+    shared by twenty thousand people — whereas ambiguity is the symptom every one of them has in
+    common as soon as a second venue claims the domain. A blocklist remains worth adding as a fast
+    reject for the *first* such venue; see the deferred domain-learning work.
     """
     if not domains:
         return {}
@@ -77,14 +92,25 @@ def _suggested_organizations(conn: Connection, user_id: int, domains: set[str]) 
             (user_id, *domains),
         )
         rows = cur.fetchall()
-    suggestions: dict[str, dict] = {}
+
+    by_domain: dict[str, list[dict]] = {}
     for row in rows:
         key = (row["email_domain"] or "").strip().lower().lstrip("@")
-        # First match wins. Two venues sharing a domain is possible (a conference centre and its
-        # catering arm); suggesting one deterministically beats suggesting neither, and the prefill
-        # is a suggestion Donna can change, not a write.
-        if key and key not in suggestions:
-            suggestions[key] = row
+        if key:
+            by_domain.setdefault(key, []).append(row)
+
+    suggestions: dict[str, dict] = {}
+    for key, claimants in by_domain.items():
+        if len(claimants) > 1:
+            logger.warning(
+                "Domain %r is claimed by %d organizations (%s); suggesting none, because a shared "
+                "domain identifies nobody",
+                key,
+                len(claimants),
+                ", ".join(str(row["id"]) for row in claimants),
+            )
+            continue
+        suggestions[key] = claimants[0]
     return suggestions
 
 
@@ -161,8 +187,8 @@ def _owns_thread(conn: Connection, user_id: int, thread_id: int) -> bool:
         return cur.fetchone() is not None
 
 
-def link_contact(conn: Connection, user_id: int, thread_id: int, contact_id: int) -> bool:
-    """Attach a contact to a thread and its unattributed messages (acceptance #4).
+def link_contact(conn: Connection, user_id: int, thread_id: int, contact_id: int | None) -> bool:
+    """Attach a contact to a thread and its unattributed messages, or detach (acceptance #4).
 
     The thread is what every read actually uses — ``repositories.email_threads`` joins ``contacts``
     through ``email_threads.contact_id``, and no query anywhere selects the message-level column
@@ -181,6 +207,12 @@ def link_contact(conn: Connection, user_id: int, thread_id: int, contact_id: int
     2's dedupe — and offering to attach an existing person rather than creating a duplicate *is*
     that dedupe, so putting a second creation path here would defeat it.
 
+    **Detaching (``contact_id=None``) returns the thread to the pending-import queue**, which is
+    the correction for having linked the wrong person. It clears the thread's contact and the
+    contact on messages that were filled *by a previous link* — recognised as those whose contact
+    matches the thread's — while leaving alone any message whose contact ingest derived
+    independently. Undoing a link must not erase evidence the link never touched.
+
     Parameters
     ----------
     conn : pymysql.connections.Connection
@@ -189,8 +221,8 @@ def link_contact(conn: Connection, user_id: int, thread_id: int, contact_id: int
         The owning user.
     thread_id : int
         Thread to attach.
-    contact_id : int
-        An existing contact of this user.
+    contact_id : int or None
+        An existing contact of this user, or ``None`` to detach.
 
     Returns
     -------
@@ -203,19 +235,40 @@ def link_contact(conn: Connection, user_id: int, thread_id: int, contact_id: int
     common.errors.InvalidInput
         When `contact_id` is not a live contact of this user.
     """
+    # `validate_contact` passes None through, so detaching needs no special case here.
     validate_contact(conn, user_id, contact_id)
     if not _owns_thread(conn, user_id, thread_id):
         return False
+
     with conn.cursor() as cur:
+        # Read the outgoing contact before overwriting it: on a detach it is the only way to tell
+        # which messages a previous link filled from those ingest attributed independently.
+        cur.execute(
+            "SELECT contact_id FROM email_threads WHERE id = %s AND user_id = %s",
+            (thread_id, user_id),
+        )
+        previous_contact_id = cur.fetchone()["contact_id"]
+
         cur.execute(
             "UPDATE email_threads SET contact_id = %s WHERE id = %s AND user_id = %s",
             (contact_id, thread_id, user_id),
         )
-        cur.execute(
-            "UPDATE email_messages SET contact_id = %s "
-            "WHERE thread_id = %s AND user_id = %s AND contact_id IS NULL",
-            (contact_id, thread_id, user_id),
-        )
+
+        if contact_id is None:
+            # Clear only what a previous link set. A message whose contact differs from the
+            # thread's came from ingest — a second tracked contact replying into this thread — and
+            # undoing Donna's link must not erase a fact her link never asserted.
+            cur.execute(
+                "UPDATE email_messages SET contact_id = NULL "
+                "WHERE thread_id = %s AND user_id = %s AND contact_id = %s",
+                (thread_id, user_id, previous_contact_id),
+            )
+        else:
+            cur.execute(
+                "UPDATE email_messages SET contact_id = %s "
+                "WHERE thread_id = %s AND user_id = %s AND contact_id IS NULL",
+                (contact_id, thread_id, user_id),
+            )
     return True
 
 

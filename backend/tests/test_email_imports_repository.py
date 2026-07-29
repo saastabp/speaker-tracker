@@ -237,6 +237,58 @@ def test_an_unclaimed_domain_suggests_nothing(seeded_db) -> None:
     assert row["suggested_organization_name"] is None
 
 
+def test_a_domain_claimed_by_two_venues_suggests_neither(seeded_db, caplog) -> None:
+    """A shared domain identifies nobody, so withholding is the honest answer.
+
+    This is also the real defence against consumer domains. A ``gmail.com`` blocklist catches the
+    loud cases and misses the quiet ones — ``stanford.edu`` is on no freemail list and is shared by
+    twenty thousand people — whereas ambiguity is the symptom every one of them shows as soon as a
+    second venue claims the domain. Picking one deterministically would be a coin flip presented as
+    knowledge, and the prefill is only worth having if Donna can trust it without checking.
+    """
+    conn, user_id, org_type, _ = seeded_db
+    _organization(conn, user_id, org_type, "Riverbend Center", "shared.org")
+    _organization(conn, user_id, org_type, "Riverbend Catering", "shared.org")
+    thread_id = _thread(conn, user_id)
+    _message(conn, user_id, thread_id, "<a@x.com>", from_addr="pat@shared.org")
+
+    row = email_imports.list_pending_imports(conn, user_id)[0]
+    assert row["suggested_organization_id"] is None
+    assert row["suggested_organization_name"] is None
+    assert any("claimed by 2 organizations" in record.message for record in caplog.records), (
+        "withholding a suggestion must be visible in the log, not silent"
+    )
+
+
+def test_a_second_venue_claiming_a_domain_withdraws_an_existing_suggestion(seeded_db) -> None:
+    conn, user_id, org_type, _ = seeded_db
+    org_id = _organization(conn, user_id, org_type, "Riverbend Center", "riverbend.org")
+    thread_id = _thread(conn, user_id)
+    _message(conn, user_id, thread_id, "<a@x.com>", from_addr="pat@riverbend.org")
+    assert (
+        email_imports.list_pending_imports(conn, user_id)[0]["suggested_organization_id"] == org_id
+    )
+
+    _organization(conn, user_id, org_type, "Riverbend Catering", "riverbend.org")
+    assert email_imports.list_pending_imports(conn, user_id)[0]["suggested_organization_id"] is None
+
+
+def test_a_soft_deleted_venue_does_not_make_a_domain_ambiguous(seeded_db) -> None:
+    """Otherwise deleting a duplicate venue would silently disable the suggestion it left behind."""
+    conn, user_id, org_type, _ = seeded_db
+    org_id = _organization(conn, user_id, org_type, "Riverbend Center", "riverbend.org")
+    duplicate = _organization(conn, user_id, org_type, "Riverbend dup", "riverbend.org")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE organizations SET deleted_at = NOW() WHERE id = %s", (duplicate,))
+
+    thread_id = _thread(conn, user_id)
+    _message(conn, user_id, thread_id, "<a@x.com>", from_addr="pat@riverbend.org")
+
+    assert (
+        email_imports.list_pending_imports(conn, user_id)[0]["suggested_organization_id"] == org_id
+    )
+
+
 def test_another_users_organization_is_never_suggested(seeded_db) -> None:
     conn, user_id, org_type, _ = seeded_db
     other_id = _user(conn)
@@ -306,6 +358,55 @@ def test_linking_the_same_contact_twice_still_succeeds(seeded_db) -> None:
 
     assert email_imports.link_contact(conn, user_id, thread_id, contact_id) is True
     assert email_imports.link_contact(conn, user_id, thread_id, contact_id) is True
+
+
+def test_detaching_returns_the_thread_to_the_queue(seeded_db) -> None:
+    """The correction for linking the wrong person. Re-linking to a *different* contact always
+    worked; "none" is the one someone who has just made a mistake reaches for."""
+    conn, user_id, _, _ = seeded_db
+    contact_id = _contact(conn, user_id)
+    thread_id = _thread(conn, user_id)
+    _message(conn, user_id, thread_id, "<a@x.com>")
+
+    email_imports.link_contact(conn, user_id, thread_id, contact_id)
+    assert email_imports.list_pending_imports(conn, user_id) == []
+
+    assert email_imports.link_contact(conn, user_id, thread_id, None) is True
+    pending = email_imports.list_pending_imports(conn, user_id)
+    assert [row["thread_id"] for row in pending] == [thread_id]
+
+
+def test_detaching_clears_only_what_the_link_filled(seeded_db) -> None:
+    """Undoing Donna's link must not erase a fact her link never asserted.
+
+    A second tracked contact who replied into the thread had their id put there by *ingest*, from
+    who actually sent the message. Detaching is an undo of the link, not of the ingest.
+    """
+    conn, user_id, _, _ = seeded_db
+    linked = _contact(conn, user_id, "Pat Host", "pat@riverbend.org")
+    other = _contact(conn, user_id, "Sam Colleague", "sam@riverbend.org")
+    thread_id = _thread(conn, user_id)
+    filled_by_link = _message(conn, user_id, thread_id, "<a@x.com>")
+    theirs = _message(conn, user_id, thread_id, "<b@x.com>", contact_id=other)
+
+    email_imports.link_contact(conn, user_id, thread_id, linked)
+    email_imports.link_contact(conn, user_id, thread_id, None)
+
+    stored = {
+        row["id"]: row["contact_id"]
+        for row in _rows(conn, "SELECT id, contact_id FROM email_messages")
+    }
+    assert stored[filled_by_link] is None, "the link's own fill should be undone"
+    assert stored[theirs] == other, "ingest's attribution must survive the undo"
+
+
+def test_detaching_a_thread_that_was_never_linked_is_harmless(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    thread_id = _thread(conn, user_id)
+    _message(conn, user_id, thread_id, "<a@x.com>")
+
+    assert email_imports.link_contact(conn, user_id, thread_id, None) is True
+    assert len(email_imports.list_pending_imports(conn, user_id)) == 1
 
 
 def test_linking_an_unknown_contact_is_rejected(seeded_db) -> None:
