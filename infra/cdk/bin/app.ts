@@ -7,6 +7,7 @@ import { FrontendStack } from '../lib/frontend-stack';
 import { MessagingStack } from '../lib/messaging-stack';
 import {
   ACCOUNT,
+  ALARM_EMAIL,
   APP_NAME,
   CERT_REGION,
   COGNITO_DOMAIN_PREFIX,
@@ -57,6 +58,7 @@ const sandboxApi = new ApiStack(app, `${APP_NAME}-sandbox-Api`, {
   appName: APP_NAME,
   email: emailFor(SANDBOX.envType),
   contentCorsOrigins: contentCorsOrigins(SANDBOX.envType),
+  alarmEmail: ALARM_EMAIL,
   ...SANDBOX,
 });
 
@@ -95,6 +97,7 @@ const prodApi = new ApiStack(app, `${APP_NAME}-prod-Api`, {
   appName: APP_NAME,
   email: emailFor(PROD.envType),
   contentCorsOrigins: contentCorsOrigins(PROD.envType),
+  alarmEmail: ALARM_EMAIL,
   ...PROD,
   auth: { userPool: prodAuth.userPool, userPoolClient: prodAuth.userPoolClient },
 });

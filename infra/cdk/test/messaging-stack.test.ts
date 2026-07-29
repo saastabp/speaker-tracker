@@ -3,7 +3,7 @@ import { Match, Template } from 'aws-cdk-lib/assertions';
 import { ApiStack } from '../lib/api-stack';
 import { MessagingStack } from '../lib/messaging-stack';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import { TEST_EMAIL_CONFIG } from './fixtures';
+import { TEST_EMAIL_CONFIG, TEST_POLL_CONFIG } from './fixtures';
 
 const ENV = { account: '111111111111', region: 'us-west-2' };
 
@@ -97,6 +97,7 @@ describe('Api stack email permissions', () => {
         dbName: 'speakertracker_sandbox',
         logRetention: logs.RetentionDays.ONE_MONTH,
         reservedConcurrency: {},
+        ...TEST_POLL_CONFIG,
         email: TEST_EMAIL_CONFIG,
         contentCorsOrigins: ['https://example.test'],
       }),
@@ -113,9 +114,13 @@ describe('Api stack email permissions', () => {
     expect(ses[0].Resource).toBe(TEST_EMAIL_CONFIG.sesIdentityArn);
   });
 
-  test('the secret grant carries the trailing -* Secrets Manager requires', () => {
+  test('every secret grant carries the trailing -* Secrets Manager requires', () => {
     // Secrets Manager appends a random six-character suffix to a secret's ARN, so an exact-name
     // ARN matches nothing and every fetch would be denied at runtime.
+    //
+    // Asserts the property of each grant rather than that there is exactly one. Two functions read
+    // the mailbox password now — the API for the Sent-folder APPEND, and 6b's poller — and a count
+    // would have to be revised every time that changes, which is how a test stops meaning anything.
     const policies = apiTemplate().findResources('AWS::IAM::Policy');
     const statements = Object.values(policies).flatMap(
       (p: any) => p.Properties.PolicyDocument.Statement,
@@ -124,8 +129,10 @@ describe('Api stack email permissions', () => {
       JSON.stringify(s.Action).includes('secretsmanager:GetSecretValue'),
     );
 
-    expect(secret).toHaveLength(1);
-    expect(JSON.stringify(secret[0].Resource)).toContain('speakertracker/imap-*');
+    expect(secret.length).toBeGreaterThan(0);
+    for (const statement of secret) {
+      expect(JSON.stringify(statement.Resource)).toContain('speakertracker/imap-*');
+    }
   });
 
   test('the content bucket allows browser PUTs from the app origin', () => {

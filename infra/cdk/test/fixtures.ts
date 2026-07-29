@@ -12,3 +12,12 @@ export const TEST_EMAIL_CONFIG = {
   mailFromAddress: 'sender@example.com',
   mailFromName: 'Test Sender',
 } as const;
+
+/** Poller wiring (slice 6b). Spread into `ApiStackProps` by every test that builds the stack.
+ *
+ *  `pollEnabled` is false by default so the shared fixture never implies a scheduled poller;
+ *  `imap-poll.test.ts` overrides it where the schedule itself is under test. */
+export const TEST_POLL_CONFIG = {
+  pollEnabled: false,
+  alarmEmail: 'alarms@example.test',
+} as const;

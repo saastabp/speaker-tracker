@@ -3,7 +3,7 @@ import { Template } from 'aws-cdk-lib/assertions';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { ApiStack } from '../lib/api-stack';
 import { AuthStack } from '../lib/auth-stack';
-import { TEST_EMAIL_CONFIG } from './fixtures';
+import { TEST_EMAIL_CONFIG, TEST_POLL_CONFIG } from './fixtures';
 
 const ENV = { account: '111111111111', region: 'us-west-2' };
 
@@ -23,6 +23,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
       dbName: 'speakertracker_sandbox',
       logRetention: logs.RetentionDays.ONE_MONTH,
       reservedConcurrency: {},
+      ...TEST_POLL_CONFIG,
       email: TEST_EMAIL_CONFIG,
     contentCorsOrigins: ['https://example.test'],
     });
@@ -52,6 +53,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
       dbName: 'speakertracker',
       logRetention: logs.RetentionDays.THREE_MONTHS,
       reservedConcurrency: { api: 5, migrate: 1 },
+      ...TEST_POLL_CONFIG,
       email: TEST_EMAIL_CONFIG,
     contentCorsOrigins: ['https://example.test'],
       auth: { userPool: auth.userPool, userPoolClient: auth.userPoolClient },

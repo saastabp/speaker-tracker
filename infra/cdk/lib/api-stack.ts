@@ -2,11 +2,17 @@ import { ArnFormat, Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-l
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cwActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as triggers from 'aws-cdk-lib/triggers';
 import { Construct } from 'constructs';
 import { SharedDatabase } from './shared-db';
@@ -147,7 +153,17 @@ export interface ApiStackProps extends StackProps {
   readonly dbName: string;
   readonly logRetention: logs.RetentionDays;
   /** Reserved concurrency per function; omit a value → no reservation. */
-  readonly reservedConcurrency: { readonly api?: number; readonly migrate?: number };
+  readonly reservedConcurrency: {
+    readonly api?: number;
+    readonly migrate?: number;
+    readonly poll?: number;
+  };
+  /** Whether this environment's IMAP poller runs on its schedule. Exactly one environment may
+   *  poll a given mailbox — see `config.ts`. The function is deployed either way, so a disabled
+   *  environment can still be invoked by hand for testing. */
+  readonly pollEnabled: boolean;
+  /** Address the poller's failure alarm notifies. */
+  readonly alarmEmail: string;
   /** Cognito wiring for the JWT authorizer. Absent → open gateway (sandbox). */
   readonly auth?: {
     readonly userPool: cognito.IUserPool;
@@ -296,6 +312,112 @@ export class ApiStack extends Stack {
       logRetention: props.logRetention,
     });
     db.grantConnect(migrateFn);
+
+    // ---------------------------------------------------------------------------------------
+    // The IMAP poller (slice 6b).
+    //
+    // It lives HERE and not in `<env>-Messaging`, which is what DEV-PLAN originally said, because
+    // it needs the ContentBucket for raw inbound MIME — and Messaging was deliberately built to
+    // import nothing and export nothing. Putting it there would mean a cross-stack reference for
+    // the bucket, which is the exact shape that broke the Frontend origin in July. Everything the
+    // poller needs already exists in this stack.
+    //
+    // Not VPC-attached, like every other function here: the database is reached over its public
+    // endpoint with IAM auth, so there is no subnet or ENI plumbing to do.
+    // ---------------------------------------------------------------------------------------
+    const pollFn = this.pythonFunction('ImapPollFunction', {
+      functionName: `${props.appName}-${props.envType}-imap-poll`,
+      code,
+      handler: 'handlers.imap_poll.lambda_handler',
+      memorySize: 512,
+      // Generous next to the API's 15s: a UIDVALIDITY reset drains up to MAX_UIDS_PER_POLL (200)
+      // messages in one invocation, each fetched over IMAP and written to S3.
+      timeout: Duration.seconds(120),
+      // Reserved concurrency 1 is an EFFICIENCY guard, not the correctness guarantee.
+      //
+      // Correctness comes from idempotency: ingest dedupes on UNIQUE(user_id, message_id), the
+      // cursor cannot rewind within a UID generation, S3 writes are same-key-same-bytes, and the
+      // Import move happens only after the row commits. Two overlapping invocations would
+      // duplicate work, not corrupt data.
+      //
+      // What this prevents is pile-up: on a one-minute schedule, a poll that runs long (a hung
+      // IMAP socket, slow S3) would otherwise have its successor start on top of it, every
+      // minute, compounding. Throttling is the better outcome.
+      //
+      // It is also the WRONG unit once there is more than one mailbox. The thing that must not
+      // happen twice is "polling this mailbox", and reserved concurrency is scoped to the
+      // *function* — so with N users it would force every mailbox to be polled serially inside
+      // one invocation. The multi-user replacement is a per-mailbox lease in the database, which
+      // is the same piece of work as the mailbox→user table (see DEV-PLAN's future section);
+      // adopting it is what lets this reservation be dropped.
+      reservedConcurrentExecutions: props.reservedConcurrency.poll,
+      environment: { ...environment, ...emailEnvironment },
+      logRetention: props.logRetention,
+    });
+    db.grantConnect(pollFn);
+
+    // Same prefix scoping as the API function: a key built outside `email/` is denied at runtime
+    // rather than silently working.
+    contentBucket.grantReadWrite(pollFn, 'email/*');
+
+    // The mailbox password. The trailing `-*` matters for the same reason it does above — Secrets
+    // Manager appends a random suffix to the ARN.
+    pollFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [
+          Stack.of(this).formatArn({
+            service: 'secretsmanager',
+            resource: 'secret',
+            resourceName: `${props.email.imapSecretName}-*`,
+            arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+          }),
+        ],
+      }),
+    );
+    // Deliberately no `ses:SendRawEmail`: the poller reads the mailbox and never sends.
+
+    new events.Rule(this, 'ImapPollSchedule', {
+      ruleName: `${props.appName}-${props.envType}-imap-poll`,
+      schedule: events.Schedule.rate(Duration.minutes(1)),
+      // Exactly one environment may poll a given mailbox — two pollers would race over the Import
+      // folder and a dragged email would land in one database at random. The function is still
+      // deployed when disabled, so it can be invoked by hand for testing.
+      enabled: props.pollEnabled,
+      targets: [new targets.LambdaFunction(pollFn)],
+    });
+
+    // Acceptance #11 — the project's worst failure mode is a poller that keeps running on
+    // schedule, finds nothing, and stops threading mail with no error anywhere.
+    //
+    // The alarm watches the Lambda `Errors` metric rather than a log-metric filter on a green
+    // invocation, because that rests on a *type* propagating (ImapAuthError, after one retry with
+    // refreshed credentials) rather than on a log string somebody might reword. Transient network
+    // failures are caught in the handler and never reach this metric.
+    //
+    // treatMissingData: NOT_BREACHING because a minute with no invocation is not a failure.
+    const alarmTopic = new sns.Topic(this, 'ImapPollAlarmTopic', {
+      topicName: `${props.appName}-${props.envType}-imap-poll-alarm`,
+      displayName: 'Speaker Tracker IMAP poll failures',
+    });
+    // Email subscriptions require a one-time confirmation click; until it is confirmed the
+    // subscription is PendingConfirmation and the alarm is silent.
+    alarmTopic.addSubscription(new snsSubscriptions.EmailSubscription(props.alarmEmail));
+
+    const pollAlarm = new cloudwatch.Alarm(this, 'ImapPollFailureAlarm', {
+      alarmName: `${props.appName}-${props.envType}-imap-poll-failures`,
+      alarmDescription:
+        'The IMAP poller failed. Most likely the mailbox password was rotated: the handler ' +
+        'retries once with a freshly fetched secret and then lets the error fail the ' +
+        'invocation, which is what fires this. Inbound mail is NOT being processed until it is ' +
+        'fixed. Check the function log for "credentials rejected after refresh".',
+      metric: pollFn.metricErrors({ period: Duration.minutes(5) }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    pollAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
 
     // HTTP API with explicit routes (not ANY /{proxy+}), so /health can stay open and
     // the gateway rejects unknown paths itself.

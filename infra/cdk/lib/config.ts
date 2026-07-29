@@ -57,6 +57,17 @@ export const imapSecretName = (envType: 'sandbox' | 'prod'): string =>
 export const MAIL_FROM_ADDRESS = 'donna.king@360balancedliving.com';
 export const MAIL_FROM_NAME = 'Donna King';
 
+/** Where the IMAP poller's failure alarm goes.
+ *
+ *  Brian, not Donna, and deliberately: the alarm fires on a rejected mailbox password, which is an
+ *  administration problem she cannot act on. He is sole admin of her account, which is what makes
+ *  an unrelated rotation *more* likely, not less (DEV-PLAN slice 6b acceptance #11).
+ *
+ *  SNS email subscriptions require a one-time confirmation click, so the subscription sits
+ *  `PendingConfirmation` until that happens and the alarm is silent until then. Confirm it once
+ *  per environment after the first deploy. */
+export const ALARM_EMAIL = 'saastabp@gmail.com';
+
 /** Origins allowed to PUT composer attachments directly to the content bucket.
  *
  *  Sandbox serves from a generated `*.cloudfront.net` domain that changes whenever the Frontend
@@ -74,10 +85,34 @@ export interface EnvConfig {
   readonly authMode: 'dev' | 'cognito';
   readonly dbName: string;
   readonly logRetention: logs.RetentionDays;
-  /** Reserved concurrency per function. Empty = none — required for sandbox until the account's
-   *  Lambda concurrency quota is raised above 10 (reserving anything drops unreserved below the
-   *  hard floor of 10). Prod reserves to bound connections on the shared db.t4g.micro. */
-  readonly reservedConcurrency: { readonly api?: number; readonly migrate?: number };
+  /** Reserved concurrency per function. Omit a key for none.
+   *
+   *  Prod reserves `api` to bound connections on the shared db.t4g.micro. Both environments
+   *  reserve `poll` at 1 — see the note on that Lambda in `api-stack.ts` for what that does and,
+   *  more importantly, what it does not do.
+   *
+   *  *(Corrected 2026-07-28: this previously said the account limit was 10 with a quota increase
+   *  pending, which is why sandbox reserved nothing. Verified against the account —
+   *  `lambda get-account-settings` reports 1000 concurrent, 1000 unreserved — so the restriction
+   *  no longer applies and sandbox reserves the same as prod where it matters.)* */
+  readonly reservedConcurrency: {
+    readonly api?: number;
+    readonly migrate?: number;
+    readonly poll?: number;
+  };
+
+  /** Whether this environment's IMAP poller runs on its schedule.
+   *
+   *  **Exactly one environment may poll a given mailbox.** Sandbox and prod hold separate secrets
+   *  (`speakertracker/<env>/imap`) but there is one real WorkMail mailbox behind them, and two
+   *  pollers on a one-minute schedule would race over the `Import` folder: whichever moves a
+   *  message to `Processed` first wins, and the other environment never sees it. A dragged email
+   *  would then land in one database at random.
+   *
+   *  Sandbox polls today because prod does not exist. When prod launches this must flip — either
+   *  turn sandbox off, or give sandbox its own mailbox. The flag exists so that is one visible
+   *  line rather than a surprise. */
+  readonly pollEnabled: boolean;
 }
 
 export const SANDBOX: EnvConfig = {
@@ -85,7 +120,8 @@ export const SANDBOX: EnvConfig = {
   authMode: 'dev',
   dbName: 'speakertracker_sandbox',
   logRetention: logs.RetentionDays.ONE_MONTH,
-  reservedConcurrency: {}, // none — account concurrency limit is 10 (quota increase pending)
+  reservedConcurrency: { poll: 1 },
+  pollEnabled: true, // prod does not exist yet; flip this when it does
 };
 
 export const PROD: EnvConfig = {
@@ -93,5 +129,7 @@ export const PROD: EnvConfig = {
   authMode: 'cognito',
   dbName: 'speakertracker',
   logRetention: logs.RetentionDays.THREE_MONTHS,
-  reservedConcurrency: { api: 5, migrate: 1 },
+  reservedConcurrency: { api: 5, migrate: 1, poll: 1 },
+  // Turning this on requires turning sandbox off first — one mailbox, one poller.
+  pollEnabled: false,
 };
