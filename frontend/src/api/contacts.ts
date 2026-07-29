@@ -53,7 +53,9 @@ export interface AffiliationUpdate {
   is_power_partner?: boolean;
 }
 
-const contactKeys = {
+/** Exported because `emailImports.ts` creates a contact as one step of importing a thread and must
+ *  invalidate the same caches this module's own mutations do. */
+export const contactKeys = {
   all: ['contacts'] as const,
   list: (query?: string) => ['contacts', 'list', query ?? ''] as const,
   detail: (id: number) => ['contacts', id] as const,

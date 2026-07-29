@@ -6,6 +6,7 @@ import {
   Card,
   Group,
   Loader,
+  Select,
   Stack,
   Text,
   Title,
@@ -21,6 +22,8 @@ import {
   useReplyToThread,
   type EmailMessageDetail,
 } from '../api/emails';
+import { useLinkThreadOpportunity } from '../api/emailImports';
+import { useOpportunities } from '../api/opportunities';
 import { useSignatures } from '../api/signatures';
 import { CardTitle } from '../components/detailCards';
 import { FieldLabel } from '../components/FieldLabel';
@@ -53,6 +56,8 @@ export function EmailThread() {
   const thread = useEmailThread(threadId);
   const markRead = useMarkThreadRead();
   const closeThread = useCloseThread();
+  const opportunities = useOpportunities();
+  const linkOpportunity = useLinkThreadOpportunity();
 
   // Opening the thread is what clears the inbox's unread weighting. Fired once per thread id,
   // not on every render or refetch.
@@ -100,6 +105,19 @@ export function EmailThread() {
                 Unlinked contact
               </Text>
             )}
+            {/* The linked gig, as a link rather than a label: the whole point of attributing a
+                conversation to an opportunity is being able to get from one to the other. */}
+            {data.opportunity_id !== null && (
+              <Anchor
+                component={Link}
+                to={`/pipeline/${data.opportunity_id}`}
+                size="sm"
+                c="teal.8"
+              >
+                {opportunities.data?.find((o) => o.id === data.opportunity_id)?.title ??
+                  'Linked gig'}
+              </Anchor>
+            )}
             {data.pending_count > 0 && (
               <Badge size="sm" variant="light" color="orange">
                 {data.pending_count} pending
@@ -113,6 +131,36 @@ export function EmailThread() {
           </Group>
         </div>
         <Group gap="xs">
+          {/*
+            Linking a thread to a gig is not a convenience — it is the only way an inbound-first
+            thread ever reaches one. Nothing infers it: a contact having exactly one open gig is
+            not evidence that a given email concerns it, and filing side-channel mail against the
+            wrong gig is worse than leaving it unattached. So a thread that started with a venue
+            writing in would otherwise stay unattributed forever.
+
+            `clearable` is what makes a wrong link correctable — clearing the picker detaches.
+          */}
+          <Select
+            size="sm"
+            w={230}
+            placeholder="Not linked to a gig"
+            aria-label="Link this thread to a gig"
+            data={(opportunities.data ?? []).map((opportunity) => ({
+              value: String(opportunity.id),
+              label: `${opportunity.title} — ${opportunity.organization_name}`,
+            }))}
+            value={data.opportunity_id === null ? null : String(data.opportunity_id)}
+            onChange={(value) =>
+              linkOpportunity.mutate({
+                threadId: data.id,
+                opportunityId: value === null ? null : Number(value),
+              })
+            }
+            disabled={opportunities.isPending || linkOpportunity.isPending}
+            clearable
+            searchable
+            nothingFoundMessage="No gigs match"
+          />
           {data.contact_id && (
             <Button variant="default" onClick={() => navigate(`/contacts/${data.contact_id}`)}>
               View contact

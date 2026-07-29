@@ -100,7 +100,9 @@ export interface AttachmentUpload {
   content_type: string;
 }
 
-const emailKeys = {
+/** Exported because `emailImports.ts` invalidates threads: linking a contact to a pending thread
+ *  changes what the inbox shows, not just the import queue. */
+export const emailKeys = {
   threads: ['emails', 'threads'] as const,
   thread: (id: number) => ['emails', 'threads', id] as const,
 };

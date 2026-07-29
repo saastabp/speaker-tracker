@@ -23,6 +23,7 @@ import { CardTitle } from '../components/detailCards';
 import { EmailComposer } from '../components/EmailComposer';
 import { FieldLabel } from '../components/FieldLabel';
 import { FilterBar, type FilterPill } from '../components/FilterBar';
+import { PendingImportsCard } from '../components/PendingImportsCard';
 import { RichTextField } from '../components/RichTextEditor';
 
 /** Direction filters. Deliberately not "Replied": that cannot be derived from the data, and it is
@@ -88,6 +89,10 @@ export function Emails() {
         </div>
         <Button onClick={openComposer}>Compose</Button>
       </Group>
+
+      {/* Above the filters and the list: triage comes before browsing, and the card hides itself
+          when there is nothing to triage. */}
+      <PendingImportsCard />
 
       <FilterBar
         search={search}
