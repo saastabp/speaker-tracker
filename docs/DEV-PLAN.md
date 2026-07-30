@@ -440,8 +440,10 @@ lands on the opportunity; then drag a stranger's email into Import and complete 
 **Size: S.** Smallest slice; deliberately last because it depends on contacts, opportunities, and
 the composer all existing.
 
-**Migration `0009_followups.sql`** — `follow_ups` with
-`CHECK (contact_id IS NOT NULL OR opportunity_id IS NOT NULL)`.
+**Migration `0010_followups.sql`** — `follow_ups` with
+`CHECK (contact_id IS NOT NULL OR opportunity_id IS NOT NULL)`. **Not `0009`** — slice 6b took that
+number for `0009_external_message_id.sql`, so this shifted by one; `DATABASE.md`'s migration table
+is the authority on what is already claimed.
 
 **Backend** — `follow_ups.py`, `common/scheduler.py` (deterministic `followup-<id>`, no-op when
 unconfigured), `followup_notify.py` (**never touches the DB** — payload carries everything).
