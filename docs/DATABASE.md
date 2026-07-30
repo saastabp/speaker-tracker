@@ -12,11 +12,12 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: implemented through migration `0009` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
-> (UX reconciliation, a catalog label update with no schema change), `0008_email` (slice 6a) and
-> `0009_external_message_id` (slice 6b).** This document is the schema contract; everything through
-> `0009` satisfies it, while `0010_followups` (slice 7) and `0011_materials` remain target schema.
-> Derived from `DESIGN.md` §4/§5 and supersedes any older sketch.
+> **Status: implemented through migration `0010` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
+> (UX reconciliation, a catalog label update with no schema change), `0008_email` (slice 6a),
+> `0009_external_message_id` (slice 6b) and `0010_followups` (slice 7).** This document is the
+> schema contract; everything through `0010` satisfies it, while `0011_materials` remains target
+> schema. Note `0010` is **written and applied in test, but not yet deployed** — the rest of slice 7
+> is still being built on top of it. Derived from `DESIGN.md` §4/§5 and supersedes any older sketch.
 
 **Conventions** (inherited from the sibling apps, see `CODING-GUIDELINES.md` §2):
 
