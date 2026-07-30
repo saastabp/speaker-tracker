@@ -397,12 +397,57 @@ def build_raw_message(
     return raw
 
 
+#: Domain SES stamps onto the ``Message-ID`` it substitutes for ours. Verified 2026-07-29 against a
+#: real delivery: SES returned ``0100019fb1ccf4d8-…-000000`` and the recipient's client displayed
+#: ``<0100019fb1ccf4d8-…-000000@email.amazonses.com>``.
+#:
+#: **This is the one vendor-specific line in the threading path.** A future mail host replaces this
+#: constant and :func:`external_message_id`; nothing else — not the schema, not the matching logic —
+#: knows which provider sent the mail.
+SES_MESSAGE_ID_DOMAIN = "email.amazonses.com"
+
+
+def external_message_id(ses_message_id: str) -> str | None:
+    """Derive the ``Message-ID`` the recipient will see, from the id the provider returned.
+
+    Parameters
+    ----------
+    ses_message_id : str
+        The ``MessageId`` from :func:`send_raw`.
+
+    Returns
+    -------
+    str or None
+        The bracketed header value, or ``None`` when there is nothing to derive from — a blank id
+        must not become the string ``"<@email.amazonses.com>"``, which would then be *stored* and
+        could match a later message's headers by accident.
+
+    Examples
+    --------
+    >>> external_message_id("0100019fb1ccf4d8-abc-000000")
+    '<0100019fb1ccf4d8-abc-000000@email.amazonses.com>'
+    >>> external_message_id("") is None
+    True
+    """
+    cleaned = (ses_message_id or "").strip()
+    if not cleaned:
+        return None
+    return f"<{cleaned}@{SES_MESSAGE_ID_DOMAIN}>"
+
+
 def send_raw(raw_message: bytes, *, sender: str, destinations: list[str]) -> str:
     """Hand raw MIME to SES and return SES's own message id.
 
-    The returned id is SES's, **not** the RFC 5322 ``Message-ID`` in the headers — the two are
-    different identifiers. Threading and the ``UNIQUE(user_id, message_id)`` idempotency key use
-    the header value we minted; the SES id is useful only for correlating with SES logs.
+    **The returned id is not merely a log correlator — it is the basis of the ``Message-ID`` the
+    recipient actually receives.** SES *replaces* the RFC 5322 header we mint, so the value here,
+    run through :func:`external_message_id`, is what every reply's ``In-Reply-To`` will point at.
+    Store it (``email_messages.external_message_id``); threading depends on it.
+
+    *(This docstring previously asserted the opposite — that the two identifiers were unrelated and
+    the SES id was "useful only for correlating with SES logs". That claim was wrong and cost the
+    header chain: for every thread the app originated, replies referenced an id we had never
+    stored, so they matched nothing. Verified 2026-07-29 by comparing a send's logged ids against
+    what the recipient's mail client displayed.)*
 
     Parameters
     ----------

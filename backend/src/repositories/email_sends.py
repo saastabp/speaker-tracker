@@ -287,11 +287,17 @@ def confirm_send(
     user_id: int,
     message_row_id: int,
     sent_at: datetime | None = None,
+    external_message_id: str | None = None,
 ) -> bool:
     """Phase 3 — mark a pending message sent and advance its thread, inside one transaction.
 
     Called only after SES has accepted the message. Advancing ``last_message_at`` here rather than
     in phase 1 is what lets compensation be a pure delete.
+
+    This is also the only moment ``external_message_id`` can be recorded: the provider replaces the
+    ``Message-ID`` we minted, and does not tell us the substitute until it accepts the message. That
+    substitute is what every reply's ``In-Reply-To`` points at, so without it the header chain
+    cannot match a single reply to a thread this app originated.
 
     Parameters
     ----------
@@ -303,6 +309,10 @@ def confirm_send(
         ``email_messages.id`` returned by :func:`create_pending_send`.
     sent_at : datetime or None, optional
         Send timestamp; ``None`` uses the database's ``CURRENT_TIMESTAMP``.
+    external_message_id : str or None, optional
+        The ``Message-ID`` the recipient will see (``common.mail.external_message_id``). ``None``
+        leaves the column untouched rather than blanking it, so a retry that lacks the value cannot
+        erase one already recorded.
 
     Returns
     -------
@@ -313,9 +323,10 @@ def confirm_send(
     """
     with conn.cursor() as cur:
         cur.execute(
-            "UPDATE email_messages SET sent_at = COALESCE(%s, CURRENT_TIMESTAMP) "
+            "UPDATE email_messages SET sent_at = COALESCE(%s, CURRENT_TIMESTAMP), "
+            "  external_message_id = COALESCE(%s, external_message_id) "
             "WHERE id = %s AND user_id = %s AND direction = 'out' AND sent_at IS NULL",
-            (sent_at, message_row_id, user_id),
+            (sent_at, external_message_id, message_row_id, user_id),
         )
         if cur.rowcount == 0:
             return False

@@ -53,10 +53,19 @@ def threads_by_message_id(
     ``candidate_ancestors`` and gets back only the ids we actually stored, in one query rather than
     one per ancestor.
 
-    Keys are returned exactly as stored, which is the **bracketed** form
-    (``<uuid@360balancedliving.com>``) that ``core.email_headers.generate_message_id`` mints and
-    ``parse_message_ids`` extracts. Both sides of the lookup therefore agree on bracketing; a bare
-    id would simply never match, and the resulting mis-thread would be invisible.
+    **Two columns are searched, because an outbound message has two identities.** We mint
+    ``message_id`` before sending, but the provider *replaces* that header on the way out and the
+    recipient only ever sees ``external_message_id`` — so an external reply chains against the
+    latter while an internal one (a reply composed in the mailbox itself, against the Sent-folder
+    copy we appended) chains against the former. Searching only ``message_id`` is what silently
+    broke threading for every reply from outside: the chain matched nothing, and the message
+    survived only if its sender happened to be a tracked contact.
+
+    Keys are returned in whichever form was matched, so the caller's map is keyed by the id it
+    actually asked about. Both are stored **bracketed** — the form
+    ``core.email_headers.generate_message_id`` mints, ``bracketed`` canonicalizes, and
+    ``parse_message_ids`` extracts — so both sides of the lookup agree; a bare id would simply
+    never match, and the resulting mis-thread would be invisible.
 
     Parameters
     ----------
@@ -76,13 +85,25 @@ def threads_by_message_id(
     """
     if not message_ids:
         return {}
+    placeholders = _placeholders(len(message_ids))
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT message_id, thread_id FROM email_messages "
-            f"WHERE user_id = %s AND message_id IN ({_placeholders(len(message_ids))})",
-            (user_id, *message_ids),
+            "SELECT message_id, external_message_id, thread_id FROM email_messages "
+            f"WHERE user_id = %s AND (message_id IN ({placeholders}) "
+            f"                        OR external_message_id IN ({placeholders}))",
+            (user_id, *message_ids, *message_ids),
         )
-        return {row["message_id"]: row["thread_id"] for row in cur.fetchall()}
+        rows = cur.fetchall()
+
+    wanted = set(message_ids)
+    found: dict[str, int] = {}
+    for row in rows:
+        # Key by whichever identity the caller asked about — a row can match on either column, and
+        # returning the other one would leave `match_by_headers` unable to find its own lookup.
+        for candidate in (row["message_id"], row["external_message_id"]):
+            if candidate in wanted:
+                found[candidate] = row["thread_id"]
+    return found
 
 
 def contacts_by_address(conn: Connection, user_id: int, addresses: Sequence[str]) -> dict[str, int]:

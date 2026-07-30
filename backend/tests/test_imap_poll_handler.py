@@ -356,6 +356,120 @@ def test_re_dragging_the_same_message_creates_no_duplicate(poller) -> None:
     assert len(poller.rows("SELECT id FROM email_messages")) == 1
 
 
+def test_a_reply_from_an_untracked_sender_threads_via_the_external_message_id(poller) -> None:
+    """The regression test for the bug live testing found on 2026-07-29.
+
+    SES **replaces** the ``Message-ID`` we mint, so the recipient replies to an id that exists
+    nowhere in our database. Before ``external_message_id`` was recorded, the chain matched nothing
+    and such a reply was **silently dropped** — not queued for triage, just gone. It survived only
+    when its sender happened to be a tracked contact, which made acceptance #1 pass for the wrong
+    reason.
+
+    This drives the exact shape that failed, and it is careful to leave the header chain as the
+    **only** way in. The outbound message was addressed to a plus-alias while the reply arrives
+    from the bare address — which is what really happened, gmail replying from
+    ``saastabp@gmail.com`` to mail sent to ``saastabp+ghl@gmail.com``. That mismatch defeats the
+    contact match *and* the subject fallback's counterpart check, so if the chain does not match,
+    nothing does.
+
+    Mutation-checked: with the lookup reverted to ``message_id`` only, this fails. An earlier draft
+    of this test reused one address for both, and the subject fallback quietly rescued the message
+    — it passed against the broken code and proved nothing.
+    """
+    ours = "<72b96991f1a84dc9aa661903fb907f50@360balancedliving.com>"
+    as_sent = "<0100019fb1ccf4d8-abc-000000@email.amazonses.com>"
+    with poller.conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO email_threads (user_id, subject_normalized, last_direction, "
+            " last_message_at) VALUES (%s, 'SPEAKER REPLY TEST', 'out', %s)",
+            (poller.user_id, dt.datetime(2026, 7, 29, 20, 53)),
+        )
+        thread_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO email_messages (user_id, thread_id, message_id, external_message_id, "
+            " direction, from_addr, to_addr, subject, sent_at) "
+            "VALUES (%s, %s, %s, %s, 'out', %s, 'stranger+alias@elsewhere.test', "
+            " 'SPEAKER REPLY TEST', %s)",
+            (
+                poller.user_id,
+                thread_id,
+                ours,
+                as_sent,
+                OUR_ADDRESS,
+                dt.datetime(2026, 7, 29, 20, 53),
+            ),
+        )
+
+    poller.run()
+    poller.server.add(
+        "INBOX",
+        901,
+        build_message(
+            message_id="<reply@mail.gmail.test>",
+            # Deliberately an address on no contact record — the contact match must not rescue this.
+            from_addr="A Stranger <stranger@elsewhere.test>",
+            subject="Re: SPEAKER REPLY TEST",
+            in_reply_to=as_sent,
+            references=as_sent,
+        ),
+    )
+
+    inbox = poller.folder(poller.run(), "INBOX")
+    assert inbox["ingested"] == 1, "the reply was dropped — the header chain did not match"
+
+    rows = poller.rows(
+        "SELECT thread_id, direction FROM email_messages "
+        "WHERE message_id = '<reply@mail.gmail.test>'"
+    )
+    assert rows and rows[0]["thread_id"] == thread_id, "reply landed, but not on its own thread"
+    assert rows[0]["direction"] == "in"
+
+
+def test_a_reply_referencing_the_id_we_minted_still_threads(poller) -> None:
+    """The other identity must keep working: a reply composed inside the mailbox itself chains
+    against the Sent-folder copy, which carries the id we minted rather than the provider's."""
+    ours = "<72b96991f1a84dc9aa661903fb907f50@360balancedliving.com>"
+    as_sent = "<0100019fb1ccf4d8-abc-000000@email.amazonses.com>"
+    with poller.conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO email_threads (user_id, subject_normalized, last_direction, "
+            " last_message_at) VALUES (%s, 'SPEAKER REPLY TEST', 'out', %s)",
+            (poller.user_id, dt.datetime(2026, 7, 29, 20, 53)),
+        )
+        thread_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO email_messages (user_id, thread_id, message_id, external_message_id, "
+            " direction, from_addr, subject, sent_at) "
+            "VALUES (%s, %s, %s, %s, 'out', %s, 'SPEAKER REPLY TEST', %s)",
+            (
+                poller.user_id,
+                thread_id,
+                ours,
+                as_sent,
+                OUR_ADDRESS,
+                dt.datetime(2026, 7, 29, 20, 53),
+            ),
+        )
+
+    poller.run()
+    poller.server.add(
+        "INBOX",
+        901,
+        build_message(
+            message_id="<internal-reply@wm.test>",
+            from_addr="A Stranger <stranger@elsewhere.test>",
+            subject="Re: SPEAKER REPLY TEST",
+            in_reply_to=ours,
+        ),
+    )
+
+    assert poller.folder(poller.run(), "INBOX")["ingested"] == 1
+    rows = poller.rows(
+        "SELECT thread_id FROM email_messages WHERE message_id = '<internal-reply@wm.test>'"
+    )
+    assert rows[0]["thread_id"] == thread_id
+
+
 def test_a_message_that_fails_to_ingest_stays_in_the_import_folder(poller) -> None:
     """The ordering the module calls not interchangeable, and the only case that distinguishes it.
 

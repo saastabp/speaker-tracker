@@ -365,32 +365,64 @@ unread/awaiting indicators; explicit **thread close** ("no reply needed"); and a
 `opportunity_id = NULL` unconditionally (a lone open opportunity is no guarantee the mail is about
 it), so without a manual control such a thread can never reach an opportunity at all.
 
-**Acceptance**
-1. A reply from a tracked contact links to the right thread **and opportunity** within ~1 minute.
-2. Mail from a **non-tracked** address is **never ingested** — verify with a personal email.
-3. Dragging an unknown sender's mail to `Import` produces a pending-import row, moves it to
+**Acceptance** — ✅ = demonstrated on the real mailbox in sandbox (2026-07-29); see the
+verification notes after the list.
+
+1. ✅ A reply from a tracked contact links to the right thread **and opportunity** within ~1 minute.
+2. ✅ Mail from a **non-tracked** address is **never ingested** — verify with a personal email.
+3. ✅ Dragging an unknown sender's mail to `Import` produces a pending-import row, moves it to
    `Processed`, and badges the app.
-4. Importing opens Add Contact prefilled; saving links contact **and** the whole thread.
-5. **Re-dragging the same message creates no duplicate** (`UNIQUE(user_id, message_id)`).
-6. Changing the folder's **`UIDVALIDITY` resets the cursor** rather than skipping or re-importing.
-7. Two overlapping poll invocations cannot both process a message (reserved concurrency 1).
-8. Inbound mail creates **no `outreaches` row** — targets are unmoved by receiving email. Nor does
+4. ✅ Importing opens Add Contact prefilled; saving links contact **and** the whole thread.
+5. ✅ **Re-dragging the same message creates no duplicate** (`UNIQUE(user_id, message_id)`).
+6. ✅ Changing the folder's **`UIDVALIDITY` resets the cursor** rather than skipping or re-importing.
+7. ✅ Two overlapping poll invocations cannot both process a message (reserved concurrency 1).
+8. ◻ Inbound mail creates **no `outreaches` row** — targets are unmoved by receiving email. Nor does
    a message the poller discovers in `Sent` because it was composed in Outlook: **all outreach
    counting originates inside the app.** A touch that appears in the journal without Donna having
    logged or sent it from here is unexplainable from her side, and an unexplainable number is worse
    than a low one.
-9. A thread whose opportunity closes is **auto-closed**; a closed thread raises no Needs-attention.
-10. The broken-`References` fallback (From + normalized subject + time window) threads correctly.
-11. **A wrong IMAP password raises an alarm, not a silent no-op.** Deliberately break the secret
+9. ◻ A thread whose opportunity closes is **auto-closed**; a closed thread raises no Needs-attention.
+10. ◻ The broken-`References` fallback (From + normalized subject + time window) threads correctly.
+11. ✅ **A wrong IMAP password raises an alarm, not a silent no-op.** Deliberately break the secret
     value and confirm the failure surfaces — auth errors must be distinguishable from the transient
     network errors the poller retries. This is the project's worst failure mode: the poller keeps
     running on schedule, finds nothing, and inbound threading stops with no error anywhere. Brian
     being sole admin of Donna's account makes an unrelated password rotation *more* likely, not
     less.
-12. *(moved from 6a)* `Speaker Tracker/Import` and `/Processed` are **auto-created and subscribed**
+12. ◑ *(moved from 6a)* `Speaker Tracker/Import` and `/Processed` are **auto-created and subscribed**
     on the poller's first connect, and **visible in Outlook** without manual subscription —
     `SUBSCRIBE` is what makes them appear; creating them is not enough.
-13. *(moved from 6a)* Deleting the Import folder and re-polling **recreates** it.
+13. ✅ *(moved from 6a)* Deleting the Import folder and re-polling **recreates** it.
+
+**Verification notes (2026-07-29, sandbox against the real mailbox).** ✅ = demonstrated live;
+◑ = partly; ◻ = covered by mutation-checked tests but not separately observed live.
+
+- **#6 could not be triggered naturally and was verified by simulation.** WorkMail preserves
+  `UIDVALIDITY` *and* UID numbering across a folder delete/recreate — rebuilding `Import` returned
+  `uidvalidity=1, uidnext=38459`, continuous with the pre-delete 38458 — so the reset path never
+  fires on this server. Setting `imap_folder_cursors.uid_validity` to a wrong value is a *faithful*
+  substitute rather than a fudge: the poller cannot distinguish "the server changed its generation"
+  from "the stored value differs", because comparing those two numbers is the whole mechanism.
+  Observed `resume → uidvalidity_changed (floor 0) → resume`, i.e. it reset **once** and re-synced,
+  which is what separates a working reset from a poller stuck rescanning forever.
+- **#11 needed a cold start, and its absence looked like a failure.** Editing the secret alone
+  produced no errors, because `common/secrets.py` caches it at module scope and a warm container
+  never re-reads it. This does not weaken the alarm: in a real rotation the *mailbox* rejects the
+  cached password, so the auth path fires regardless. Once a deploy forced a new container the full
+  chain ran — reject → refresh-and-retry → reject → invocation fails → `Errors` → `ALARM` → email —
+  and after the secret was fixed the `refresh=True` retry recovered it with **no redeploy**, with
+  the alarm returning to `OK` (which matters: SNS notifies only on transitions, so an alarm stuck in
+  ALARM would swallow the next real failure).
+- **#12 is ◑ because imports were done in WorkMail webmail, which lists folders regardless of
+  subscription state.** Creation is verified in the logs; the "visible without manual subscription"
+  half needs a client that filters by the subscription list (Outlook, Thunderbird).
+- **#8 is implicitly true** — no `outreaches` row exists from any of the inbound traffic — but was
+  not asserted as its own live check.
+- **⚠ Latent risk, never hit:** `fetch_messages` pulls all capped UIDs in a **single** `FETCH`, so a
+  200-message batch that cannot transfer within the 120s timeout would fail, never advance the
+  cursor, and retry that same batch forever — a stall that emits an alarm every cycle. This is why a
+  `UIDVALIDITY` reset should not be pointed at INBOX (6,286 messages) casually. If it ever bites,
+  lower `MAX_UIDS_PER_POLL` or fetch in sub-batches.
 
 *(#12/#13 were filed under 6a, but the helpers there are never called by the send path — they are
 poller behaviour. `common/imap.py` already ships `ensure_app_folders`, SPECIAL-USE discovery and

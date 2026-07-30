@@ -605,3 +605,33 @@ def test_parse_of_an_empty_message_is_empty_not_an_error() -> None:
 
     assert parsed.body_html is None
     assert parsed.attachments == []
+
+
+# --- external_message_id (slice 6b: the id the recipient actually sees) -------------------
+
+
+def test_external_message_id_derives_the_header_the_recipient_receives() -> None:
+    """SES replaces the Message-ID we mint; this reconstructs what it substituted.
+
+    Verified against a real delivery on 2026-07-29: SES returned
+    ``0100019fb1ccf4d8-…-000000`` and the recipient's client displayed that value
+    ``@email.amazonses.com``.
+    """
+    assert (
+        mail.external_message_id("0100019fb1ccf4d8-abc-000000")
+        == "<0100019fb1ccf4d8-abc-000000@email.amazonses.com>"
+    )
+
+
+def test_a_blank_provider_id_derives_nothing() -> None:
+    """``<@email.amazonses.com>`` would be *stored*, and could then match a later message's headers
+    by accident — a mis-thread with no symptom."""
+    assert mail.external_message_id("") is None
+    assert mail.external_message_id("   ") is None
+
+
+def test_the_derived_id_is_bracketed_so_it_matches_stored_message_ids() -> None:
+    """Both columns are searched by ``threads_by_message_id`` against bracketed ids extracted from
+    ``In-Reply-To``; an unbracketed value would never match."""
+    derived = mail.external_message_id("abc-123")
+    assert derived.startswith("<") and derived.endswith(">")

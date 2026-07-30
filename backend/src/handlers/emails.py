@@ -155,7 +155,14 @@ def _deliver(
     #    loudly rather than surfaced as a failed send the user would retry (and double-send).
     try:
         with transaction(request.connection) as conn:
-            email_sends.confirm_send(conn, request.user_id, pending.message_row_id)
+            # The provider's id becomes the Message-ID the recipient sees, and therefore the one
+            # every reply chains against. Recorded here because this is the first moment we know it.
+            email_sends.confirm_send(
+                conn,
+                request.user_id,
+                pending.message_row_id,
+                external_message_id=mail.external_message_id(ses_message_id),
+            )
     except Exception:
         logger.exception(
             "Email SENT but confirm failed — message is pending reconciliation "
