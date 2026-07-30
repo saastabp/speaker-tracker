@@ -447,7 +447,14 @@ is the authority on what is already claimed.
 
 **Backend** — `follow_ups.py`, `common/scheduler.py` (deterministic `followup-<id>`, no-op when
 unconfigured), `followup_notify.py` (**never touches the DB** — payload carries everything).
-`<env>-Messaging` gains the Scheduler group + exec role.
+
+`<env>-Api` gains the Scheduler group, the exec role **and the notify function** — **not**
+`<env>-Messaging`, which is what this line said before. The same correction the poller needed above
+(§"Slice 6b"), for the same reason: Messaging was deliberately built to import and export nothing,
+so siting these there would force Api to take cross-stack references to the group name and role
+ARN — the weak-reference shape that left the CloudFront origin pointing at a deleted API on
+2026-07-25. Api already has `backendBundle()`, the SES grant, and two non-API-function precedents
+(`migrate`, `imap_poll`). Settled with Brian 2026-07-29.
 
 **Frontend** — follow-up creation standalone and as an opt-in rider; due list on the Dashboard;
 mark done.

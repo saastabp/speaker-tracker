@@ -11,6 +11,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as triggers from 'aws-cdk-lib/triggers';
@@ -426,6 +427,110 @@ export class ApiStack extends Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
     pollAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
+    // ---------------------------------------------------------------------------------------
+    // Follow-up reminders (slice 7).
+    //
+    // The schedule group, the invoke role and the notify function all live HERE rather than in
+    // `<env>-Messaging`, which is what DEV-PLAN originally said — the same correction the IMAP
+    // poller needed above, for the same reason. Messaging was deliberately built to import and
+    // export nothing, so siting these there would force this stack to take cross-stack references
+    // to the group name and role ARN: the weak-reference shape that left the CloudFront origin
+    // pointing at a deleted API in July. Everything needed is already in this stack.
+    //
+    // One EventBridge schedule per pending follow-up, named `followup-<id>` (common/scheduler.py).
+    // The name is a pure function of the row id, so nothing here tracks schedule state and nothing
+    // reads it back.
+    // ---------------------------------------------------------------------------------------
+    const followUpGroup = new scheduler.CfnScheduleGroup(this, 'FollowUpScheduleGroup', {
+      name: `${props.appName}-${props.envType}-followups`,
+    });
+
+    // The reminder sender. Note what it does NOT get: no `db.grantConnect`, no database env vars,
+    // no content bucket, no IMAP secret. handlers/followup_notify.py renders everything from the
+    // schedule's frozen payload and never opens a connection — that is what lets it run with no
+    // RDS handshake, and this is where the guarantee stops being a convention and becomes IAM. If
+    // it ever grows a database need, the deploy is the right place for that to hurt.
+    //
+    // No reserved concurrency: a one-time schedule cannot pile up the way the 1-minute poller can,
+    // and sandbox reserves sparingly to fit the account's concurrent-execution limit.
+    const notifyFn = this.pythonFunction('FollowUpNotifyFunction', {
+      functionName: `${props.appName}-${props.envType}-followup-notify`,
+      code,
+      handler: 'handlers.followup_notify.lambda_handler',
+      memorySize: 256,
+      timeout: Duration.seconds(30),
+      environment: {
+        ENV_TYPE: props.envType,
+        POWERTOOLS_SERVICE_NAME: 'speaker-tracker',
+        POWERTOOLS_METRICS_NAMESPACE: 'SpeakerTracker',
+        POWERTOOLS_TRACE_DISABLED: 'true',
+        POWERTOOLS_LOG_LEVEL: 'INFO',
+        MAIL_FROM_ADDRESS: props.email.mailFromAddress,
+        MAIL_FROM_NAME: props.email.mailFromName,
+      },
+      logRetention: props.logRetention,
+    });
+
+    // Scoped to the identity ARN, not '*', exactly as the API function's grant is.
+    notifyFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendRawEmail'],
+        resources: [props.email.sesIdentityArn],
+      }),
+    );
+
+    // The role EventBridge Scheduler assumes to invoke the notify function. The SourceAccount
+    // condition is the confused-deputy guard: without it, another account's scheduler service
+    // could in principle present this role.
+    const schedulerRole = new iam.Role(this, 'FollowUpSchedulerRole', {
+      roleName: `${props.appName}-${props.envType}-followup-scheduler`,
+      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com', {
+        conditions: {
+          StringEquals: { 'aws:SourceAccount': Stack.of(this).account },
+        },
+      }),
+      description: 'Assumed by EventBridge Scheduler to invoke the follow-up reminder function',
+    });
+    notifyFn.grantInvoke(schedulerRole);
+
+    // The API function manages the schedules. Deliberately no `scheduler:GetSchedule` and no
+    // `scheduler:ListSchedules`: the design never reads schedule state back — every operation is
+    // addressed by the derived name — so the policy says so. A future read fails in IAM rather
+    // than quietly introducing the dependency the naming scheme exists to avoid.
+    apiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'scheduler:CreateSchedule',
+          'scheduler:UpdateSchedule',
+          'scheduler:DeleteSchedule',
+        ],
+        resources: [
+          Stack.of(this).formatArn({
+            service: 'scheduler',
+            resource: 'schedule',
+            resourceName: `${followUpGroup.name}/*`,
+            arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+          }),
+        ],
+      }),
+    );
+
+    // Creating a schedule that carries `schedulerRole` requires permission to pass it.
+    apiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['iam:PassRole'],
+        resources: [schedulerRole.roleArn],
+      }),
+    );
+
+    // Added after the fact rather than in the function's `environment` above, so construct
+    // ordering does not matter. These three names are what common/scheduler.py reads; when any is
+    // absent it no-ops and logs a WARNING, so an un-deployed scheduler degrades to a
+    // Dashboard-only reminder instead of a failed request.
+    apiFn.addEnvironment('SCHEDULER_GROUP_NAME', followUpGroup.name!);
+    apiFn.addEnvironment('SCHEDULER_NOTIFY_ARN', notifyFn.functionArn);
+    apiFn.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
 
     // HTTP API with explicit routes (not ANY /{proxy+}), so /health can stay open and
     // the gateway rejects unknown paths itself.

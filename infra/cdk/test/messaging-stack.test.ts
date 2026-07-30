@@ -110,8 +110,14 @@ describe('Api stack email permissions', () => {
     );
     const ses = statements.filter((s: any) => JSON.stringify(s.Action).includes('ses:'));
 
-    expect(ses).toHaveLength(1);
-    expect(ses[0].Resource).toBe(TEST_EMAIL_CONFIG.sesIdentityArn);
+    // Two senders as of slice 7: the composer (ApiFunction) and the follow-up reminder
+    // (FollowUpNotifyFunction). The invariant under test is the *scoping*, not the count — this
+    // asserted `toHaveLength(1)` when only one thing sent, which conflated the two. Checking every
+    // statement means a third sender does not break the test, while a '*' resource still does.
+    expect(ses.length).toBeGreaterThan(0);
+    for (const statement of ses) {
+      expect(statement.Resource).toBe(TEST_EMAIL_CONFIG.sesIdentityArn);
+    }
   });
 
   test('every secret grant carries the trailing -* Secrets Manager requires', () => {
