@@ -26,7 +26,7 @@ from decimal import Decimal
 
 from pymysql.connections import Connection
 
-from core.periods import period_bounds, stale_cutoff
+from core.periods import awaiting_reply_cutoff, period_bounds, stale_cutoff
 
 #: Money totals assume a single currency (the app default); Donna's gigs are all USD.
 _CURRENCY = "USD"
@@ -202,12 +202,19 @@ def stale_opportunities(conn: Connection, user_id: int, now_local: datetime) -> 
 def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
     """Return follow-up rows the dashboard flags.
 
-    Three reasons today: ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked``
-    (past-event gig still pre-Booked) are **opportunity**-scoped; ``research_incomplete`` is
-    **organization**-scoped (a venue that is not research-ready — missing a Kindling field or a
-    contact), so its ``id`` is the org id and the SPA links to the venue. Opportunity rows carry an
-    ``event_date`` and sort first; research rows (no date) follow. A richer tickler model with
-    per-type timing thresholds is future work (its own table).
+    Four reasons, across three different id-spaces — the ``reason`` token is what tells the SPA
+    which one an ``id`` belongs to, so adding a reason means teaching it a new link target:
+
+    - ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked`` (past-event gig
+      still pre-Booked) are **opportunity**-scoped;
+    - ``research_incomplete`` is **organization**-scoped (a venue that is not research-ready —
+      missing a Kindling field or a contact), so its ``id`` is the org id;
+    - ``awaiting_reply`` is **email-thread**-scoped (slice 6b acceptance #9): an open thread whose
+      last message went out and has gone unanswered past
+      :data:`core.periods.AWAITING_REPLY_AFTER_DAYS`.
+
+    Opportunity rows carry an ``event_date`` and sort first; the dateless reasons follow. A richer
+    tickler model with per-type timing thresholds is future work (its own table).
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -232,8 +239,33 @@ def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list
             "SELECT o.id, o.name AS title, o.name, 'research_incomplete', NULL "
             "FROM organizations o "
             "WHERE o.user_id = %s AND o.deleted_at IS NULL AND NOT (" + _RESEARCH_READY + ") "
+            # An open thread whose last message went OUT and has gone unanswered. All three
+            # conditions are load-bearing: a closed thread raises nothing (acceptance #9), and a
+            # thread whose last message came IN is Donna's turn rather than the venue's.
+            #
+            # `last_message_at` is a TIMESTAMP, which MySQL converts to the session timezone on
+            # comparison — the session tz is already the user's — so comparing it against a
+            # local-naive cutoff is right, exactly as `stale_opportunities` does.
+            #
+            # NULLIF guards the link text: `subject_normalized` is NOT NULL but may be empty, and
+            # the SPA renders `title` as the anchor, so an empty subject would draw a blank link.
+            "UNION ALL "
+            "SELECT t.id, COALESCE(NULLIF(t.subject_normalized, ''), '(no subject)'), "
+            "       COALESCE(c.name, ''), 'awaiting_reply', NULL "
+            "FROM email_threads t "
+            "LEFT JOIN contacts c ON c.id = t.contact_id "
+            "WHERE t.user_id = %s AND t.deleted_at IS NULL AND t.closed_at IS NULL "
+            "  AND t.last_direction = 'out' AND t.last_message_at IS NOT NULL "
+            "  AND t.last_message_at < %s "
             "ORDER BY event_date IS NULL, event_date ASC",
-            (user_id, user_id, now_local.date(), user_id),
+            (
+                user_id,
+                user_id,
+                now_local.date(),
+                user_id,
+                user_id,
+                awaiting_reply_cutoff(now_local),
+            ),
         )
         return list(cur.fetchall())
 

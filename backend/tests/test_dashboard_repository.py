@@ -248,6 +248,134 @@ def test_needs_attention_flags_research_incomplete_venues(seeded_db) -> None:
     assert incomplete == {"NoKindling", "NoContact"}
 
 
+def _email_thread(
+    conn,
+    user_id: int,
+    *,
+    subject: str = "Speaking inquiry",
+    last_direction: str = "out",
+    last_message_at: datetime | None = datetime(2026, 7, 1, 9, 0),
+    closed: bool = False,
+    contact_id: int | None = None,
+    deleted: bool = False,
+) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO email_threads (user_id, contact_id, subject_normalized, last_direction, "
+            " last_message_at, closed_at, deleted_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (
+                user_id,
+                contact_id,
+                subject,
+                last_direction,
+                last_message_at,
+                "2026-01-01 00:00:00" if closed else None,
+                "2026-01-01 00:00:00" if deleted else None,
+            ),
+        )
+        return cur.lastrowid
+
+
+def _awaiting_reply(rows: list[dict]) -> set[str]:
+    return {r["title"] for r in rows if r["reason"] == "awaiting_reply"}
+
+
+def test_needs_attention_flags_an_unanswered_outbound_thread(seeded_db) -> None:
+    """Acceptance #9: an open thread whose last message went out and has gone quiet.
+
+    Threshold is 7 days (``core.periods.AWAITING_REPLY_AFTER_DAYS``) — shorter than the 14-day
+    stale window on purpose, because a venue that has not answered in a week is the moment a nudge
+    still reads as attentive rather than impatient.
+    """
+    conn, user_id, _, _ = seeded_db
+    _email_thread(conn, user_id, subject="Waited", last_message_at=datetime(2026, 7, 10, 9, 0))
+    _email_thread(conn, user_id, subject="Fresh", last_message_at=datetime(2026, 7, 19, 9, 0))
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert _awaiting_reply(rows) == {"Waited"}
+
+
+def test_a_thread_awaiting_donnas_own_reply_is_not_flagged(seeded_db) -> None:
+    """``last_direction='in'`` means the ball is in *her* court, which is a different prompt this
+    deliberately does not make — flagging it would tell her a venue owes her a reply when she owes
+    them one."""
+    conn, user_id, _, _ = seeded_db
+    _email_thread(
+        conn,
+        user_id,
+        subject="Their turn",
+        last_direction="in",
+        last_message_at=datetime(2026, 7, 1, 9, 0),
+    )
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert _awaiting_reply(rows) == set()
+
+
+def test_a_closed_thread_raises_no_needs_attention(seeded_db) -> None:
+    """The other half of acceptance #9 — closing is how a conversation stops nagging."""
+    conn, user_id, _, _ = seeded_db
+    _email_thread(
+        conn, user_id, subject="Closed", last_message_at=datetime(2026, 7, 1, 9, 0), closed=True
+    )
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert _awaiting_reply(rows) == set()
+
+
+def test_a_soft_deleted_thread_is_not_flagged(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    _email_thread(
+        conn, user_id, subject="Deleted", last_message_at=datetime(2026, 7, 1, 9, 0), deleted=True
+    )
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert _awaiting_reply(rows) == set()
+
+
+def test_a_thread_with_nothing_sent_yet_is_not_flagged(seeded_db) -> None:
+    """A thread whose only message is an unconfirmed send has no ``last_message_at``; it has not
+    gone unanswered, it has not gone out."""
+    conn, user_id, _, _ = seeded_db
+    _email_thread(conn, user_id, subject="Never sent", last_message_at=None)
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert _awaiting_reply(rows) == set()
+
+
+def test_an_awaiting_reply_row_carries_the_thread_id_so_the_spa_can_link_to_it(seeded_db) -> None:
+    """The ``reason`` token is the only thing saying which id-space ``id`` is in. If this row
+    carried anything but the thread id, the dashboard link would land on an unrelated gig."""
+    conn, user_id, _, _ = seeded_db
+    thread_id = _email_thread(conn, user_id, last_message_at=datetime(2026, 7, 1, 9, 0))
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    row = next(r for r in rows if r["reason"] == "awaiting_reply")
+    assert row["id"] == thread_id
+    assert row["event_date"] is None
+
+
+def test_a_subjectless_thread_gets_placeholder_link_text(seeded_db) -> None:
+    """``title`` is rendered as the anchor, and ``subject_normalized`` is NOT NULL but may be empty
+    — an empty subject would otherwise draw a blank, unclickable-looking link."""
+    conn, user_id, _, _ = seeded_db
+    _email_thread(conn, user_id, subject="", last_message_at=datetime(2026, 7, 1, 9, 0))
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert _awaiting_reply(rows) == {"(no subject)"}
+
+
+def test_another_users_threads_are_never_flagged(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO users (cognito_sub, email) VALUES ('other', 'o@x.com')")
+        other_id = cur.lastrowid
+    _email_thread(conn, other_id, subject="Theirs", last_message_at=datetime(2026, 7, 1, 9, 0))
+
+    rows = dashboard.needs_attention(conn, user_id, datetime(2026, 7, 20, 12, 0))
+    assert _awaiting_reply(rows) == set()
+
+
 # --- coming up -----------------------------------------------------------------------------------
 
 

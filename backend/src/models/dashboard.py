@@ -68,11 +68,19 @@ class StaleOpportunity(BaseModel):
 class NeedsAttentionItem(BaseModel):
     """A row flagged for follow-up on the dashboard.
 
-    ``reason`` is a machine token the SPA maps to display text and a link target:
-    ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked`` (past-event gig still
-    pre-Booked) are gig-scoped, so ``id`` is the opportunity id; ``research_incomplete`` is
-    org-scoped (a venue that is not research-ready), so ``id`` is the organization id and the SPA
-    links to the venue. ``event_date`` is null for research rows.
+    ``reason`` is a machine token the SPA maps to display text and a link target — and it is the
+    **only** thing that says which id-space ``id`` belongs to, so a new reason always means
+    teaching the SPA a new link:
+
+    - ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked`` (past-event gig
+      still pre-Booked) are gig-scoped, so ``id`` is the opportunity id;
+    - ``research_incomplete`` is org-scoped (a venue that is not research-ready), so ``id`` is the
+      organization id and the SPA links to the venue;
+    - ``awaiting_reply`` is thread-scoped (slice 6b): an open thread whose last message went out
+      and has gone unanswered past the threshold, so ``id`` is the ``email_threads`` id.
+
+    ``event_date`` is null for every reason but the two gig-scoped ones, which is also what sorts
+    dated rows first.
     """
 
     id: int

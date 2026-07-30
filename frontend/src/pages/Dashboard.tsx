@@ -88,11 +88,23 @@ const REASON: Record<NeedsAttentionItem['reason'], { label: string; color: strin
   awaiting_payment: { label: 'Awaiting payment', color: 'warn' },
   overdue_unbooked: { label: 'Overdue', color: 'terracotta' },
   research_incomplete: { label: 'Research incomplete', color: 'gray' },
+  awaiting_reply: { label: 'Awaiting reply', color: 'blue' },
 };
 
-/** Needs-attention rows link to the gig, except research rows which link to the venue. */
+/**
+ * Where a needs-attention row goes. The `reason` is what says which id-space `id` is in, so this
+ * switch has to grow whenever a reason does — a missing case would link a thread id into /pipeline
+ * and land on someone else's gig, or a 404.
+ */
 function needsAttentionHref(n: NeedsAttentionItem): string {
-  return n.reason === 'research_incomplete' ? `/venues/${n.id}` : `/pipeline/${n.id}`;
+  switch (n.reason) {
+    case 'research_incomplete':
+      return `/venues/${n.id}`;
+    case 'awaiting_reply':
+      return `/emails/${n.id}`;
+    default:
+      return `/pipeline/${n.id}`;
+  }
 }
 
 /** Funnel bar opacity per stage — fades as reach narrows (mockup `.fstep` opacities). */

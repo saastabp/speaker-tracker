@@ -40,7 +40,9 @@ export interface NeedsAttentionItem {
   id: number;
   title: string;
   organization_name: string;
-  reason: 'awaiting_payment' | 'overdue_unbooked' | 'research_incomplete';
+  /** Also says which id-space `id` belongs to: the two gig reasons → opportunity, research →
+   *  organization, awaiting_reply → email thread. Adding one means teaching Dashboard a link. */
+  reason: 'awaiting_payment' | 'overdue_unbooked' | 'research_incomplete' | 'awaiting_reply';
   event_date: string | null;
 }
 

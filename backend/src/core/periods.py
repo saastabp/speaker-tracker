@@ -29,6 +29,18 @@ CADENCES = (WEEKLY, MONTHLY, QUARTERLY)
 #: each opportunity's last activity.
 STALE_AFTER_DAYS = 14
 
+#: An open email thread whose last message went *out* this many days ago is awaiting a reply
+#: (DEV-PLAN slice 6b acceptance #9, threshold settled with Brian 2026-07-27).
+#:
+#: Shorter than :data:`STALE_AFTER_DAYS` on purpose: a gig can sit two weeks between stages without
+#: anything being wrong, but a venue that has not answered an email in a week is the moment a nudge
+#: still reads as attentive rather than impatient.
+#:
+#: Hardcoded like the other three needs-attention reasons. Per-type timing thresholds belong to the
+#: tickler model that is future work, and inventing half of it here would leave the app with two
+#: places that decide when to prompt.
+AWAITING_REPLY_AFTER_DAYS = 7
+
 
 def _add_months(first_of_month: datetime, n: int) -> datetime:
     """Return the first-of-month ``n`` months after ``first_of_month`` (which must have day=1)."""
@@ -100,3 +112,29 @@ def stale_cutoff(now_local: datetime) -> datetime:
         ``now_local - STALE_AFTER_DAYS`` days.
     """
     return now_local - timedelta(days=STALE_AFTER_DAYS)
+
+
+def awaiting_reply_cutoff(now_local: datetime) -> datetime:
+    """Return the local-naive instant before which an unanswered outbound email needs a nudge.
+
+    An email thread that is open, whose last message went **out**, and whose ``last_message_at`` is
+    older than this is awaiting a reply. All three conditions are required: a closed thread raises
+    nothing (acceptance #9), and a thread whose last message came *in* is Donna's turn, not the
+    venue's — which is a different prompt this deliberately does not make.
+
+    Parameters
+    ----------
+    now_local : datetime
+        The current time in the user's local timezone (naive).
+
+    Returns
+    -------
+    datetime
+        ``now_local - AWAITING_REPLY_AFTER_DAYS`` days.
+
+    Examples
+    --------
+    >>> awaiting_reply_cutoff(datetime(2026, 7, 29, 9, 0))
+    datetime.datetime(2026, 7, 22, 9, 0)
+    """
+    return now_local - timedelta(days=AWAITING_REPLY_AFTER_DAYS)
