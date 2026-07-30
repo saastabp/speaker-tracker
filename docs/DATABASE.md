@@ -189,7 +189,8 @@ erDiagram
         bigint thread_id FK
         bigint contact_id FK "NULLABLE"
         bigint opportunity_id FK "NULLABLE"
-        varchar message_id "UK with user_id"
+        varchar message_id "UK with user_id — the id WE mint"
+        varchar external_message_id "NULLABLE — the id the RECIPIENT sees"
         varchar in_reply_to
         text message_references
         enum direction "out|in"
@@ -420,11 +421,34 @@ re-dragged email, a redelivered IMAP fetch, or an overlapping poll structurally 
 double-inserting. `message_id` is `VARCHAR(255)` — comfortably above real-world Message-IDs and
 within the InnoDB DYNAMIC 3072-byte index limit at utf8mb4.
 
+**An outbound message has TWO identities, and both are stored** (`0009`, slice 6b). SES *replaces*
+the RFC 5322 `Message-ID` header we mint on the way out, so the id in `message_id` exists nowhere
+except this database and the Sent-folder copy we `APPEND` ourselves:
+
+| Column | Is |
+|---|---|
+| `message_id` | the id we mint **before** sending. The `UNIQUE` idempotency key — durable before SES is contacted, which is what makes the intent-first send safe — and what the Sent-folder copy carries |
+| `external_message_id` | the header **as actually sent**, `<{provider_id}@email.amazonses.com>`. NULL for inbound and for anything we did not originate. Written at confirm time, the first moment it is known |
+
+`repositories.email_matching.threads_by_message_id` matches an incoming `In-Reply-To`/`References`
+against **either**. This is not belt-and-braces: an *external* reply chains on the provider's id and
+an *internal* one (composed in the mailbox against our Sent copy) chains on ours, so searching only
+`message_id` silently dropped every reply from anyone who was not already a tracked contact. Found
+in live testing 2026-07-29 — see the `ses-rewrites-message-id` note.
+
+The column is deliberately **not** called `ses_message_id`: "the Message-ID the recipient saw" is a
+host-agnostic fact, and only its derivation is SES-specific (one constant and one function in
+`common/mail.py`). It is **not** UNIQUE — a provider could reuse or omit one, and that must never be
+able to block a send; uniqueness stays on the id we control.
+
 `direction` is an `ENUM('out','in')` — see §5 for why this one is not a catalog.
-`s3_key` points at the raw MIME (attachments are extracted from it, not stored separately).
+`s3_key` points at the raw MIME (attachments are extracted from it, not stored separately). **The
+poller writes it too** — `0008` stores no body, so that object is the only copy of what arrived, and
+a NULL `s3_key` means the message displays with nothing in it.
 `imap_folder` + `imap_uid` record provenance and support re-fetch.
 Indexes: `(thread_id, COALESCE(sent_at, received_at))`, `(user_id, message_id)` UK,
-`(in_reply_to)` — the reply-matching lookup.
+`(in_reply_to)` — the reply-matching lookup — and `(external_message_id)`, consulted on every
+polled message that carries a threading header.
 
 ### `follow_ups`
 A future, actionable reminder — distinct from `outreaches` (past touches) and `opportunity_notes`
@@ -664,8 +688,9 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 | `0006_targets.sql` | `targets` | 5 |
 | `0007_target_labels.sql` | updates `target_types` display labels to the approved mockup wording (no schema change) | UX reconciliation |
 | `0008_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors`, `signatures`, + the deferred `outreaches.email_message_id` FK (ALTER, from 0005) | 6a |
-| `0009_followups.sql` | `follow_ups` | 7 |
-| `0010_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a / Talks |
+| `0009_external_message_id.sql` | `email_messages.external_message_id` + its index — SES replaces the `Message-ID` we mint, so the header chain needs the id the recipient actually sees | 6b |
+| `0010_followups.sql` | `follow_ups` | 7 |
+| `0011_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a / Talks |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The

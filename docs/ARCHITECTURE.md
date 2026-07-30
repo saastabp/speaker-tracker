@@ -167,11 +167,32 @@ backend/src/
                   params.py    (path/query-parameter parsing, e.g. path_int → 404)
                   responses.py (detail-response composition, so no route imports a sibling route)
   core/           business logic — pure (purity enforced by ruff, see §8)
+                  email_headers.py  subject/Message-ID/address normalization, reply chaining
+                  email_threading.py  which thread a message joins (chain, then guarded fallback)
+                  email_scope.py    whether a polled message enters the app at all
+                  imap_cursor.py    where a poll starts reading; PollSummary
   repositories/   data access — raw SQL, one module per aggregate
+                  email_sends.py    outbound: the three-phase intent-first send
+                  email_threads.py  thread + message READS, and the gig-close auto-close hook
+                  email_matching.py inbound READS that feed the pure matcher
+                  email_inbound.py  inbound WRITE — idempotent ingest
+                  email_imports.py  the pending-import queue and its two link actions
+                  imap_cursors.py   per-folder poll watermarks
   models/         pydantic models — API contracts + typed rows
   migrations/     runner.py + forward-only .sql
   common/         shared infra
+                  mail.py       OUTBOUND MIME assembly + the SES edge
+                  mail_parse.py INBOUND parsing — headers (poller) and body (thread view)
+                  imap.py       connection, auth, folder topology, Sent-folder APPEND
+                  imap_poll.py  message-level ops: select, UID search, fetch, move
 ```
+
+**The email modules split reads from writes on both sides**, which is why there are six of them
+rather than two: `email_sends`/`email_threads` for the outbound half (slice 6a) and
+`email_matching`/`email_inbound` for the inbound half (6b), with `common/mail` vs `common/mail_parse`
+and `common/imap` vs `common/imap_poll` following the same seam. Each pair was split when the
+combined file passed the size guideline, and the seam was chosen to match the existing precedent
+rather than invented per-file.
 
 **Response envelope** matches the siblings: bare JSON on success (each handler names its own
 top-level keys — no `{"data": ...}` wrapper), `{"error": "<message>"}` on failure, with
@@ -224,7 +245,7 @@ table.
 | `targets.py` | GET/PUT `/targets`, DELETE `/targets/{targetType}/{cadence}` |
 | `dashboard.py` | GET `/dashboard` |
 | `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, PATCH `/emails/threads/{id}` (read / close), POST `/emails/send`, POST `/emails/threads/{id}/reply` |
-| `email_imports.py` | GET `/emails/pending-import`, POST `/emails/pending-import/{id}/link` |
+| `email_imports.py` | GET `/emails/imports`, PUT `/emails/threads/{id}/contact`, PUT `/emails/threads/{id}/opportunity` — **PUT, not POST**: these set a property, so re-sending the same value succeeds, unlike the `/close` verb whose second call is a 404 |
 | `talks.py` | GET/POST `/talks`, PUT/DELETE `/talks/{id}` |
 | `materials.py` | GET/POST `/materials`, POST `/materials/presign`, DELETE `/materials/{id}` |
 | `imap_poll.py` | *(separate function — EventBridge, 1-minute)* |
@@ -279,18 +300,19 @@ flowchart TB
     subgraph Out["Outbound — composer"]
         COMP["Emails composer (Tiptap)"]
         SEND["emails.py POST /emails/send"]
-        MIME["common/mail.py<br/>build raw MIME, stable Message-ID,<br/>In-Reply-To + References on reply"]
+        MIME["common/mail.py<br/>build raw MIME, mint Message-ID,<br/>In-Reply-To + References on reply"]
+        EXT["SES REPLACES the Message-ID —<br/>store its substitute as<br/>external_message_id at confirm"]
         SES["SES SendRawEmail<br/>DKIM-signed by WorkMail domain"]
         APPEND["common/imap.py<br/>APPEND to Sent, found via \\Sent SPECIAL-USE"]
     end
 
     subgraph Poll["Inbound — imap_poll.py, every 1 min, reserved concurrency 1"]
         CUR["read imap_folder_cursors<br/>check UIDVALIDITY"]
-        FETCH["fetch UIDs above watermark<br/>INBOX · \\Sent · Import · Processed"]
-        MATCH["core/email_threading.py<br/>In-Reply-To/References → stored Message-ID<br/>fallback: From + normalized subject + window"]
+        FETCH["common/imap_poll.py<br/>UID search above watermark, BODY.PEEK[]<br/>INBOX · \\Sent · Import (Processed = destination only)"]
+        MATCH["core/email_threading.py (pure)<br/>chain → repositories/email_matching.py<br/>matches message_id OR external_message_id<br/>fallback: From + normalized subject + window"]
         SCOPE{"in scope?"}
         DROP["ignore — never ingested"]
-        STORE["upsert email_messages<br/>UNIQUE(user_id, message_id)"]
+        STORE["repositories/email_inbound.py<br/>idempotent on UNIQUE(user_id, message_id)<br/>raw MIME → S3 first; NO outreaches row"]
         MOVE["Import → Processed"]
     end
 
@@ -298,14 +320,20 @@ flowchart TB
     MBOX[("WorkMail mailbox<br/>Outlook = peer IMAP client")]
 
     COMP --> SEND --> MIME --> SES --> MBOX
+    SES --> EXT
     MIME --> APPEND --> MBOX
-    MBOX --> CUR --> FETCH --> SCOPE
-    SCOPE -->|"tracked contact address"| MATCH
-    SCOPE -->|"in Import folder"| MOVE --> STORE
-    SCOPE -->|"neither"| DROP
-    MATCH --> STORE
+    MBOX --> CUR --> FETCH --> MATCH --> SCOPE
+    SCOPE -->|"chain matched · tracked contact · dragged to Import"| STORE
+    SCOPE -->|"none of those"| DROP
+    STORE -->|"Import only — AFTER the row commits"| MOVE
     STORE --> BADGE
 ```
+
+**Two orderings in that flow are not interchangeable.** The thread match runs *before* the scope
+decision, because "this message continues a conversation we already have" is itself grounds to
+ingest — that is what lets a reply from someone who is not yet a contact still land. And the
+`Import → Processed` move happens *after* the row commits: moving first would file a message into
+`Processed`, which is never polled, with nothing to show for it, and the message would be gone.
 
 **Scope — two consented surfaces, never the whole mailbox.** (a) correspondence with a tracked
 contact, matched against the `(user_id, email)` index on `contacts`, or against a stored outbound
@@ -384,7 +412,7 @@ flowchart TB
     JTDATA["/jobtracker/data/*<br/>shared RDS coords via SSM"]
     AUTH["&lt;env&gt;-Auth<br/>Cognito pool + client + Hosted UI"]
     CERT["&lt;env&gt;-Cert (us-east-1)<br/>ACM cert (prod)"]
-    MSG["&lt;env&gt;-Messaging<br/>SES identity · Scheduler group<br/>followup_notify · imap_poll<br/>IMAP secret"]
+    MSG["&lt;env&gt;-Messaging<br/>SES identity · Scheduler group<br/>followup_notify<br/>IMAP secret"]
     API["&lt;env&gt;-Api<br/>HTTP API + route Lambdas<br/>+ migrate Trigger"]
     FE["&lt;env&gt;-Frontend<br/>S3 + CloudFront + Route53 (prod)"]
 
@@ -397,15 +425,22 @@ flowchart TB
 ```
 
 Acyclic by construction: no SPA↔API URL cycle (same-origin), no auth↔api cycle (the API depends on
-`Auth`'s pool + client, never the reverse), and `Messaging` depends on nothing of `Api`'s — `imap_poll` writes to the database
-directly and `followup_notify` reads only its payload.
+`Auth`'s pool + client, never the reverse), and `Messaging` depends on nothing of `Api`'s and
+exports nothing to it.
+
+**`imap_poll` lives in `<env>-Api`, not `<env>-Messaging`** — a
+deliberate reversal of the original plan (slice 6b decision 1). The poller needs the
+**ContentBucket** for raw inbound MIME, and `Messaging` was built to import and export nothing,
+so siting it there would have required a cross-stack reference — the exact shape that broke the
+Frontend's origin in July. `Api` already has the bucket, `SharedDatabase`, `backendBundle()`, and
+a non-API-function precedent in `migrate`.
 
 | Stack | Region | Role | Envs |
 |---|---|---|---|
 | `<env>-Auth` | us-west-2 | Cognito pool, client, Hosted UI | prod |
 | `<env>-Cert` | **us-east-1** | ACM cert for the SPA domain | prod |
-| `<env>-Messaging` | us-west-2 | Scheduler group + exec role, `followup_notify`, `imap_poll` + its 1-min rule, IMAP secret. **SES clients target us-east-1**; the identity is pre-existing and *referenced*, never created | prod + sandbox |
-| `<env>-Api` | us-west-2 | HTTP API, route Lambdas, migrate Trigger, conditional JWT authorizer | prod + sandbox |
+| `<env>-Messaging` | us-west-2 | Scheduler group + exec role, `followup_notify`, IMAP secret. **SES clients target us-east-1**; the identity is pre-existing and *referenced*, never created | prod + sandbox |
+| `<env>-Api` | us-west-2 | HTTP API, route Lambdas, migrate Trigger, conditional JWT authorizer, **`imap_poll` + its 1-minute rule + the failure alarm** | prod + sandbox |
 | `<env>-Frontend` | us-west-2 | S3 SPA bucket, CloudFront (S3 + `/api/*` origins), Route53 alias | prod + sandbox |
 
 **DNS and certificate — all in account 381492047863:**
