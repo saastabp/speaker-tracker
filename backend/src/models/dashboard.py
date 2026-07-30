@@ -1,10 +1,15 @@
 """Pydantic contract for the composite dashboard response (DEV-PLAN slice 5).
 
 One ``GET /dashboard`` returns everything the home screen renders: actual-vs-target tiles, the
-funnel ratio counts, the money rollup, the stale-opportunity list, and the needs-attention list. It
-is a read-only projection assembled by ``repositories.dashboard`` — actuals bucket into the current
-period per cadence in the user's timezone (``core.periods``), funnel counts are reached-or-beyond
-(``core.funnel``), and money excludes pro bono from the currency totals (acceptance #5).
+funnel ratio counts, the money rollup, the stale-opportunity list, the needs-attention list, and
+the due follow-up reminders. It is a read-only projection assembled by ``repositories.dashboard`` —
+actuals bucket into the current period per cadence in the user's timezone (``core.periods``),
+funnel counts are reached-or-beyond (``core.funnel``), and money excludes pro bono from the
+currency totals (acceptance #5).
+
+``follow_ups`` reuses :class:`models.follow_ups.FollowUpSummary` rather than a dashboard-specific
+shape: the card renders the same fields the Follow-ups page does, and a second model would be one
+more thing to keep in step for no gain.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel
 
+from models.follow_ups import FollowUpSummary
 from models.targets import Cadence
 
 
@@ -93,8 +99,8 @@ class NeedsAttentionItem(BaseModel):
 class ComingUpEvent(BaseModel):
     """An active gig with a today-or-future event date (the "Coming up" card).
 
-    Follow-up reminders will also populate this panel once ``follow_ups`` (slice 7) exists; for now
-    it is upcoming gigs by ``event_date`` only.
+    Gigs only. Follow-up reminders get their own card (``follow_ups``) rather than being merged in
+    here — this panel is future-facing and an overdue reminder needs to be louder than that.
     """
 
     id: int
@@ -113,3 +119,4 @@ class Dashboard(BaseModel):
     stale: list[StaleOpportunity]
     needs_attention: list[NeedsAttentionItem]
     coming_up: list[ComingUpEvent]
+    follow_ups: list[FollowUpSummary]

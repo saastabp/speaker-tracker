@@ -14,6 +14,8 @@ Everything the home screen shows, computed on the fly (DATABASE.md §4) and owne
   totals and reported as a separate count (#5).
 - **stale** — active gigs with no status change or outreach in the stale window (``core.periods``).
 - **needs-attention** — delivered-but-unsettled (awaiting payment) and past-event still-pre-Booked.
+- **follow-ups** — pending reminders due today or earlier (slice 7), from
+  :mod:`repositories.follow_ups`.
 
 Actuals/stale/needs-attention take an injected ``now_local`` (the caller passes the DB's session-tz
 ``NOW()`` in production; tests pass a fixed value) so the period math stays deterministic.
@@ -27,6 +29,7 @@ from decimal import Decimal
 from pymysql.connections import Connection
 
 from core.periods import awaiting_reply_cutoff, period_bounds, stale_cutoff
+from repositories.follow_ups import list_due
 
 #: Money totals assume a single currency (the app default); Donna's gigs are all USD.
 _CURRENCY = "USD"
@@ -270,12 +273,26 @@ def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list
         return list(cur.fetchall())
 
 
+def due_follow_ups(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
+    """Return pending follow-up reminders due today or earlier, most overdue first (slice 7).
+
+    Delegates to :func:`repositories.follow_ups.list_due` rather than repeating the query, so the
+    Dashboard card and the Follow-ups page cannot drift apart on what "due" means.
+
+    ``now_local.date()`` is the user's local today — the same session-clock value every other panel
+    here is windowed by, so a reminder set for Donna's Tuesday appears on Donna's Tuesday.
+    """
+    return list_due(conn, user_id, due_through=now_local.date())
+
+
 def upcoming_events(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
     """Return active gigs with a today-or-future event date, soonest first (the "Coming up" card).
 
-    Follow-up reminders and ad-hoc calendar items are out of scope until ``follow_ups`` (0008); once
-    that lands, follow-up reminders also surface in this panel. For now this shows booked/pending
-    gigs by their ``event_date``.
+    Gigs only. Follow-up reminders get their **own** card via :func:`due_follow_ups` rather than
+    being merged in here (settled with Brian 2026-07-30, revising the earlier note that promised
+    this panel would absorb them): "Coming up" is future-facing, and an overdue reminder is the
+    opposite — it has to get louder, not scroll off the top. Ad-hoc calendar items remain out of
+    scope, having no data model at all.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -302,4 +319,5 @@ def build_dashboard(conn: Connection, user_id: int) -> dict:
         "stale": stale_opportunities(conn, user_id, now_local),
         "needs_attention": needs_attention(conn, user_id, now_local),
         "coming_up": upcoming_events(conn, user_id, now_local),
+        "follow_ups": due_follow_ups(conn, user_id, now_local),
     }

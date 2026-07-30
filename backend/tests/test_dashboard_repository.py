@@ -405,5 +405,6 @@ def test_build_dashboard_returns_all_sections(seeded_db) -> None:
         "stale",
         "needs_attention",
         "coming_up",
+        "follow_ups",
     }
     assert len(payload["funnel"]) == 5  # all five funnel stages always present

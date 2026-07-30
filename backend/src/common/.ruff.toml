@@ -12,6 +12,7 @@
 extend = "../../pyproject.toml"
 
 [lint.flake8-tidy-imports.banned-api]
+"core".msg = "common/ is a leaf layer; do not import core/. Pass primitives in and translate at the handler edge (this is why common/scheduler.py takes an expression and a payload dict, not a core.follow_ups.ReminderSchedule)."
 "repositories".msg = "common/ is a leaf layer; do not import the data layer. Wire cross-layer at the handler edge (handlers/context.py)."
 "handlers".msg = "common/ is a leaf layer; do not import the presentation layer (handlers/)."
 "models".msg = "common/ is a leaf layer; do not import models/."
