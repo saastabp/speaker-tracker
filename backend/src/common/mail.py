@@ -232,8 +232,33 @@ def from_address() -> str:
     return formataddr((name, address)) if name else address
 
 
-def _domain_of(address: str) -> str:
-    """Extract the domain from a From value, for qualifying generated Content-IDs."""
+def domain_of(address: str) -> str:
+    """Extract the domain from a ``From`` value, with or without a display name.
+
+    Used for two things that both have to agree with the sending identity: qualifying generated
+    ``Content-ID``s, and minting the ``Message-ID`` (``core.email_headers.generate_message_id``).
+    Public because every caller that builds a message needs it — it previously existed here as a
+    private helper *and* again as ``handlers/emails.py:_sender_domain``, and a third copy was about
+    to be written for the follow-up reminder.
+
+    Parameters
+    ----------
+    address : str
+        Either ``donna@example.com`` or ``Donna King <donna@example.com>``.
+
+    Returns
+    -------
+    str
+        The domain part, or ``"localhost"`` when the address carries none — a fallback that keeps
+        MIME assembly working rather than failing a send over a cosmetic header.
+
+    Examples
+    --------
+    >>> domain_of("Donna King <donna@example.com>")
+    'example.com'
+    >>> domain_of("donna@example.com")
+    'example.com'
+    """
     bare = address.rsplit("<", 1)[-1].rstrip(">") if "<" in address else address
     return bare.rsplit("@", 1)[-1].strip() or "localhost"
 
@@ -351,7 +376,7 @@ def build_raw_message(
 
     # Images the composer stored as data: URIs become inline parts referenced by cid:. Done before
     # the body is set, so the HTML that goes on the wire already carries the cid: references.
-    html, inline_images = extract_inline_images(body_html, domain=_domain_of(sender))
+    html, inline_images = extract_inline_images(body_html, domain=domain_of(sender))
 
     # set_content + add_alternative produces multipart/alternative with text first, html second —
     # the order clients expect, least-capable representation first. The plaintext alternative is
