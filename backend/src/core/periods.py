@@ -5,12 +5,18 @@ timezone** (DEV-PLAN slice 5 acceptance #1): a touch logged at 22:00 Kauaʻi cou
 Kauaʻi day, not the next UTC day. Getting this wrong silently mis-buckets every metric.
 
 This module owns the boundary computation as a pure function over a caller-supplied *local* "now",
-so it is unit-tested with no database and no wall clock. The repository obtains the local now
-(``datetime.now(ZoneInfo(user_tz))`` stripped to naive) and passes the returned bounds as query
+so it is unit-tested with no database and no wall clock. The caller obtains that "now" from
+``common.db.db_now_local`` — **the app's single clock** — and passes the returned bounds as query
 parameters. The window is left-closed/right-open ``[start, end)``; both bounds are **naive local**
 datetimes — the MySQL session ``time_zone`` (already set to the user's zone in ``common/db.py``)
 interprets them in local time and converts the stored UTC ``TIMESTAMP`` columns to match, so the
 comparison lands on the correct local day. Weeks start **Sunday** (US convention).
+
+Do **not** substitute ``datetime.now(ZoneInfo(user_tz))`` here — an earlier version of this
+docstring prescribed exactly that, and nothing in the app has ever done it. Every timestamp the app
+stores is written by MySQL's ``CURRENT_TIMESTAMP``, so "now" must come from the same clock that
+wrote the rows being compared; reading the Lambda host's clock instead turns NTP skew between two
+machines into a real off-by-a-little.
 """
 
 from __future__ import annotations

@@ -32,11 +32,19 @@ class AuthenticatedRequest:
         The reused module-scope connection with the caller's timezone applied.
     user_id : int
         The caller's ``users.id``, created on first sign-in.
+    timezone : str
+        The caller's validated IANA timezone — the same value applied to the connection's session
+        ``time_zone``. Carried here because some work needs the zone *name*, not just its effect on
+        the session: a follow-up reminder passes it to EventBridge as
+        ``ScheduleExpressionTimezone`` so the schedule fires at 07:00 in the user's own zone. Kept
+        on the context rather than re-derived per handler, since ``authenticate`` already computes
+        it and would otherwise throw it away.
     """
 
     principal: Principal
     connection: Connection
     user_id: int
+    timezone: str
 
 
 def authenticate(event: dict) -> AuthenticatedRequest:
@@ -70,4 +78,6 @@ def authenticate(event: dict) -> AuthenticatedRequest:
     connection = get_connection(tz)
     user_id = upsert_user_id(connection, principal.sub, principal.email)
     logger.debug("Authenticated request user_id=%s sub=%s", user_id, principal.sub)
-    return AuthenticatedRequest(principal=principal, connection=connection, user_id=user_id)
+    return AuthenticatedRequest(
+        principal=principal, connection=connection, user_id=user_id, timezone=tz
+    )

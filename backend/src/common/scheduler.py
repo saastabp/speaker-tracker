@@ -42,9 +42,18 @@ import os
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from common.logger import logger
+
+#: Everything a scheduler call can raise. botocore has **two independent roots** —
+#: ``ClientError`` (the service returned an error response) and ``BotoCoreError`` (client-side:
+#: ``EndpointConnectionError``, ``ConnectTimeoutError``, ``ReadTimeoutError``,
+#: ``NoCredentialsError``) — and neither is a subclass of the other. Catching only ``ClientError``
+#: would let exactly the *likely* Lambda failures escape into the API's catch-all 500, which would
+#: fail the user's request **after the follow-up row had already been committed** — the opposite of
+#: the graceful degradation this module promises.
+_SCHEDULER_ERRORS = (ClientError, BotoCoreError)
 
 #: Name of the EventBridge Scheduler group the schedules live in, set by the Api stack.
 SCHEDULER_GROUP_ENV = "SCHEDULER_GROUP_NAME"
@@ -187,8 +196,11 @@ def put_schedule(*, follow_up_id: int, expression: str, timezone: str, payload: 
     try:
         client.create_schedule(**request)
         return True
-    except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") != "ConflictException":
+    except _SCHEDULER_ERRORS as exc:
+        # Only a ClientError carries a service error code; a BotoCoreError never conflicts, it
+        # simply never reached the service, so it falls straight through to the failure branch.
+        code = exc.response.get("Error", {}).get("Code") if isinstance(exc, ClientError) else None
+        if code != "ConflictException":
             # Swallow-and-report: the caller has no recovery path, and failing the whole request
             # would lose a follow-up the user did successfully create. WARNING-and-above is what
             # monitoring watches, so this cannot pass silently.
@@ -198,7 +210,7 @@ def put_schedule(*, follow_up_id: int, expression: str, timezone: str, payload: 
     try:
         client.update_schedule(**request)
         return True
-    except ClientError:
+    except _SCHEDULER_ERRORS:
         logger.exception("scheduler: update_schedule failed for %s", name)
         return False
 
@@ -232,8 +244,9 @@ def delete_schedule(*, follow_up_id: int) -> bool:
     try:
         client.delete_schedule(Name=name, GroupName=group)
         return True
-    except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
+    except _SCHEDULER_ERRORS as exc:
+        code = exc.response.get("Error", {}).get("Code") if isinstance(exc, ClientError) else None
+        if code == "ResourceNotFoundException":
             # Already fired and self-deleted, or never created (scheduler stack absent when the row
             # was made). Either way there is nothing to cancel, which is the desired end state.
             logger.info("scheduler: schedule %s already absent", name)

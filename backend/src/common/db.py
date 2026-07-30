@@ -34,6 +34,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -205,6 +206,38 @@ def close_quietly(conn: Connection | None) -> None:
         The connection to close; ``None`` is a no-op.
     """
     _close_quietly(conn)
+
+
+def db_now_local(conn: Connection) -> datetime:
+    """Return the current time in the caller's timezone, as a naive datetime.
+
+    **This is the app's single source of "now."** Every timestamp the app stores is written by
+    MySQL (``CURRENT_TIMESTAMP`` — ``created_at``, ``occurred_at``, ``completed_at``, ``sent_at``,
+    the soft-delete markers), so anything comparing against stored data has to ask the same clock
+    that wrote it. Reading the Lambda host's clock instead would compare rows stamped by one
+    machine against a "now" from another, and any NTP skew between them becomes a real
+    off-by-a-little rather than a theoretical one.
+
+    It also needs no timezone arithmetic: :func:`get_connection` has already applied
+    ``SET time_zone`` for this request, so ``NOW()`` comes back in the user's own zone and the
+    naive value is directly comparable with the naive local bounds ``core.periods`` computes.
+
+    Lives here rather than in a repository because it is a property of the *session*, which this
+    module owns.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A connection from :func:`get_connection`, with the caller's timezone applied.
+
+    Returns
+    -------
+    datetime
+        ``NOW()`` in the session timezone, naive (no tzinfo).
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT NOW() AS now")
+        return cur.fetchone()["now"]
 
 
 @contextmanager

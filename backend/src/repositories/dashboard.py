@@ -28,6 +28,7 @@ from decimal import Decimal
 
 from pymysql.connections import Connection
 
+from common.db import db_now_local
 from core.periods import awaiting_reply_cutoff, period_bounds, stale_cutoff
 from repositories.follow_ups import list_due
 
@@ -48,13 +49,6 @@ _RESEARCH_READY = (
     "            JOIN contacts c ON c.id = co.contact_id AND c.deleted_at IS NULL "
     "            WHERE co.organization_id = o.id)"
 )
-
-
-def db_now_local(conn: Connection) -> datetime:
-    """Return the DB's ``NOW()`` — the current time in the session (= user's) timezone, naive."""
-    with conn.cursor() as cur:
-        cur.execute("SELECT NOW() AS now")
-        return cur.fetchone()["now"]
 
 
 def _scalar(conn: Connection, sql: str, params: tuple) -> int:

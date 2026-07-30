@@ -142,6 +142,14 @@ const ROUTES: RouteDef[] = [
   { method: apigwv2.HttpMethod.POST, path: '/signatures', authRequired: true },
   { method: apigwv2.HttpMethod.PUT, path: '/signatures/{id}', authRequired: true },
   { method: apigwv2.HttpMethod.DELETE, path: '/signatures/{id}', authRequired: true },
+
+  // Slice 7 — follow-up reminders (handlers/follow_ups.py). Flat, with the contact/opportunity
+  // links as query filters rather than nested paths, so one route serves the Follow-ups page and
+  // both detail panels. Marking done is PATCH with `completed`, not a route of its own.
+  { method: apigwv2.HttpMethod.GET, path: '/follow-ups', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/follow-ups', authRequired: true },
+  { method: apigwv2.HttpMethod.PATCH, path: '/follow-ups/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/follow-ups/{id}', authRequired: true },
 ];
 
 export interface ApiStackProps extends StackProps {
