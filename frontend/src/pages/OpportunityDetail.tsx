@@ -41,6 +41,7 @@ import {
 } from '../api/opportunities';
 import { useOrganization } from '../api/organizations';
 import { CardTitle, KV, initials } from '../components/detailCards';
+import { FollowUpsCard } from '../components/FollowUpsCard';
 import { CloseOpportunityModal } from '../components/CloseOpportunityModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
 import { formatMoney, paymentColor, stageColor } from '../opportunityChips';
@@ -457,6 +458,8 @@ export function OpportunityDetail() {
         {/* RIGHT column */}
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Stack>
+            <FollowUpsCard opportunityId={o.id} />
+
             <VenueCard orgId={o.organization_id} orgName={o.organization_name} />
 
             <Card withBorder radius="md">

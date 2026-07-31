@@ -35,6 +35,7 @@ import { useOrganizations } from '../api/organizations';
 import { AffiliationRow } from '../components/AffiliationRow';
 import { CardTitle, KV } from '../components/detailCards';
 import { ContactFormModal } from '../components/ContactFormModal';
+import { FollowUpsCard } from '../components/FollowUpsCard';
 import { EmailComposer } from '../components/EmailComposer';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { warmthColor } from '../contactChips';
@@ -341,6 +342,8 @@ export function ContactDetail() {
         {/* RIGHT column */}
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Stack>
+            <FollowUpsCard contactId={c.id} />
+
             <Card withBorder radius="md">
               <CardTitle>Reach</CardTitle>
               <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px' }}>
