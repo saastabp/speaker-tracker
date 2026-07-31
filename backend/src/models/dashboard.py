@@ -1,9 +1,9 @@
 """Pydantic contract for the composite dashboard response (DEV-PLAN slice 5).
 
 One ``GET /dashboard`` returns everything the home screen renders: actual-vs-target tiles, the
-funnel ratio counts, the money rollup, the stale-opportunity list, the needs-attention list, and
-the due follow-up reminders. It is a read-only projection assembled by ``repositories.dashboard`` —
-actuals bucket into the current period per cadence in the user's timezone (``core.periods``),
+funnel ratio counts, the money rollup, the needs-attention list, and the due follow-up reminders.
+It is a read-only projection assembled by ``repositories.dashboard`` — actuals bucket into the
+current period per cadence in the user's timezone (``core.periods``),
 funnel counts are reached-or-beyond (``core.funnel``), and money excludes pro bono from the
 currency totals (acceptance #5).
 
@@ -14,7 +14,7 @@ more thing to keep in step for no gain.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -61,16 +61,6 @@ class MoneyRollup(BaseModel):
     pro_bono_count: int
 
 
-class StaleOpportunity(BaseModel):
-    """An active gig with no status change or outreach in the stale window (``core.periods``)."""
-
-    id: int
-    title: str
-    organization_name: str
-    current_status: str
-    last_activity_at: datetime | None
-
-
 class NeedsAttentionItem(BaseModel):
     """A row flagged for follow-up on the dashboard.
 
@@ -78,15 +68,18 @@ class NeedsAttentionItem(BaseModel):
     **only** thing that says which id-space ``id`` belongs to, so a new reason always means
     teaching the SPA a new link:
 
-    - ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked`` (past-event gig
-      still pre-Booked) are gig-scoped, so ``id`` is the opportunity id;
+    - ``awaiting_payment`` (delivered gig, unsettled), ``overdue_unbooked`` (past-event gig still
+      pre-Booked) and ``stale`` (no status change or outreach in the stale window) are gig-scoped,
+      so ``id`` is the opportunity id;
     - ``research_incomplete`` is org-scoped (a venue that is not research-ready), so ``id`` is the
       organization id and the SPA links to the venue;
     - ``awaiting_reply`` is thread-scoped (slice 6b): an open thread whose last message went out
       and has gone unanswered past the threshold, so ``id`` is the ``email_threads`` id.
 
-    ``event_date`` is null for every reason but the two gig-scoped ones, which is also what sorts
-    dated rows first.
+    ``event_date`` is null for every reason but the gig-scoped ones, which is also what sorts dated
+    rows first. ``since`` is the date the condition began — last activity for ``stale``, last
+    outbound message for ``awaiting_reply`` — and is null where urgency is not a duration, so the
+    SPA can render "9 days" rather than only naming the problem.
     """
 
     id: int
@@ -94,6 +87,7 @@ class NeedsAttentionItem(BaseModel):
     organization_name: str
     reason: str
     event_date: date | None
+    since: date | None
 
 
 class ComingUpEvent(BaseModel):
@@ -116,7 +110,6 @@ class Dashboard(BaseModel):
     targets: list[TargetTile]
     funnel: list[FunnelCount]
     money: MoneyRollup
-    stale: list[StaleOpportunity]
     needs_attention: list[NeedsAttentionItem]
     coming_up: list[ComingUpEvent]
     follow_ups: list[FollowUpSummary]

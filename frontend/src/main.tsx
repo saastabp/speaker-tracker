@@ -20,6 +20,7 @@ import { OpportunityDetail } from './pages/OpportunityDetail';
 import { Pipeline } from './pages/Pipeline';
 import { Placeholder } from './pages/Placeholder';
 import { Targets } from './pages/Targets';
+import { FollowUps } from './pages/FollowUps';
 import { Templates } from './pages/Templates';
 import { VenueDetail } from './pages/VenueDetail';
 import { Venues } from './pages/Venues';
@@ -47,6 +48,7 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
                   <Route path="venues/:id" element={<VenueDetail />} />
                   <Route path="contacts" element={<Contacts />} />
                   <Route path="contacts/:id" element={<ContactDetail />} />
+                  <Route path="follow-ups" element={<FollowUps />} />
                   <Route path="templates" element={<Templates />} />
                   <Route path="targets" element={<Targets />} />
                   <Route path="emails" element={<Emails />} />

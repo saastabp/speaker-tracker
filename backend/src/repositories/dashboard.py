@@ -12,12 +12,14 @@ Everything the home screen shows, computed on the fly (DATABASE.md §4) and owne
   booked (#3), mirroring ``core.funnel.reached_or_beyond`` in SQL.
 - **money** — Booked / Received / Outstanding over paid gigs; pro bono is excluded from the currency
   totals and reported as a separate count (#5).
-- **stale** — active gigs with no status change or outreach in the stale window (``core.periods``).
-- **needs-attention** — delivered-but-unsettled (awaiting payment) and past-event still-pre-Booked.
+- **needs-attention** — the single "what needs me?" panel: awaiting payment, past-event
+  still-pre-Booked, research incomplete, an unanswered outbound thread, and **stale** (no status
+  change or outreach in the stale window). Stale was its own card until 2026-07-30; see
+  :func:`needs_attention` for why it was folded in.
 - **follow-ups** — pending reminders due today or earlier (slice 7), from
   :mod:`repositories.follow_ups`.
 
-Actuals/stale/needs-attention take an injected ``now_local`` (the caller passes the DB's session-tz
+Actuals and needs-attention take an injected ``now_local`` (the caller passes the DB's session-tz
 ``NOW()`` in production; tests pass a fixed value) so the period math stays deterministic.
 """
 
@@ -174,49 +176,60 @@ def money_rollup(conn: Connection, user_id: int) -> dict:
     }
 
 
-def stale_opportunities(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
-    """Return active gigs whose last activity predates the stale cutoff, oldest first."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT o.id, o.title, org.name AS organization_name, st.short_name AS current_status, "
-            "  GREATEST("
-            "    COALESCE((SELECT MAX(occurred_at) FROM status_events "
-            "              WHERE opportunity_id = o.id), '1970-01-01 00:00:00'), "
-            "    COALESCE((SELECT MAX(occurred_at) FROM outreaches "
-            "              WHERE opportunity_id = o.id AND deleted_at IS NULL), "
-            "'1970-01-01 00:00:00')"
-            "  ) AS last_activity_at "
-            "FROM opportunities o "
-            "JOIN organizations org ON org.id = o.organization_id "
-            "JOIN opportunity_statuses st ON st.id = o.current_status_id "
-            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND o.closed_at IS NULL "
-            "HAVING last_activity_at < %s ORDER BY last_activity_at ASC",
-            (user_id, stale_cutoff(now_local)),
-        )
-        return list(cur.fetchall())
+#: Last dated activity on an opportunity — the most recent status change or outreach. Written as a
+#: SQL expression rather than a column because it is derived: `opportunities` has no
+#: `last_activity_at`, deliberately (it would be one more denormalized field to keep in step).
+_LAST_ACTIVITY = (
+    "GREATEST("
+    "  COALESCE((SELECT MAX(occurred_at) FROM status_events "
+    "            WHERE opportunity_id = o.id), '1970-01-01 00:00:00'), "
+    "  COALESCE((SELECT MAX(occurred_at) FROM outreaches "
+    "            WHERE opportunity_id = o.id AND deleted_at IS NULL), '1970-01-01 00:00:00')"
+    ")"
+)
 
 
 def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
-    """Return follow-up rows the dashboard flags.
+    """Return the rows the dashboard flags as wanting Donna's attention.
 
-    Four reasons, across three different id-spaces — the ``reason`` token is what tells the SPA
+    Five reasons, across three different id-spaces — the ``reason`` token is what tells the SPA
     which one an ``id`` belongs to, so adding a reason means teaching it a new link target:
 
-    - ``awaiting_payment`` (delivered gig, unsettled) and ``overdue_unbooked`` (past-event gig
-      still pre-Booked) are **opportunity**-scoped;
+    - ``awaiting_payment`` (delivered gig, unsettled), ``overdue_unbooked`` (past-event gig still
+      pre-Booked) and ``stale`` — shown as **"Gone quiet"**: a gig still being *pursued* with no
+      status change or outreach in the stale window — are **opportunity**-scoped;
     - ``research_incomplete`` is **organization**-scoped (a venue that is not research-ready —
       missing a Kindling field or a contact), so its ``id`` is the org id;
     - ``awaiting_reply`` is **email-thread**-scoped (slice 6b acceptance #9): an open thread whose
       last message went out and has gone unanswered past
       :data:`core.periods.AWAITING_REPLY_AFTER_DAYS`.
 
+    **``stale`` used to be its own dashboard card and is now a reason here** (2026-07-30). It was a
+    beyond-mockup addition; the approved design has one such panel, and two of them asked the user
+    the same question — "what needs me?" — while showing overlapping rows with no relationship
+    between them. A delivered-but-unpaid gig with no recent activity appeared in *both*.
+
+    That overlap is why the ``stale`` branch excludes anything another reason already covers: a row
+    flagged for a specific reason is more actionable than the same row flagged for a vague one, and
+    listing it twice is the redundancy that prompted the merge. It is a genuine
+    least-specific-wins rule, not an optimization.
+
+    The same conversation narrowed what ``stale`` *means*. It now covers only gigs **before
+    Booked** — see the SQL comment — because a booked gig awaiting a distant event is quiet for
+    good reason, and flagging it fortnightly was noise the old card also produced.
+
+    ``since`` carries the date the condition started mattering, where there is one — last activity
+    for ``stale``, last outbound message for ``awaiting_reply`` — so the SPA can say *how long*
+    rather than just *what*. It is NULL for reasons whose urgency is not a duration.
+
     Opportunity rows carry an ``event_date`` and sort first; the dateless reasons follow. A richer
     tickler model with per-type timing thresholds is future work (its own table).
     """
+    booked_sort = "(SELECT sort_order FROM opportunity_statuses WHERE short_name = 'booked')"
     with conn.cursor() as cur:
         cur.execute(
             "SELECT o.id, o.title, org.name AS organization_name, "
-            "       'awaiting_payment' AS reason, o.event_date "
+            "       'awaiting_payment' AS reason, o.event_date, NULL AS since "
             "FROM opportunities o "
             "JOIN organizations org ON org.id = o.organization_id "
             "JOIN opportunity_statuses st ON st.id = o.current_status_id "
@@ -224,16 +237,15 @@ def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list
             "WHERE o.user_id = %s AND o.deleted_at IS NULL "
             "  AND st.short_name = 'delivered' AND pay.is_settled = FALSE "
             "UNION ALL "
-            "SELECT o.id, o.title, org.name, 'overdue_unbooked', o.event_date "
+            "SELECT o.id, o.title, org.name, 'overdue_unbooked', o.event_date, NULL "
             "FROM opportunities o "
             "JOIN organizations org ON org.id = o.organization_id "
             "JOIN opportunity_statuses st ON st.id = o.current_status_id "
             "WHERE o.user_id = %s AND o.deleted_at IS NULL AND o.closed_at IS NULL "
             "  AND o.event_date IS NOT NULL AND o.event_date < %s "
-            "  AND st.sort_order < (SELECT sort_order FROM opportunity_statuses "
-            "                       WHERE short_name = 'booked') "
+            "  AND st.sort_order < " + booked_sort + " "
             "UNION ALL "
-            "SELECT o.id, o.name AS title, o.name, 'research_incomplete', NULL "
+            "SELECT o.id, o.name AS title, o.name, 'research_incomplete', NULL, NULL "
             "FROM organizations o "
             "WHERE o.user_id = %s AND o.deleted_at IS NULL AND NOT (" + _RESEARCH_READY + ") "
             # An open thread whose last message went OUT and has gone unanswered. All three
@@ -242,18 +254,38 @@ def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list
             #
             # `last_message_at` is a TIMESTAMP, which MySQL converts to the session timezone on
             # comparison — the session tz is already the user's — so comparing it against a
-            # local-naive cutoff is right, exactly as `stale_opportunities` does.
+            # local-naive cutoff is right, exactly as the stale branch below does.
             #
             # NULLIF guards the link text: `subject_normalized` is NOT NULL but may be empty, and
             # the SPA renders `title` as the anchor, so an empty subject would draw a blank link.
             "UNION ALL "
             "SELECT t.id, COALESCE(NULLIF(t.subject_normalized, ''), '(no subject)'), "
-            "       COALESCE(c.name, ''), 'awaiting_reply', NULL "
+            "       COALESCE(c.name, ''), 'awaiting_reply', NULL, DATE(t.last_message_at) "
             "FROM email_threads t "
             "LEFT JOIN contacts c ON c.id = t.contact_id "
             "WHERE t.user_id = %s AND t.deleted_at IS NULL AND t.closed_at IS NULL "
             "  AND t.last_direction = 'out' AND t.last_message_at IS NOT NULL "
             "  AND t.last_message_at < %s "
+            # Gone quiet — a gig still being *pursued* that nothing has happened to in a while.
+            #
+            # `sort_order < booked` is the load-bearing clause. Silence on a pursuit means the
+            # pursuit has stalled and the gig will die without a nudge; silence on a *booked* gig
+            # is just a calendar waiting, and flagging it every fortnight until the event was pure
+            # noise. That was true of the standalone Stale card too, and is the reason this is
+            # scoped rather than merely renamed.
+            #
+            # The event-date clause then de-duplicates against `overdue_unbooked`, which covers the
+            # same pre-Booked gigs once their event date has passed — a gig already flagged for the
+            # specific problem is not also reported as merely quiet.
+            "UNION ALL "
+            "SELECT o.id, o.title, org.name, 'stale', o.event_date, DATE(" + _LAST_ACTIVITY + ") "
+            "FROM opportunities o "
+            "JOIN organizations org ON org.id = o.organization_id "
+            "JOIN opportunity_statuses st ON st.id = o.current_status_id "
+            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND o.closed_at IS NULL "
+            "  AND st.sort_order < " + booked_sort + " "
+            "  AND " + _LAST_ACTIVITY + " < %s "
+            "  AND (o.event_date IS NULL OR o.event_date >= %s) "
             "ORDER BY event_date IS NULL, event_date ASC",
             (
                 user_id,
@@ -262,6 +294,9 @@ def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list
                 user_id,
                 user_id,
                 awaiting_reply_cutoff(now_local),
+                user_id,
+                stale_cutoff(now_local),
+                now_local.date(),
             ),
         )
         return list(cur.fetchall())
@@ -310,7 +345,6 @@ def build_dashboard(conn: Connection, user_id: int) -> dict:
         "targets": target_actuals(conn, user_id, now_local),
         "funnel": funnel_counts(conn, user_id),
         "money": money_rollup(conn, user_id),
-        "stale": stale_opportunities(conn, user_id, now_local),
         "needs_attention": needs_attention(conn, user_id, now_local),
         "coming_up": upcoming_events(conn, user_id, now_local),
         "follow_ups": due_follow_ups(conn, user_id, now_local),

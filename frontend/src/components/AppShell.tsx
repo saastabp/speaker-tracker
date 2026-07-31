@@ -10,6 +10,7 @@ import {
   Text,
 } from '@mantine/core';
 import {
+  IconBellRinging,
   IconBuilding,
   IconColumns,
   IconHistory,
@@ -66,6 +67,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Emails', to: '/emails', icon: IconMail },
       { label: 'Templates', to: '/templates', icon: IconTemplate },
+      { label: 'Follow-ups', to: '/follow-ups', icon: IconBellRinging },
     ],
   },
   {

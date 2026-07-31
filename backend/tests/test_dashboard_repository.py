@@ -197,12 +197,18 @@ def test_money_rollup_excludes_pro_bono_from_currency_totals(seeded_db) -> None:
     assert money["invoiced_count"] == 0  # none invoiced
 
 
-# --- stale (14d) ---------------------------------------------------------------------------------
+# --- gone quiet (14d), a needs-attention reason since 2026-07-30 ----------------------------------
 
 
-def test_stale_lists_only_inactive_open_gigs(seeded_db) -> None:
+def _quiet(rows: list[dict]) -> list[str]:
+    """Titles of the `stale` (Gone quiet) rows in a needs-attention result."""
+    return [r["title"] for r in rows if r["reason"] == "stale"]
+
+
+def test_gone_quiet_lists_only_inactive_open_gigs(seeded_db) -> None:
     conn, user_id, _, _ = seeded_db
     org = _org(conn, user_id, "Venue")
+    _affiliate(conn, _contact(conn, user_id), org)  # research-ready → no research_incomplete noise
     old = _opp(conn, user_id, org, title="Old")
     _set_last_event(conn, old, datetime(2026, 7, 1, 10, 0))
     recent = _opp(conn, user_id, org, title="Recent")
@@ -211,9 +217,52 @@ def test_stale_lists_only_inactive_open_gigs(seeded_db) -> None:
     _set_last_event(conn, closed, datetime(2026, 7, 1, 10, 0))
     opp.close(conn, user_id, closed, "lost", "went cold")
     now = datetime(2026, 7, 20, 12, 0)  # cutoff = 07-06
-    stale = dashboard.stale_opportunities(conn, user_id, now)
-    titles = [s["title"] for s in stale]
-    assert titles == ["Old"]  # Recent is within 14d; Closed is excluded
+
+    assert _quiet(dashboard.needs_attention(conn, user_id, now)) == ["Old"]
+
+
+def test_gone_quiet_ignores_booked_gigs_waiting_on_a_distant_event(seeded_db) -> None:
+    """A booked gig is *supposed* to be quiet until its date — flagging it fortnightly was noise.
+
+    This is what separates "Gone quiet" from the old Stale card: it means a **pursuit** has
+    stalled, not that a calendar is waiting.
+    """
+    conn, user_id, _, _ = seeded_db
+    org = _org(conn, user_id, "Venue")
+    _affiliate(conn, _contact(conn, user_id), org)
+    booked = _opp(conn, user_id, org, title="Booked far out", event_date=date(2026, 12, 1))
+    opp.patch_status(conn, user_id, booked, "booked")
+    _set_last_event(conn, booked, datetime(2026, 7, 1, 10, 0))
+    now = datetime(2026, 7, 20, 12, 0)
+
+    assert _quiet(dashboard.needs_attention(conn, user_id, now)) == []
+
+
+def test_gone_quiet_yields_to_the_more_specific_overdue_reason(seeded_db) -> None:
+    """One row, one reason. A quiet gig whose event date has passed is *overdue*, not just quiet."""
+    conn, user_id, _, _ = seeded_db
+    org = _org(conn, user_id, "Venue")
+    _affiliate(conn, _contact(conn, user_id), org)
+    past = _opp(conn, user_id, org, title="Past event", event_date=date(2026, 7, 10))
+    _set_last_event(conn, past, datetime(2026, 7, 1, 10, 0))
+    now = datetime(2026, 7, 20, 12, 0)
+
+    rows = dashboard.needs_attention(conn, user_id, now)
+    reasons = [r["reason"] for r in rows if r["title"] == "Past event"]
+    assert reasons == ["overdue_unbooked"]  # not also 'stale'
+
+
+def test_gone_quiet_reports_the_date_it_went_quiet(seeded_db) -> None:
+    """`since` is what lets the SPA render an age chip instead of a bare label."""
+    conn, user_id, _, _ = seeded_db
+    org = _org(conn, user_id, "Venue")
+    _affiliate(conn, _contact(conn, user_id), org)
+    quiet = _opp(conn, user_id, org, title="Quiet")
+    _set_last_event(conn, quiet, datetime(2026, 7, 1, 10, 0))
+    now = datetime(2026, 7, 20, 12, 0)
+
+    row = next(r for r in dashboard.needs_attention(conn, user_id, now) if r["title"] == "Quiet")
+    assert row["since"] == date(2026, 7, 1)
 
 
 # --- #6: needs-attention -------------------------------------------------------------------------
@@ -402,7 +451,6 @@ def test_build_dashboard_returns_all_sections(seeded_db) -> None:
         "targets",
         "funnel",
         "money",
-        "stale",
         "needs_attention",
         "coming_up",
         "follow_ups",

@@ -4,6 +4,7 @@ import {
   Anchor,
   Badge,
   Box,
+  Button,
   Card,
   Grid,
   Group,
@@ -23,6 +24,7 @@ import {
   type NeedsAttentionItem,
   type TargetTile as TargetTileData,
 } from '../api/dashboard';
+import { usePatchFollowUp, type FollowUp as FollowUpItem } from '../api/followUps';
 import { useAuthSession } from '../auth/session';
 import { BRAND_LINE } from '../theme';
 
@@ -34,19 +36,17 @@ function formatMoney(amount: string, currency: string): string {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(n);
 }
 
-function formatDate(iso: string | null): string {
-  if (!iso) {
-    return '—';
-  }
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString();
-}
-
 /** Parse a bare ``YYYY-MM-DD`` as a *local* date (avoids the UTC-midnight day-shift `new Date(iso)`
  *  would cause in a negative-offset zone like Kauaʻi). */
 function parseDateLocal(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d);
+}
+
+/** Midnight today, for comparing a calendar due date without a time component getting in the way. */
+function startOfToday(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 function greeting(name: string | null): string {
@@ -89,7 +89,14 @@ const REASON: Record<NeedsAttentionItem['reason'], { label: string; color: strin
   overdue_unbooked: { label: 'Overdue', color: 'terracotta' },
   research_incomplete: { label: 'Research incomplete', color: 'gray' },
   awaiting_reply: { label: 'Awaiting reply', color: 'blue' },
+  stale: { label: 'Gone quiet', color: 'gray' },
 };
+
+/** Whole days between `iso` and today, for the age chip on duration-shaped reasons. */
+function daysSince(iso: string): number {
+  const then = parseDateLocal(iso);
+  return Math.max(0, Math.round((startOfToday().getTime() - then.getTime()) / 86_400_000));
+}
 
 /**
  * Where a needs-attention row goes. The `reason` is what says which id-space `id` is in, so this
@@ -205,6 +212,66 @@ function ComingUpRow({ event, style }: { event: ComingUpEvent; style?: React.CSS
           {event.organization_name}
         </Text>
       </div>
+    </Group>
+  );
+}
+
+/** One due reminder, with the mark-done control that removes it from this card.
+ *
+ * Marking done is the whole point of the row: it is what cancels the emailed reminder, so a
+ * follow-up Donna has already dealt with stops nagging her. The button is disabled while the
+ * mutation is in flight rather than optimistically hidden — the row disappearing before the
+ * schedule was actually cancelled would be the one misleading state here.
+ */
+function FollowUpDueRow({
+  followUp,
+  style,
+}: {
+  followUp: FollowUpItem;
+  style?: React.CSSProperties;
+}) {
+  const patch = usePatchFollowUp();
+  const due = parseDateLocal(followUp.due_date);
+  const overdue = due < startOfToday();
+  const target = followUp.opportunity_id
+    ? `/pipeline/${followUp.opportunity_id}`
+    : followUp.contact_id
+      ? `/contacts/${followUp.contact_id}`
+      : null;
+  const label = followUp.contact_name ?? followUp.opportunity_title ?? 'Follow-up';
+
+  return (
+    <Group justify="space-between" wrap="nowrap" align="flex-start" py="xs" style={style}>
+      <div style={{ minWidth: 0 }}>
+        <Group gap="xs" wrap="nowrap">
+          {target ? (
+            <Anchor component={Link} to={target} size="sm" lineClamp={1}>
+              {label}
+            </Anchor>
+          ) : (
+            <Text size="sm" lineClamp={1}>
+              {label}
+            </Text>
+          )}
+          {overdue && (
+            <Badge color="warn" variant="light" size="xs" style={{ flexShrink: 0 }}>
+              overdue
+            </Badge>
+          )}
+        </Group>
+        <Text size="xs" c="dimmed" lineClamp={2}>
+          {followUp.note}
+        </Text>
+      </div>
+      <Button
+        size="compact-xs"
+        variant="subtle"
+        loading={patch.isPending}
+        onClick={() => patch.mutate({ id: followUp.id, completed: true })}
+        style={{ flexShrink: 0 }}
+      >
+        Done
+      </Button>
     </Group>
   );
 }
@@ -346,33 +413,23 @@ export function Dashboard() {
               </SimpleGrid>
             </DashCard>
 
-            {/* Stale — a beyond-mockup addition; kept, fit to the left column. */}
-            <DashCard title="Stale — needs a nudge">
-              {d.stale.length === 0 ? (
+            {/* Follow-ups due — pending reminders due today or earlier (slice 7). Its own card
+                rather than folded into "Coming up": that panel is future-facing, and an overdue
+                reminder has to get louder rather than scroll off the top of it. */}
+            <DashCard title="Follow-ups due">
+              {d.follow_ups.length === 0 ? (
                 <Text c="dimmed" size="sm">
-                  Nothing stale — every active gig has recent activity.
+                  Nothing due — you are caught up.
                 </Text>
               ) : (
                 <Stack gap={0}>
-                  {d.stale.map((s, i) => (
-                    <Group
-                      key={s.id}
-                      justify="space-between"
-                      wrap="nowrap"
-                      py="xs"
-                      style={rowDivider(i)}
-                    >
-                      <Anchor component={Link} to={`/pipeline/${s.id}`} size="sm" lineClamp={1}>
-                        {s.title}
-                      </Anchor>
-                      <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-                        {s.organization_name} · {formatDate(s.last_activity_at)}
-                      </Text>
-                    </Group>
+                  {d.follow_ups.map((f, i) => (
+                    <FollowUpDueRow key={f.id} followUp={f} style={rowDivider(i)} />
                   ))}
                 </Stack>
               )}
             </DashCard>
+
           </Stack>
         </Grid.Col>
 
@@ -382,7 +439,7 @@ export function Dashboard() {
             <DashCard title="Needs attention">
               {d.needs_attention.length === 0 ? (
                 <Text c="dimmed" size="sm">
-                  All clear — nothing awaiting payment or overdue.
+                  All clear — nothing needs chasing right now.
                 </Text>
               ) : (
                 <Stack gap={0}>
@@ -397,13 +454,18 @@ export function Dashboard() {
                       <Anchor component={Link} to={needsAttentionHref(n)} size="sm" lineClamp={1}>
                         {n.title}
                       </Anchor>
-                      <Badge
-                        color={REASON[n.reason].color}
-                        variant="light"
-                        style={{ flexShrink: 0 }}
-                      >
-                        {REASON[n.reason].label}
-                      </Badge>
+                      <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
+                        {/* Duration-shaped reasons say how long, so "Gone quiet" reads as
+                            specifically as its neighbours rather than as a vague mood. */}
+                        {n.since && (
+                          <Text size="xs" c="dimmed">
+                            {daysSince(n.since)}d
+                          </Text>
+                        )}
+                        <Badge color={REASON[n.reason].color} variant="light">
+                          {REASON[n.reason].label}
+                        </Badge>
+                      </Group>
                     </Group>
                   ))}
                 </Stack>

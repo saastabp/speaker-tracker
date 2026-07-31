@@ -97,7 +97,6 @@ def test_dashboard_returns_all_sections(api) -> None:
         "targets",
         "funnel",
         "money",
-        "stale",
         "needs_attention",
         "coming_up",
         "follow_ups",

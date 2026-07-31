@@ -1,5 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { useApi } from './client';
+import type { FollowUp } from './followUps';
 import type { Cadence } from './targets';
 
 // Mirrors backend models/dashboard.py — one composite GET /dashboard. Money amounts are Decimals
@@ -28,22 +29,22 @@ export interface MoneyRollup {
   pro_bono_count: number;
 }
 
-export interface StaleOpportunity {
-  id: number;
-  title: string;
-  organization_name: string;
-  current_status: string;
-  last_activity_at: string | null;
-}
-
 export interface NeedsAttentionItem {
   id: number;
   title: string;
   organization_name: string;
-  /** Also says which id-space `id` belongs to: the two gig reasons → opportunity, research →
+  /** Also says which id-space `id` belongs to: the three gig reasons → opportunity, research →
    *  organization, awaiting_reply → email thread. Adding one means teaching Dashboard a link. */
-  reason: 'awaiting_payment' | 'overdue_unbooked' | 'research_incomplete' | 'awaiting_reply';
+  reason:
+    | 'awaiting_payment'
+    | 'overdue_unbooked'
+    | 'research_incomplete'
+    | 'awaiting_reply'
+    | 'stale';
   event_date: string | null;
+  /** The date the condition began — last activity for `stale`, last outbound message for
+   *  `awaiting_reply`. Null where the urgency is not a duration, so the row shows no age chip. */
+  since: string | null;
 }
 
 export interface ComingUpEvent {
@@ -58,9 +59,11 @@ export interface Dashboard {
   targets: TargetTile[];
   funnel: FunnelCount[];
   money: MoneyRollup;
-  stale: StaleOpportunity[];
   needs_attention: NeedsAttentionItem[];
   coming_up: ComingUpEvent[];
+  /** Pending reminders due today **or earlier** — overdue ones must get louder, not scroll off a
+   *  future-facing list, which is why they are their own card rather than part of `coming_up`. */
+  follow_ups: FollowUp[];
 }
 
 /** Exported so writes elsewhere that move dashboard numbers (sending an email logs an outreach,
