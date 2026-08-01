@@ -38,6 +38,7 @@ from common.imap import append_to_sent_best_effort
 from common.logger import logger
 from core.email_headers import build_reply_headers, generate_message_id
 from handlers.context import authenticate
+from handlers.follow_ups import create_rider_follow_up, schedule_new_follow_up
 from handlers.params import path_int
 from models.emails import (
     EmailAttachment,
@@ -210,6 +211,41 @@ def _deliver(
         request.user_id,
     )
 
+    # 7. The opt-in follow-up rider, deliberately last.
+    #
+    #    It runs only once the message has actually gone out: a reminder to chase an email that
+    #    never left would be worse than no reminder. And it must not fail the request — the mail is
+    #    already delivered by this point, so a 500 here would invite a retry and a double-send. Same
+    #    reasoning as step 6.
+    #
+    #    A rider of None (the default) reaches `create_rider_follow_up` and returns None without
+    #    writing anything, which is acceptance #6: sending with the rider off creates no follow-up.
+    try:
+        with transaction(request.connection) as conn:
+            follow_up_id = create_rider_follow_up(
+                conn,
+                request.user_id,
+                data.follow_up,
+                contact_id=data.contact_id,
+                opportunity_id=data.opportunity_id,
+                fallback_note=f"Follow up on: {data.subject}",
+            )
+        if follow_up_id is not None:
+            schedule_new_follow_up(request, follow_up_id)
+            logger.info(
+                "Rider follow_up id=%s created for message_id=%s user_id=%s",
+                follow_up_id,
+                message_id,
+                request.user_id,
+            )
+    except Exception:
+        logger.exception(
+            "Email SENT but its follow-up rider failed — no reminder was set. "
+            "message_id=%s user_id=%s",
+            message_id,
+            request.user_id,
+        )
+
     row = email_threads.get_message(request.connection, request.user_id, pending.message_row_id)
     return EmailSendResult(
         message=EmailMessageSummary(**row),
@@ -271,6 +307,7 @@ def reply_to_thread(thread_id: str) -> dict:
         contact_id=thread["contact_id"],
         opportunity_id=thread["opportunity_id"],
         outreach_kind=data.outreach_kind,
+        follow_up=data.follow_up,
         attachments=data.attachments,
     )
     return _deliver(

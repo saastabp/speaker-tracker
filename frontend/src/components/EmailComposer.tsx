@@ -19,6 +19,7 @@ import { useSendEmail, useUploadAttachment, type EmailAttachmentInput } from '..
 import { useSignatures } from '../api/signatures';
 import { useTemplates } from '../api/templates';
 import { FieldLabel } from './FieldLabel';
+import { FollowUpRiderFields, type FollowUpRiderValue } from './FollowUpRiderFields';
 import { RichTextField } from './RichTextEditor';
 import { fillMerge } from './TemplatePicker';
 
@@ -104,6 +105,8 @@ export function EmailComposer({
   const [bodyHtml, setBodyHtml] = useState('');
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<EmailAttachmentInput[]>([]);
+  const [riderOn, setRiderOn] = useState(false);
+  const [rider, setRider] = useState<FollowUpRiderValue>({ due_date: '', note: '' });
   const [error, setError] = useState<string | null>(null);
   // Minted per compose and held across retries. If the send fails ambiguously (a timeout, where
   // the mail may already have gone out), pressing Send again reuses this key, so the server
@@ -129,6 +132,10 @@ export function EmailComposer({
     setTemplateId(null);
     setAttachments([]);
     setError(null);
+    // Off on every open. Acceptance #6 is that sending never silently schedules anything, so a
+    // rider left on from a previous compose would be exactly the wrong carry-over.
+    setRiderOn(false);
+    setRider({ due_date: '', note: '' });
     setIdempotencyKey(crypto.randomUUID()); // a new draft is a new message, not a retry
     setBodyHtml(defaultSignature ? `<p></p>${defaultSignature.body_html}` : '<p></p>');
   }, [opened, contactEmail, defaultSignature?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -186,9 +193,14 @@ export function EmailComposer({
 
   async function handleSend() {
     setError(null);
+    if (riderOn && !rider.due_date) {
+      setError('Pick a date for the follow-up, or switch it off.');
+      return;
+    }
     try {
       const result = await send.mutateAsync({
         idempotency_key: idempotencyKey,
+        follow_up: riderOn ? { due_date: rider.due_date, note: rider.note.trim() || null } : null,
         to: recipients,
         cc: splitAddresses(cc),
         subject: subject.trim(),
@@ -312,6 +324,14 @@ export function EmailComposer({
             {error}
           </Alert>
         )}
+
+        <FollowUpRiderFields
+          enabled={riderOn}
+          onEnabledChange={setRiderOn}
+          value={rider}
+          onChange={setRider}
+          description="Pick a date to be reminded to chase this email."
+        />
 
         <Group justify="space-between" mt="xs">
           <Text size="xs" c={blocker ? 'orange.7' : 'dimmed'}>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useApi } from './client';
+import type { FollowUpRiderInput } from './outreaches';
 import { dashboardKeys } from './dashboard';
 import { outreachKeys, timelineKeys } from './outreaches';
 
@@ -39,6 +40,7 @@ export interface EmailSendInput {
   message_template_id?: number | null;
   /** Omit to accept the server-inferred outreach kind (initial / correspondence). */
   outreach_kind?: string | null;
+  follow_up?: FollowUpRiderInput | null;
   attachments?: EmailAttachmentInput[];
 }
 
@@ -54,6 +56,7 @@ export interface EmailReplyInput {
   to?: string[] | null;
   cc?: string[] | null;
   outreach_kind?: string | null;
+  follow_up?: FollowUpRiderInput | null;
   attachments?: EmailAttachmentInput[];
 }
 

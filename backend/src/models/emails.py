@@ -33,6 +33,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from models.follow_ups import FollowUpRider
+
 #: ``email_messages.direction`` / ``email_threads.last_direction`` — an ENUM('out','in') in MySQL.
 EmailDirection = Literal["out", "in"]
 
@@ -134,6 +136,10 @@ class EmailSendInput(BaseModel):
         ``outreach_kinds`` short_name overriding the inferred default. Omit to accept
         ``core.outreach.resolve_outreach_kind``'s contact-scoped inference (initial /
         correspondence).
+    follow_up : models.follow_ups.FollowUpRider or None
+        Opt-in request to schedule a reminder once this message is sent. **``None`` is the off
+        state and the default** — sending an email must never silently schedule anything
+        (DEV-PLAN slice 7 acceptance #6). The reminder inherits the message's contact and gig.
     attachments : list of EmailAttachmentInput
         Already-uploaded attachments to include; may be empty.
     """
@@ -147,6 +153,7 @@ class EmailSendInput(BaseModel):
     opportunity_id: int | None = None
     message_template_id: int | None = None
     outreach_kind: str | None = None
+    follow_up: FollowUpRider | None = None
     attachments: list[EmailAttachmentInput] = Field(default_factory=list)
 
     @field_validator("to", "cc")
@@ -182,6 +189,10 @@ class EmailReplyInput(BaseModel):
         Override the derived Cc list; ``None`` keeps the server's derivation.
     outreach_kind : str or None
         ``outreach_kinds`` short_name overriding the inferred default for the logged touch.
+    follow_up : models.follow_ups.FollowUpRider or None
+        Opt-in request to schedule a reminder once this message is sent. **``None`` is the off
+        state and the default** — sending an email must never silently schedule anything
+        (DEV-PLAN slice 7 acceptance #6). The reminder inherits the message's contact and gig.
     attachments : list of EmailAttachmentInput
         Already-uploaded attachments to include; may be empty.
     """
@@ -192,6 +203,7 @@ class EmailReplyInput(BaseModel):
     to: list[str] | None = None
     cc: list[str] | None = None
     outreach_kind: str | None = None
+    follow_up: FollowUpRider | None = None
     attachments: list[EmailAttachmentInput] = Field(default_factory=list)
 
     @field_validator("to", "cc")

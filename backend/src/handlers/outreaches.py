@@ -16,6 +16,7 @@ from common import errors
 from common.db import transaction
 from common.logger import logger
 from handlers.context import authenticate
+from handlers.follow_ups import create_rider_follow_up, schedule_new_follow_up
 from handlers.params import path_int
 from models.outreach import OutreachInput, OutreachSummary
 from models.timeline import TimelineItem
@@ -31,17 +32,32 @@ def create_outreach() -> dict:
 
     The ``kind`` is inferred server-side when omitted (``initial`` for the first touch to the
     contact, ``correspondence`` after) and echoed back resolved, so the client never re-derives it.
+
+    An opt-in ``follow_up`` rider schedules a reminder alongside the touch. It is created **in the
+    same transaction** — a touch and the reminder to chase it should land together — and its
+    schedule is built after the commit, so a scheduler outage costs the email and not the touch.
     """
     request = authenticate(router.current_event.raw_event)
     data = OutreachInput.model_validate(router.current_event.json_body or {})
     with transaction(request.connection) as conn:
         outreach_id = outreaches_repo.create_outreach(conn, request.user_id, data)
+        follow_up_id = create_rider_follow_up(
+            conn,
+            request.user_id,
+            data.follow_up,
+            contact_id=data.contact_id,
+            opportunity_id=data.opportunity_id,
+            fallback_note="Follow up on this touch.",
+        )
     logger.info(
-        "Logged outreach id=%s contact_id=%s user_id=%s",
+        "Logged outreach id=%s contact_id=%s follow_up_id=%s user_id=%s",
         outreach_id,
         data.contact_id,
+        follow_up_id,
         request.user_id,
     )
+    if follow_up_id is not None:
+        schedule_new_follow_up(request, follow_up_id)
     row = outreaches_repo.get_outreach(request.connection, request.user_id, outreach_id)
     return OutreachSummary(**row).model_dump(mode="json")
 

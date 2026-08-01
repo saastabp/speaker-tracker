@@ -25,6 +25,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from models.follow_ups import FollowUpRider
+
 
 class OutreachInput(BaseModel):
     """A logged outbound touch, for create.
@@ -46,6 +48,10 @@ class OutreachInput(BaseModel):
         Free-text note about the touch.
     occurred_at : datetime or None
         When the touch happened; defaults to now server-side when omitted. A touch may be backdated.
+    follow_up : models.follow_ups.FollowUpRider or None
+        Opt-in request to schedule a reminder alongside this touch. **``None`` is the off state and
+        the default** — logging a touch never silently schedules anything (DESIGN.md §7). The
+        reminder inherits this touch's contact and opportunity.
     """
 
     contact_id: int
@@ -55,6 +61,7 @@ class OutreachInput(BaseModel):
     message_template_id: int | None = None
     note: str | None = None
     occurred_at: datetime | None = None
+    follow_up: FollowUpRider | None = None
 
 
 class OutreachSummary(BaseModel):

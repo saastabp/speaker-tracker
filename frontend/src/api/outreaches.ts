@@ -4,6 +4,15 @@ import { useApi } from './client';
 // Mirrors backend models/outreach.py and models/timeline.py. Entities are referenced by id and
 // catalogs by short_name (Option A); timestamps are ISO strings over the wire.
 
+
+/** Opt-in request to schedule a follow-up alongside another action. Omit or send `null` to leave
+ *  it off — sending or logging must never silently schedule anything (acceptance #6). */
+export interface FollowUpRiderInput {
+  due_date: string;
+  /** Blank lets the server derive one from the parent action's context. */
+  note?: string | null;
+}
+
 export interface OutreachInput {
   contact_id: number;
   channel: string; // outreach_channels short_name
@@ -13,6 +22,7 @@ export interface OutreachInput {
   message_template_id?: number | null;
   note?: string | null;
   occurred_at?: string | null;
+  follow_up?: FollowUpRiderInput | null;
 }
 
 export interface Outreach {

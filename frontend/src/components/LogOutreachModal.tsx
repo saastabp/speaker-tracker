@@ -18,6 +18,7 @@ import { useContacts } from '../api/contacts';
 import { useContactOutreaches, useCreateOutreach } from '../api/outreaches';
 import { useOpportunities } from '../api/opportunities';
 import { FieldLabel } from './FieldLabel';
+import { FollowUpRiderFields, type FollowUpRiderValue } from './FollowUpRiderFields';
 import { TemplatePicker } from './TemplatePicker';
 
 // Email is owned by the composer (it auto-logs an outreach on send), so it is not a manual
@@ -63,6 +64,8 @@ export function LogOutreachModal({
   const [note, setNote] = useState('');
   const [occurredOn, setOccurredOn] = useState('');
   const [templateId, setTemplateId] = useState<number | null>(null);
+  const [riderOn, setRiderOn] = useState(false);
+  const [rider, setRider] = useState<FollowUpRiderValue>({ due_date: '', note: '' });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,6 +79,9 @@ export function LogOutreachModal({
       setNote('');
       setOccurredOn('');
       setTemplateId(null);
+      // Off on every open — the rider is opt-in, and a previous use must not carry over.
+      setRiderOn(false);
+      setRider({ due_date: '', note: '' });
       setError(null);
     }
   }, [opened, contactId]);
@@ -113,6 +119,10 @@ export function LogOutreachModal({
       setError('Pick a channel.');
       return;
     }
+    if (riderOn && !rider.due_date) {
+      setError('Pick a date for the follow-up, or switch it off.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -125,6 +135,7 @@ export function LogOutreachModal({
         message_template_id: templateId,
         note: note.trim() || null,
         occurred_at: occurredOn || null,
+        follow_up: riderOn ? { due_date: rider.due_date, note: rider.note.trim() || null } : null,
       });
       onClose();
     } catch (err) {
@@ -227,6 +238,14 @@ export function LogOutreachModal({
               onChange={(event) => setNote(event.currentTarget.value)}
             />
           </div>
+
+          <FollowUpRiderFields
+            enabled={riderOn}
+            onEnabledChange={setRiderOn}
+            value={rider}
+            onChange={setRider}
+            description="Pick a date to be reminded to chase this touch."
+          />
 
           <Group justify="space-between" mt="sm">
             <Group>

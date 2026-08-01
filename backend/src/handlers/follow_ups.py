@@ -32,7 +32,7 @@ from common.logger import logger
 from core.follow_ups import DELETE, PUT, desired_schedule, reconcile
 from handlers.context import AuthenticatedRequest, authenticate
 from handlers.params import path_int
-from models.follow_ups import FollowUpInput, FollowUpPatch, FollowUpSummary
+from models.follow_ups import FollowUpInput, FollowUpPatch, FollowUpRider, FollowUpSummary
 from repositories import follow_ups as follow_ups_repo
 
 router = Router()
@@ -84,6 +84,72 @@ def _apply(action: str, follow_up_id: int, schedule) -> None:
     logger.info("Reminder schedule action=%s follow_up_id=%s", action, follow_up_id)
 
 
+def create_rider_follow_up(
+    conn,
+    user_id: int,
+    rider: FollowUpRider | None,
+    *,
+    contact_id: int | None,
+    opportunity_id: int | None,
+    fallback_note: str,
+) -> int | None:
+    """Create the follow-up an opt-in rider asked for, or return None when there is no rider.
+
+    Shared by the outreach and email paths so "logging a touch also sets a reminder" is one rule
+    rather than two that drift. **Call inside the caller's transaction** — the reminder and the
+    thing it rides on should land together or not at all — then schedule with
+    :func:`schedule_new_follow_up` after the commit.
+
+    ``rider is None`` **is** the off state, and returning ``None`` for it is what makes acceptance
+    #6 structural: there is no branch that could accidentally create a follow-up for a send that
+    did not ask for one.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection inside the caller's transaction.
+    user_id : int
+        The owning user.
+    rider : models.follow_ups.FollowUpRider or None
+        The opt-in request. ``None`` means the switch was off.
+    contact_id, opportunity_id : int or None
+        Inherited from the parent action — the contact the email went to, the gig it was
+        attributed to. The rider carries no links of its own; that is the point of it.
+    fallback_note : str
+        Used when the rider carries no note, derived from the parent action's context (an email's
+        subject, a contact's name) so Donna is not asked to retype what the app already knows.
+
+    Returns
+    -------
+    int or None
+        The new follow-up's id, or ``None`` when there was no rider.
+    """
+    if rider is None:
+        return None
+    return follow_ups_repo.create_follow_up(
+        conn,
+        user_id,
+        FollowUpInput(
+            due_date=rider.due_date,
+            note=(rider.note or fallback_note).strip(),
+            contact_id=contact_id,
+            opportunity_id=opportunity_id,
+        ),
+    )
+
+
+def schedule_new_follow_up(request: AuthenticatedRequest, follow_up_id: int) -> None:
+    """Create the EventBridge schedule for a freshly created follow-up.
+
+    No before-state to reconcile against, so this is the create half of :func:`reconcile` on its
+    own. Call **after** the transaction commits: a scheduler failure then loses the reminder email
+    but keeps the row, where the reverse ordering could leave a schedule with no row behind it.
+    """
+    row = follow_ups_repo.get_follow_up(request.connection, request.user_id, follow_up_id)
+    schedule = _desired(request, row)
+    _apply(PUT if schedule is not None else "none", follow_up_id, schedule)
+
+
 @router.post("/follow-ups")
 def create_follow_up() -> dict:
     """Create a follow-up and schedule its reminder; return the created row.
@@ -103,9 +169,8 @@ def create_follow_up() -> dict:
         data.opportunity_id,
         request.user_id,
     )
+    schedule_new_follow_up(request, follow_up_id)
     row = follow_ups_repo.get_follow_up(request.connection, request.user_id, follow_up_id)
-    schedule = _desired(request, row)
-    _apply(PUT if schedule is not None else "none", follow_up_id, schedule)
     return FollowUpSummary(**row).model_dump(mode="json")
 
 
