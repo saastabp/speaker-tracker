@@ -155,6 +155,11 @@ class FollowUpSummary(BaseModel):
     ``contact_name`` and ``opportunity_title`` are denormalized for display so a list render needs
     no follow-up lookups; either may be ``None``, and by ``ck_follow_ups_target`` never both.
 
+    ``reminder_failed_at`` is set when the reminder email was dead-lettered after exhausting its
+    retries, and cleared by any edit. It answers **"did it fail?"**, never "did it arrive?" — there
+    is no ``reminder_sent_at``, because ``followup_notify`` deliberately never touches the database.
+    A client should read it as "this nudge did not go out", not as delivery tracking.
+
     Whether the row is *pending* is ``completed_at is None`` — no separate flag is sent, because a
     derived boolean beside the timestamp is the same two-columns-one-fact drift the schema
     deliberately avoids. Whether it is *overdue* is likewise not sent: it depends on the viewer's
@@ -170,4 +175,5 @@ class FollowUpSummary(BaseModel):
     opportunity_title: str | None
     remind_by_email: bool
     completed_at: datetime | None
+    reminder_failed_at: datetime | None
     created_at: datetime

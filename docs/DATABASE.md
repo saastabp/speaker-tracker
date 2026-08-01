@@ -12,12 +12,16 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: implemented through migration `0010` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
+> **Status: implemented through migration `0011` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
 > (UX reconciliation, a catalog label update with no schema change), `0008_email` (slice 6a),
-> `0009_external_message_id` (slice 6b) and `0010_followups` (slice 7).** This document is the
-> schema contract; everything through `0010` satisfies it, while `0011_materials` remains target
-> schema. Note `0010` is **written and applied in test, but not yet deployed** — the rest of slice 7
-> is still being built on top of it. Derived from `DESIGN.md` §4/§5 and supersedes any older sketch.
+> `0009_external_message_id` (slice 6b), `0010_followups` and `0011_reminder_failures` (slice 7).**
+> This document is the schema contract; everything through `0011` satisfies it, while
+> `0012_materials` remains target schema. `0010` is deployed to sandbox; `0011` is written and
+> applied in test and awaits the next sandbox deploy. **Materials moved from `0011` to `0012`** —
+> it is unwritten, `0011_reminder_failures` was being written, and the runner applies unapplied
+> files in version order, so leaving a hole would have `0011` applying *after* `0012`. Same
+> resolution slice 7's own migration got when 6b spent `0009`. Derived from `DESIGN.md` §4/§5 and
+> supersedes any older sketch.
 
 **Conventions** (inherited from the sibling apps, see `CODING-GUIDELINES.md` §2):
 
@@ -215,6 +219,7 @@ erDiagram
         text note
         bool remind_by_email
         timestamp completed_at "NULL = pending"
+        timestamp reminder_failed_at "NULL = no failure"
         timestamp deleted_at
     }
     message_templates {
@@ -465,6 +470,16 @@ unreachable in the UI. Both are individually nullable (a gig-level reminder may 
 
 EventBridge Scheduler uses the deterministic schedule name **`followup-<id>`** (ported from
 job-tracker), so create/update/delete need no state read-back.
+
+`reminder_failed_at` records that the reminder email was dead-lettered after exhausting its
+retries. It answers **"did it fail?"**, never "did it arrive?" — there is no `reminder_sent_at`,
+because `followup_notify` deliberately never touches the database (that is what lets it run outside
+the VPC with no RDS handshake). The column is written by a *different* function, the dead-letter
+consumer, which runs only on failure and is the sole part of the reminder path holding database
+access. It is **cleared whenever a new schedule is successfully put**, so a reminder that failed on
+Monday and was rescheduled to Friday does not keep showing as failed after Friday's send works.
+Unindexed on purpose: it is read as part of rows already selected, never filtered on.
+
 Indexes: `(user_id, due_date, completed_at)` — the Dashboard's due list.
 
 ### `message_templates`
@@ -692,7 +707,8 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 | `0008_email.sql` | `email_threads`, `email_messages`, `imap_folder_cursors`, `signatures`, + the deferred `outreaches.email_message_id` FK (ALTER, from 0005) | 6a |
 | `0009_external_message_id.sql` | `email_messages.external_message_id` + its index — SES replaces the `Message-ID` we mint, so the header chain needs the id the recipient actually sees | 6b |
 | `0010_followups.sql` | `follow_ups` | 7 |
-| `0011_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a / Talks |
+| `0011_reminder_failures.sql` | `follow_ups.reminder_failed_at` — so a reminder that never arrived is visible in the app, not only in CloudWatch | 7 |
+| `0012_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a / Talks |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The

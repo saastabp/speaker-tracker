@@ -64,6 +64,26 @@ SCHEDULER_NOTIFY_ARN_ENV = "SCHEDULER_NOTIFY_ARN"
 #: ARN of the role EventBridge assumes to invoke that Lambda.
 SCHEDULER_ROLE_ARN_ENV = "SCHEDULER_ROLE_ARN"
 
+#: ARN of the SQS queue a reminder lands in once its retries are exhausted. **Optional**, unlike
+#: the three above: a missing dead-letter queue must not stop reminders being scheduled — the
+#: reminder working matters more than capturing the rare one that fails — so its absence omits the
+#: config and logs, rather than turning the whole call into a no-op.
+SCHEDULER_DLQ_ARN_ENV = "SCHEDULER_DLQ_ARN"
+
+#: Retry budget for a reminder whose delivery fails.
+#:
+#: EventBridge's defaults are 185 attempts over 24 hours with no dead-letter queue, which is wrong
+#: for this payload twice over. A reminder is a *morning nudge*: one that arrives after lunch has
+#: lost its purpose, so grinding away for a day helps nobody and, when the address is undeliverable,
+#: aims 185 bounces at the sending reputation. Transient SES or network failures clear in minutes,
+#: which a handful of backed-off attempts covers.
+#:
+#: Two hours is deliberately longer than the retries realistically need: it is the window in which
+#: the reminder is still useful, and reaching it means giving up *and saying so* via the DLQ alarm,
+#: rather than retrying quietly into the afternoon.
+MAX_RETRY_ATTEMPTS = 5
+MAX_EVENT_AGE_SECONDS = 2 * 60 * 60
+
 _client_instance: Any = None
 
 
@@ -188,8 +208,23 @@ def put_schedule(*, follow_up_id: int, expression: str, timezone: str, payload: 
             "Arn": notify_arn,
             "RoleArn": role_arn,
             "Input": json.dumps({**payload, "follow_up_id": follow_up_id}),
+            "RetryPolicy": {
+                "MaximumRetryAttempts": MAX_RETRY_ATTEMPTS,
+                "MaximumEventAgeInSeconds": MAX_EVENT_AGE_SECONDS,
+            },
         },
     }
+
+    dlq_arn = os.environ.get(SCHEDULER_DLQ_ARN_ENV, "")
+    if dlq_arn:
+        request["Target"]["DeadLetterConfig"] = {"Arn": dlq_arn}
+    else:
+        # Without this the reminder still fires; it just vanishes silently if every retry fails,
+        # which is the failure this queue exists to make visible.
+        logger.warning(
+            "scheduler: %s unset — a reminder that exhausts its retries will be lost silently",
+            SCHEDULER_DLQ_ARN_ENV,
+        )
 
     client = _client()
     logger.info("scheduler: putting schedule name=%s at=%s tz=%s", name, expression, timezone)

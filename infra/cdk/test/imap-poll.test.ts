@@ -138,9 +138,14 @@ describe('the failure alarm (acceptance #11)', () => {
   });
 
   test('exists in both environments, because an alarm nobody has seen fire is not an alarm', () => {
-    // The deliberate wrong-password test (#11) is run in sandbox.
-    templateFor({ envType: 'sandbox' }).resourceCountIs('AWS::CloudWatch::Alarm', 1);
-    templateFor({ envType: 'prod' }).resourceCountIs('AWS::CloudWatch::Alarm', 1);
+    // Asserts THIS alarm by name rather than counting every alarm in the stack: the stack gained a
+    // second one in slice 7 (the follow-up dead-letter queue), and a count would fail for the
+    // healthy reason that more things are now monitored.
+    for (const envType of ['sandbox', 'prod'] as const) {
+      templateFor({ envType }).hasResourceProperties('AWS::CloudWatch::Alarm', {
+        AlarmName: `speaker-tracker-${envType}-imap-poll-failures`,
+      });
+    }
   });
 });
 

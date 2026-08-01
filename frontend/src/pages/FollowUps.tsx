@@ -177,6 +177,11 @@ export function FollowUps() {
                       )}
                       {/* A dashboard-only reminder is a legitimate choice, not a fault — it is
                           worth showing so an email that never arrives is explicable. */}
+                      {f.reminder_failed_at && (
+                        <Badge color="terracotta" variant="filled" size="xs">
+                          reminder didn't send
+                        </Badge>
+                      )}
                       {pending && !f.remind_by_email && (
                         <Badge color="gray" variant="light" size="xs">
                           no email

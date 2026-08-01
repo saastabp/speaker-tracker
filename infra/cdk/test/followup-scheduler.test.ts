@@ -20,6 +20,8 @@ import { ApiStack, ApiStackProps } from '../lib/api-stack';
 import { TEST_EMAIL_CONFIG, TEST_POLL_CONFIG } from './fixtures';
 
 const ENV = { account: '111111111111', region: 'us-west-2' };
+/** Derived from the fixture, so the assertion cannot drift from what the stack is given. */
+const TEST_ALARM_EMAIL = TEST_POLL_CONFIG.alarmEmail;
 
 const props = (overrides: Partial<ApiStackProps> = {}): ApiStackProps => ({
   env: ENV,
@@ -133,6 +135,81 @@ describe('follow-up reminder infrastructure', () => {
         ]),
       },
     });
+  });
+
+  test('failed reminders are dead-lettered rather than lost', () => {
+    template().hasResourceProperties('AWS::SQS::Queue', {
+      QueueName: 'speaker-tracker-sandbox-followup-failures',
+    });
+  });
+
+  test('the alarm watches the consumer, not the queue depth', () => {
+    // Queue depth is the obvious metric and the wrong one: the consumer drains the queue in
+    // seconds, so a depth alarm can sit green through the very failures it exists to report.
+    template().hasResourceProperties('AWS::CloudWatch::Alarm', {
+      AlarmName: 'speaker-tracker-sandbox-followup-failures',
+      Threshold: 1,
+      MetricName: 'Invocations',
+      Namespace: 'AWS/Lambda',
+    });
+  });
+
+  test('the failure consumer has database access — and is the only reminder function that does', () => {
+    const t = template();
+    const roleOf = (handler: string) =>
+      (
+        Object.values(
+          t.findResources('AWS::Lambda::Function', { Properties: { Handler: handler } }),
+        )[0] as any
+      ).Properties.Role['Fn::GetAtt'][0];
+
+    const consumerRole = roleOf('handlers.followup_failed.lambda_handler');
+    const notifyRole = roleOf('handlers.followup_notify.lambda_handler');
+
+    const connectPolicies = Object.values(t.findResources('AWS::IAM::Policy')).filter((p: any) =>
+      JSON.stringify(p.Properties.PolicyDocument.Statement).includes('rds-db:connect'),
+    );
+    const rolesWithDb = JSON.stringify(connectPolicies.map((p: any) => p.Properties.Roles ?? []));
+
+    expect(rolesWithDb).toContain(consumerRole);
+    expect(rolesWithDb).not.toContain(notifyRole);
+  });
+
+  test('the consumer is triggered by the failure queue and reports partial failures', () => {
+    template().hasResourceProperties('AWS::Lambda::EventSourceMapping', {
+      FunctionResponseTypes: ['ReportBatchItemFailures'],
+    });
+  });
+
+  test('the scheduler role may write to the dead-letter queue', () => {
+    // Without this grant EventBridge silently cannot dead-letter, and the alarm above could never
+    // fire however many reminders failed.
+    const sendsToDlq = allStatements(template()).filter((s: any) =>
+      JSON.stringify(s.Action).includes('sqs:SendMessage'),
+    );
+    expect(sendsToDlq.length).toBeGreaterThan(0);
+  });
+
+  test('sandbox gets a deliverable dev principal address', () => {
+    // The default is non-deliverable, which made the reminder path untestable in sandbox.
+    const apiFn = Object.values(
+      template().findResources('AWS::Lambda::Function', {
+        Properties: { Handler: 'api_handler.lambda_handler' },
+      }),
+    )[0] as any;
+    expect(apiFn.Properties.Environment.Variables.DEV_USER_EMAIL).toBe(TEST_ALARM_EMAIL);
+  });
+
+  test('prod never gets a dev principal address, however config is set', () => {
+    const prod = Template.fromStack(
+      new ApiStack(new App(), 'TestProd', props({ envType: 'prod', authMode: 'cognito' })),
+    );
+    const apiFn = Object.values(
+      prod.findResources('AWS::Lambda::Function', {
+        Properties: { Handler: 'api_handler.lambda_handler' },
+      }),
+    )[0] as any;
+    expect(apiFn.Properties.Environment.Variables).not.toHaveProperty('DEV_USER_EMAIL');
   });
 
   test('PassRole is limited to the scheduler role', () => {

@@ -258,6 +258,13 @@ function FollowUpDueRow({
               overdue
             </Badge>
           )}
+          {/* Filled, not light: this is the one state where the app failed the user rather than
+              merely reporting a date, and it should not read as another neutral chip. */}
+          {followUp.reminder_failed_at && (
+            <Badge color="terracotta" variant="filled" size="xs" style={{ flexShrink: 0 }}>
+              reminder didn't send
+            </Badge>
+          )}
         </Group>
         <Text size="xs" c="dimmed" lineClamp={2}>
           {followUp.note}

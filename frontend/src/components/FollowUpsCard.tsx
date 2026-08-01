@@ -91,6 +91,11 @@ export function FollowUpsCard({ contactId, opportunityId }: FollowUpsCardProps) 
                         overdue
                       </Badge>
                     )}
+                    {f.reminder_failed_at && (
+                      <Badge color="terracotta" variant="filled" size="xs">
+                        reminder didn't send
+                      </Badge>
+                    )}
                     {!f.remind_by_email && (
                       <Badge color="gray" variant="light" size="xs">
                         no email

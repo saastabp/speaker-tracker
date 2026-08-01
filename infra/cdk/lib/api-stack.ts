@@ -9,10 +9,12 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as triggers from 'aws-cdk-lib/triggers';
 import { Construct } from 'constructs';
@@ -256,6 +258,12 @@ export class ApiStack extends Stack {
       IMAP_HOST: props.email.imapHost,
       MAIL_FROM_ADDRESS: props.email.mailFromAddress,
       MAIL_FROM_NAME: props.email.mailFromName,
+      // Sandbox only. `AUTH_MODE=dev` injects a fixed principal whose email defaults to a
+      // non-deliverable placeholder, which meant a sandbox reminder could never actually arrive —
+      // it would fail at SES, retry, and dead-letter. Pointing it at a real inbox is what makes
+      // the reminder path exercisable before prod. common/auth.py refuses dev auth outside
+      // sandbox, so this can never take effect in production however it is set.
+      ...(props.authMode === 'dev' ? { DEV_USER_EMAIL: props.alarmEmail } : {}),
     };
 
     // Shared code bundle; CDK stages it once per unique content hash.
@@ -524,6 +532,73 @@ export class ApiStack extends Stack {
       }),
     );
 
+    // Where a reminder goes when every retry has failed.
+    //
+    // EventBridge's defaults are 185 attempts over 24 hours with NO dead-letter queue, which for
+    // this payload means a failing reminder either hammers SES all day or disappears without
+    // trace. common/scheduler.py sets a 5-attempt / 2-hour budget instead — a reminder that has
+    // not landed by mid-morning has missed its purpose — and anything that exhausts it arrives
+    // here, where the alarm below makes it somebody's problem rather than nobody's.
+    const followUpDlq = new sqs.Queue(this, 'FollowUpDlq', {
+      // Not "-dlq": there is no primary queue behind it. EventBridge invokes the notify function
+      // directly, and this is where an invocation goes once its retries are spent — a dead-letter
+      // *destination*, not the partner of a source queue. The old name sent people looking for one.
+      queueName: `${props.appName}-${props.envType}-followup-failures`,
+      // Long enough that a weekend failure is still there on Monday.
+      retentionPeriod: Duration.days(14),
+      enforceSSL: true,
+    });
+    followUpDlq.grantSendMessages(schedulerRole);
+
+    // Consumes the failure queue and flags the follow-up, so the app can say the nudge did not go
+    // out instead of showing a row identical to one whose email arrived. This is the ONLY part of
+    // the reminder path with database access — followup-notify has none, which is what keeps the
+    // happy path free of an RDS handshake. Only the failure path pays.
+    const failedFn = this.pythonFunction('FollowUpFailedFunction', {
+      functionName: `${props.appName}-${props.envType}-followup-failed`,
+      code,
+      handler: 'handlers.followup_failed.lambda_handler',
+      memorySize: 512,
+      timeout: Duration.seconds(30),
+      environment,
+      logRetention: props.logRetention,
+    });
+    db.grantConnect(failedFn);
+    failedFn.addEventSource(
+      new lambdaEventSources.SqsEventSource(followUpDlq, {
+        // Failures are rare and individually interesting; batching would only delay the flag.
+        batchSize: 1,
+        // The handler returns batchItemFailures, so a message it cannot parse is dropped rather
+        // than redelivered forever, while a database outage is retried.
+        reportBatchItemFailures: true,
+      }),
+    );
+
+    // The alarm watches the CONSUMER'S INVOCATIONS, not the queue depth.
+    //
+    // Queue depth was the obvious metric and is the wrong one once something drains the queue: a
+    // message consumed within seconds may never be visible at an alarm evaluation, so the alarm
+    // would sit green through exactly the failures it exists to report. An invocation of this
+    // function means a reminder was dead-lettered — it cannot be missed by timing.
+    const dlqAlarm = new cloudwatch.Alarm(this, 'FollowUpDlqAlarm', {
+      alarmName: `${props.appName}-${props.envType}-followup-failures`,
+      alarmDescription:
+        'A follow-up reminder exhausted its retries and was dead-lettered. Donna did NOT get ' +
+        'that nudge. The follow-up is flagged in the app and stays on her Dashboard, so nothing ' +
+        'is lost — but the reminder path is broken and tomorrow\'s reminders will fail too. ' +
+        'Check the followup-notify log for the cause.',
+      metric: failedFn.metricInvocations({ period: Duration.minutes(5), statistic: 'Sum' }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    // Reuses the existing alarm topic rather than minting a second one: its email subscription is
+    // already confirmed, and a new topic would sit unconfirmed — silently swallowing alarms — until
+    // someone clicked the link. The topic's name still says imap-poll; that is worth renaming, but
+    // not at the cost of a window where both alarms are mute.
+    dlqAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
     // Added after the fact rather than in the function's `environment` above, so construct
     // ordering does not matter. These three names are what common/scheduler.py reads; when any is
     // absent it no-ops and logs a WARNING, so an un-deployed scheduler degrades to a
@@ -531,6 +606,7 @@ export class ApiStack extends Stack {
     apiFn.addEnvironment('SCHEDULER_GROUP_NAME', followUpGroup.name!);
     apiFn.addEnvironment('SCHEDULER_NOTIFY_ARN', notifyFn.functionArn);
     apiFn.addEnvironment('SCHEDULER_ROLE_ARN', schedulerRole.roleArn);
+    apiFn.addEnvironment('SCHEDULER_DLQ_ARN', followUpDlq.queueArn);
 
     // HTTP API with explicit routes (not ANY /{proxy+}), so /health can stay open and
     // the gateway rejects unknown paths itself.

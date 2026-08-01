@@ -38,7 +38,7 @@ from repositories._ownership import validate_contact, validate_opportunity
 _SUMMARY_SELECT = (
     "SELECT f.id, f.due_date, f.note, f.contact_id, c.name AS contact_name, "
     "       f.opportunity_id, o.title AS opportunity_title, f.remind_by_email, "
-    "       f.completed_at, f.created_at "
+    "       f.completed_at, f.reminder_failed_at, f.created_at "
     "FROM follow_ups f "
     "LEFT JOIN contacts c ON c.id = f.contact_id "
     "LEFT JOIN opportunities o ON o.id = f.opportunity_id "
@@ -239,6 +239,13 @@ def patch_follow_up(conn: Connection, user_id: int, follow_up_id: int, data: Fol
     if not assignments:
         return True
 
+    # A *real* edit clears any recorded reminder failure — but an empty patch does not, since it
+    # changes nothing and the flag still describes the current schedule accurately. The flag
+    # describes the last attempt, and an edit means a new schedule is about to be put, so keeping
+    # it would leave a follow-up that failed on Monday, was rescheduled, and sent fine on Friday
+    # still showing as failed forever.
+    assignments.append("reminder_failed_at = NULL")
+
     params.extend([follow_up_id, user_id])
     with conn.cursor() as cur:
         cur.execute(
@@ -247,6 +254,39 @@ def patch_follow_up(conn: Connection, user_id: int, follow_up_id: int, data: Fol
             params,
         )
     return True
+
+
+def mark_reminder_failed(conn: Connection, follow_up_id: int) -> bool:
+    """Record that this follow-up's reminder email was dead-lettered; return whether a row matched.
+
+    **Not owner-scoped, unlike every other write here, and deliberately so.** There is no requesting
+    user on this path: it runs from the dead-letter consumer, driven by a payload the app itself
+    minted, so the only id it can carry is one we put there. Requiring a ``user_id`` would mean
+    either inventing one or threading it through the schedule payload for no benefit.
+
+    Idempotent — re-stamping an already-failed row is a no-op in effect, which matters because SQS
+    delivers at least once and the same dead-lettered reminder may arrive twice.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection (inside a transaction).
+    follow_up_id : int
+        The ``follow_ups.id`` from the dead-lettered payload.
+
+    Returns
+    -------
+    bool
+        ``True`` when a live row matched. ``False`` means the follow-up was deleted between the
+        reminder failing and this running — not an error, just nothing left to annotate.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE follow_ups SET reminder_failed_at = CURRENT_TIMESTAMP "
+            "WHERE id = %s AND deleted_at IS NULL",
+            (follow_up_id,),
+        )
+        return cur.rowcount > 0
 
 
 def soft_delete_follow_up(conn: Connection, user_id: int, follow_up_id: int) -> bool:

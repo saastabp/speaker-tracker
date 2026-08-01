@@ -29,7 +29,15 @@ if _AUTH_MODE == "dev" and _ENV_TYPE != "sandbox":
 #: The fixed sandbox principal. Its ``users`` row is created lazily by the first authenticated
 #: request (``handlers/context.authenticate`` -> ``upsert_user_id``) and owns no records.
 DEV_USER_SUB = "dev"
-DEV_USER_EMAIL = "dev@speaker-tracker.local"
+#: Overridable so a sandbox deploy can use a **deliverable** address. The default is not
+#: deliverable by design — nothing should accidentally mail a real person from a dev principal —
+#: but leaving it unconfigurable meant the reminder feature could never be exercised end to end in
+#: sandbox: every reminder would fail at SES, retry, and land in the DLQ. Sandbox exists to
+#: exercise things before prod, so it needs a real address available to it.
+#:
+#: Unreachable in prod regardless: the import-time guard above rejects ``AUTH_MODE=dev`` outside
+#: sandbox, so this constant is only ever read where dev auth is already legal.
+DEV_USER_EMAIL = os.environ.get("DEV_USER_EMAIL", "dev@speaker-tracker.local")
 
 
 @dataclass(frozen=True)

@@ -97,6 +97,41 @@ def test_put_sends_the_one_time_schedule_shape(configured) -> None:
     assert kw["Target"]["RoleArn"] == ROLE_ARN
 
 
+def test_put_sets_a_bounded_retry_budget_and_a_dead_letter_queue(configured, monkeypatch) -> None:
+    """EventBridge's defaults are wrong for a reminder in both directions.
+
+    185 attempts over 24 hours means a failing send grinds on all afternoon — long past the point a
+    morning nudge is useful — and with no dead-letter queue the one that finally gives up vanishes
+    with only CloudWatch as evidence.
+    """
+    monkeypatch.setenv(scheduler.SCHEDULER_DLQ_ARN_ENV, "arn:aws:sqs:us-west-2:1:followup-dlq")
+    client = configured()
+    scheduler.put_schedule(**PUT_ARGS)
+
+    target = client.calls[0][1]["Target"]
+    assert target["RetryPolicy"] == {
+        "MaximumRetryAttempts": scheduler.MAX_RETRY_ATTEMPTS,
+        "MaximumEventAgeInSeconds": scheduler.MAX_EVENT_AGE_SECONDS,
+    }
+    assert scheduler.MAX_RETRY_ATTEMPTS < 185, "must not fall back to the EventBridge default"
+    assert target["DeadLetterConfig"] == {"Arn": "arn:aws:sqs:us-west-2:1:followup-dlq"}
+
+
+def test_a_missing_dlq_still_schedules_but_warns(configured, monkeypatch, caplog) -> None:
+    """The reminder working matters more than capturing the rare one that fails.
+
+    So an unset queue omits the config rather than no-opping the whole call — but it says so, since
+    the silent loss is exactly what the queue exists to prevent.
+    """
+    monkeypatch.delenv(scheduler.SCHEDULER_DLQ_ARN_ENV, raising=False)
+    client = configured()
+    with caplog.at_level("WARNING"):
+        assert scheduler.put_schedule(**PUT_ARGS) is True
+
+    assert "DeadLetterConfig" not in client.calls[0][1]["Target"]
+    assert any(scheduler.SCHEDULER_DLQ_ARN_ENV in r.getMessage() for r in caplog.records)
+
+
 def test_put_merges_the_id_so_name_and_payload_cannot_disagree(configured) -> None:
     """followup_notify correlates on the payload id and never reads the DB; a mismatch is
     undiagnosable, so the id comes from the argument the name is built from."""

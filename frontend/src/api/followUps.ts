@@ -36,6 +36,10 @@ export interface FollowUp {
   remind_by_email: boolean;
   /** Null is pending. This is the only done-state — there is no separate status field. */
   completed_at: string | null;
+  /** Set when the reminder email was dead-lettered after exhausting its retries; cleared by any
+   *  edit. It says **the nudge did not go out** — it is not delivery tracking, and null covers
+   *  both "sent fine" and "has not fired yet". */
+  reminder_failed_at: string | null;
   created_at: string;
 }
 
