@@ -277,6 +277,28 @@ def test_cancelled_gig_leaves_board_for_history(api, board) -> None:
     assert "Cancelled gig" not in _titles(api, closed="false")
 
 
+def test_board_payload_carries_the_high_water_mark(api, board) -> None:
+    # The card exposes the furthest stage the gig ever reached alongside where it sits now, so the
+    # SPA can narrow the board to the set behind a dashboard funnel bar. The funnel is
+    # reached-or-beyond, and `current_status` cannot reconstruct it: the gig below no longer sits in
+    # Booked, yet `cancelled` (sort 80) is past Booked (50) and so still counts toward it.
+    fell_through = _new_opp(api, board, title="Fell through")
+    api("PATCH", f"/opportunities/{fell_through['id']}/status", {"status": "booked"})
+    api(
+        "POST",
+        f"/opportunities/{fell_through['id']}/close",
+        {"status": "cancelled", "reason": "venue closed"},
+    )
+    _new_opp(api, board, title="Fresh")
+
+    status, body = api("GET", "/opportunities")
+    assert status == 200
+    cards = {o["title"]: o for o in body["opportunities"]}
+    assert cards["Fell through"]["max_reached_status"] == "cancelled"
+    assert cards["Fell through"]["current_status"] == "cancelled"
+    assert cards["Fresh"]["max_reached_status"] == "researching"
+
+
 # --- linked contacts -----------------------------------------------------------------------------
 
 

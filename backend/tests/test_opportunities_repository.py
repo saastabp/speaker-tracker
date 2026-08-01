@@ -170,6 +170,36 @@ def test_list_board_history_and_status_filter(pipeline_db) -> None:
     ]
 
 
+def test_list_reports_the_high_water_mark_not_the_current_stage(pipeline_db) -> None:
+    # `max_reached_status` is what lets the board be narrowed to the gigs behind a funnel bar, and
+    # the two cases below are exactly where it parts company with `current_status`:
+    #   - a gig dragged *backwards* still reports the furthest stage it ever reached;
+    #   - a booked gig that later fell through reports `cancelled` (sort 80), which is >= booked's
+    #     sort 50 and so still counts toward Booked, matching `funnel_counts`.
+    conn, user_id, ids = pipeline_db
+    back = opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Dragged back"))
+    opp.patch_status(conn, user_id, back, "pitched")
+    opp.patch_status(conn, user_id, back, "outreach_sent")
+    fell_through = opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Fell through"))
+    opp.patch_status(conn, user_id, fell_through, "booked")
+    opp.close(conn, user_id, fell_through, "cancelled", "venue pulled the event")
+    opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Fresh"))
+
+    reached = {r["title"]: r["max_reached_status"] for r in opp.list_opportunities(conn, user_id)}
+    assert reached == {
+        "Dragged back": "pitched",
+        "Fell through": "cancelled",
+        "Fresh": "researching",
+    }
+    current = {r["title"]: r["current_status"] for r in opp.list_opportunities(conn, user_id)}
+    assert current["Dragged back"] == "outreach_sent"
+    assert current["Fell through"] == "cancelled"
+    # The gig that fell through has left the board, so a reach filter only finds it with History
+    # included — which is why the funnel drill-down link has to ask for closed gigs too.
+    open_titles = {r["title"] for r in opp.list_opportunities(conn, user_id, closed=False)}
+    assert "Fell through" not in open_titles
+
+
 def test_list_orders_dated_before_undated(pipeline_db) -> None:
     conn, user_id, ids = pipeline_db
     opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Undated"))

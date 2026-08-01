@@ -211,6 +211,12 @@ class OpportunitySummary(BaseModel):
 
     The SPA buckets cards into columns by ``current_status`` (the flat-list board decision), and
     filters board vs History by ``closed_at``. Carries the money / payment chip fields.
+
+    ``max_reached_status`` is the *high-water mark* rather than the current column, so the SPA can
+    narrow the board to the gigs behind a dashboard funnel bar — that count is reached-or-beyond
+    (``core.funnel.reached_or_beyond``), which ``current_status`` alone cannot reconstruct: a gig
+    cancelled after being booked counts toward Booked but no longer sits in that column. ``None``
+    only where a gig somehow has no ``status_events`` row at all, which creation always writes.
     """
 
     id: int
@@ -221,6 +227,7 @@ class OpportunitySummary(BaseModel):
     talk_title: str | None
     opportunity_format: str
     current_status: str
+    max_reached_status: str | None
     comp_type: str
     fee_amount: Decimal | None
     currency: str

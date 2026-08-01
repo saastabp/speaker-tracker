@@ -19,6 +19,7 @@ import {
   Group,
   Loader,
   Paper,
+  Select,
   Stack,
   Switch,
   Text,
@@ -27,7 +28,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconMessagePlus, IconPlus, IconX } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
 import { useFunnel } from '../api/funnel';
 import {
@@ -38,6 +39,7 @@ import {
   type OpportunitySummary,
 } from '../api/opportunities';
 import { CloseOpportunityModal, type CloseTarget } from '../components/CloseOpportunityModal';
+import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
 import { STAGE_DOT, formatMoney, paymentColor } from '../opportunityChips';
@@ -298,7 +300,17 @@ function ClosedColumn({
 export function Pipeline() {
   const funnel = useFunnel();
   const catalogs = useCatalogs();
-  const [showClosed, setShowClosed] = useState(false);
+  // The whole filter row lives in the URL, not in useState (the Contacts pattern). Slice 8 turns
+  // each dashboard aggregate into a link into the list behind it, which only works if a link can
+  // *tell* this board what to show — local state would leave /pipeline?reached=booked quietly
+  // rendering the unfiltered board. "Show closed" belongs to that row for the same reason: the
+  // funnel counts gigs that have since closed, so a drill-down link has to be able to ask for them.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('q') ?? '';
+  const reached = searchParams.get('reached') ?? '';
+  const comp = searchParams.get('comp') ?? '';
+  const pay = searchParams.get('pay') ?? '';
+  const showClosed = searchParams.get('closed') === 'all';
   const opps = useOpportunities(showClosed ? undefined : false);
   const patchStatus = usePatchStatus();
   const createOpp = useCreateOpportunity();
@@ -314,6 +326,18 @@ export function Pipeline() {
 
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 
+  /** Write one filter key, dropping it from the URL when it returns to its default. */
+  const setParam = (key: string, value: string, fallback: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (!value || value === fallback) {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    // replace: filtering is not navigation, and each keystroke should not be a Back-button stop.
+    setSearchParams(next, { replace: true });
+  };
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const paymentStatuses = catalogs.data?.payment_statuses ?? [];
@@ -326,14 +350,62 @@ export function Pipeline() {
     formatLabel: (sn) => formats.find((f) => f.short_name === sn)?.description ?? sn,
   };
 
-  const byStatus = (shortName: string) =>
-    (opps.data ?? []).filter((o) => o.current_status === shortName && !o.closed_at);
+  const statusSort = (shortName: string | null) =>
+    shortName
+      ? ((catalogs.data?.opportunity_statuses ?? []).find((s) => s.short_name === shortName)
+          ?.sort_order ?? null)
+      : null;
+  const reachFloor = statusSort(reached || null);
 
-  const openCount = (opps.data ?? []).filter((o) => !o.closed_at).length;
+  // Reached-or-beyond, mirroring core.funnel.reached_or_beyond: a gig counts toward a stage when
+  // the furthest status it ever reached sits at or past that stage. Comparing the high-water mark
+  // rather than current_status is what makes this board's count match a dashboard funnel bar — a
+  // gig cancelled after being booked counts toward Booked while sitting in no board column at all.
+  //
+  // A card with no high-water mark (an older backend predating the field) drops out of a reach
+  // filter rather than passing it: failing visibly beats a board that silently claims to be the set
+  // behind an aggregate while in fact showing every gig.
+  const matchesReach = (o: OpportunitySummary) => {
+    if (reachFloor == null) return true;
+    const mark = statusSort(o.max_reached_status);
+    return mark != null && mark >= reachFloor;
+  };
+
+  const term = search.trim().toLowerCase();
+  // Outstanding is `invoiced`, not "unsettled": the dashboard counts exactly the billable gigs
+  // already invoiced, and an unbilled gig is unsettled too — matching on settlement would overshoot
+  // the very aggregate this pill exists to open.
+  const matches = (o: OpportunitySummary) =>
+    matchesReach(o) &&
+    (!comp || o.comp_type === comp) &&
+    (pay !== 'outstanding' || (o.comp_type === 'paid' && o.payment_status === 'invoiced')) &&
+    (!term ||
+      o.title.toLowerCase().includes(term) ||
+      (o.talk_title ?? '').toLowerCase().includes(term) ||
+      o.organization_name.toLowerCase().includes(term));
+
+  const all = opps.data ?? [];
+  const visible = all.filter(matches);
+  const isFiltered = Boolean(term || reached || comp || pay);
+
+  const byStatus = (shortName: string) =>
+    visible.filter((o) => o.current_status === shortName && !o.closed_at);
+
+  const openCount = visible.filter((o) => !o.closed_at).length;
   // Closed gigs leave their status columns and gather in a dedicated column, most-recent first.
-  const closedCards = (opps.data ?? [])
+  const closedCards = visible
     .filter((o) => o.closed_at)
     .sort((a, b) => (b.closed_at ?? '').localeCompare(a.closed_at ?? ''));
+
+  const pills: FilterPill[] = [
+    { value: 'paid', label: 'Paid', active: comp === 'paid' },
+    { value: 'pro_bono', label: 'Pro bono', active: comp === 'pro_bono' },
+    { value: 'outstanding', label: 'Outstanding', active: pay === 'outstanding' },
+  ];
+  function handlePill(value: string) {
+    if (value === 'outstanding') setParam('pay', pay === 'outstanding' ? '' : 'outstanding', '');
+    else setParam('comp', comp === value ? '' : value, '');
+  }
 
   function handleDragStart(event: DragStartEvent) {
     setActiveOpp((opps.data ?? []).find((o) => o.id === Number(event.active.id)) ?? null);
@@ -375,15 +447,20 @@ export function Pipeline() {
             Pipeline
           </Title>
           <Text c="dimmed" size="sm">
-            {openCount} open {openCount === 1 ? 'opportunity' : 'opportunities'} · drag cards between
-            stages
+            {/* Under a filter the headline number is the size of the matched set, not the open
+                count — that is the number the reader compares against the dashboard aggregate they
+                clicked to get here (slice 8 acceptance #1). */}
+            {isFiltered
+              ? `${visible.length} of ${all.length} ${all.length === 1 ? 'gig' : 'gigs'} match`
+              : `${openCount} open ${openCount === 1 ? 'opportunity' : 'opportunities'}`}{' '}
+            · drag cards between stages
           </Text>
         </div>
         <Group>
           <Switch
             label="Show closed"
             checked={showClosed}
-            onChange={(event) => setShowClosed(event.currentTarget.checked)}
+            onChange={(event) => setParam('closed', event.currentTarget.checked ? 'all' : '', '')}
           />
           <Button
             variant="default"
@@ -397,6 +474,33 @@ export function Pipeline() {
           </Button>
         </Group>
       </Group>
+
+      {all.length > 0 && (
+        <FilterBar
+          search={search}
+          onSearch={(value) => setParam('q', value, '')}
+          searchPlaceholder="Search venues, gigs…"
+          pills={pills}
+          onPillClick={handlePill}
+          extra={
+            // The stage vocabulary comes from the server's funnel, never a hardcoded list
+            // (slice 3 acceptance #9) — and "or beyond" is the funnel's own reading of a stage.
+            <Select
+              size="xs"
+              w={210}
+              clearable
+              placeholder="Reached any stage"
+              aria-label="Filter by furthest stage reached"
+              value={reached || null}
+              onChange={(value) => setParam('reached', value ?? '', '')}
+              data={(funnel.data ?? []).map((stage) => ({
+                value: stage.short_name,
+                label: `${stage.label} or beyond`,
+              }))}
+            />
+          }
+        />
+      )}
 
       {(funnel.isLoading || opps.isLoading) && (
         <Group>

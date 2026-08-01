@@ -42,6 +42,11 @@ export interface OpportunitySummary {
   talk_title: string | null; // resolved talk name (null when no talk chosen)
   opportunity_format: string;
   current_status: string; // opportunity_statuses short_name — the SPA buckets by this
+  /** Furthest stage ever reached (short_name). Not the current column: the dashboard funnel counts
+   *  reached-or-beyond, so a gig cancelled after being booked still counts toward Booked while
+   *  sitting in neither. Compare via the catalog's `sort_order`. Null only if a gig has no status
+   *  events, and creation always writes one. */
+  max_reached_status: string | null;
   comp_type: string;
   fee_amount: string | null;
   currency: string;

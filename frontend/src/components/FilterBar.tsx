@@ -1,5 +1,6 @@
 import { Button, Group, TextInput } from '@mantine/core';
 import { IconSearch } from '@tabler/icons-react';
+import type { ReactNode } from 'react';
 
 export interface FilterPill {
   value: string;
@@ -14,6 +15,10 @@ interface FilterBarProps {
   /** Pill toggles; the caller decides single- vs multi-select and computes each `active`. */
   pills?: FilterPill[];
   onPillClick?: (value: string) => void;
+  /** A filter that pills cannot express, rendered at the end of the row. Pipeline's stage-reach
+   *  Select uses it: one control standing for six ordered choices, where six more pills would
+   *  restate the board's own columns and crowd the row. */
+  extra?: ReactNode;
 }
 
 /** Reusable list toolbar: a search box plus pill filters (mockup `.toolbar`). Purely
@@ -24,6 +29,7 @@ export function FilterBar({
   searchPlaceholder = 'Search…',
   pills,
   onPillClick,
+  extra,
 }: FilterBarProps) {
   return (
     <Group gap="sm" wrap="wrap">
@@ -46,6 +52,7 @@ export function FilterBar({
           {pill.label}
         </Button>
       ))}
+      {extra}
     </Group>
   );
 }

@@ -44,12 +44,25 @@ class StatusPatchResult(Enum):
 
 
 #: Summary columns for the flat board payload / History rows (see models.OpportunitySummary).
+#:
+#: ``max_reached_status`` is the furthest status the gig has ever reached — the read side of
+#: ``core.funnel.reached_or_beyond``, and deliberately *not* ``current_status``. The dashboard
+#: funnel counts a gig toward every stage at or below that high-water mark, so a gig cancelled
+#: after being booked still counts as Booked; without this column the board cannot be filtered to
+#: the set behind a funnel bar (slice 8 acceptance #1), because a card's column only says where it
+#: sits now. It is a correlated subquery rather than a join on ``MAX(sort_order)`` because joining
+#: the catalog back on the sort order would need ``sort_order`` to be unique, which nothing
+#: enforces.
 _SUMMARY_SELECT = (
     "SELECT o.id, o.title, o.organization_id, org.name AS organization_name, "
     "       otype.short_name AS organization_type, tlk.title AS talk_title, "
     "       fmt.short_name AS opportunity_format, st.short_name AS current_status, "
     "       ct.short_name AS comp_type, o.fee_amount, o.currency, "
     "       pay.short_name AS payment_status, o.event_date, o.paid_on, "
+    "       (SELECT s.short_name FROM status_events e "
+    "          JOIN opportunity_statuses s ON s.id = e.status_id "
+    "          WHERE e.opportunity_id = o.id "
+    "          ORDER BY s.sort_order DESC LIMIT 1) AS max_reached_status, "
     "       o.closed_at, o.created_at, o.updated_at "
     "FROM opportunities o "
     "JOIN organizations org ON org.id = o.organization_id "
