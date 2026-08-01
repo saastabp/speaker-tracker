@@ -30,6 +30,7 @@ from __future__ import annotations
 import uuid
 
 from aws_lambda_powertools.event_handler.api_gateway import Router
+from botocore.exceptions import ClientError
 
 from common import errors, mail, mail_parse, storage
 from common.db import transaction
@@ -90,7 +91,9 @@ def _deliver(
     once — a second copy of this sequence is how the two paths would drift apart.
     """
     sender = mail.from_address()
-    message_id = generate_message_id(_sender_domain(sender))
+    # Derived from the client's key, so a retry of the same compose reproduces this exact id and
+    # collides with UNIQUE(user_id, message_id) instead of sending a second copy.
+    message_id = generate_message_id(_sender_domain(sender), idempotency_key=data.idempotency_key)
     destinations = [*data.to, *data.cc]
 
     # 1. Everything that can fail cheaply happens before the first write.
@@ -134,17 +137,40 @@ def _deliver(
         request.user_id,
     )
 
-    # 4. SES. A clean failure means nothing was transmitted, so the intent is compensated away.
+    # 4. SES. Whether the intent can be compensated away depends on *how* the send failed, and
+    #    botocore's two exception roots are exactly that distinction:
+    #
+    #    - ClientError  → SES received the request and rejected it (validation, throttling). Nothing
+    #                     was transmitted, so discarding the pending row restores consistency.
+    #    - BotoCoreError → a connect/read timeout or dropped response. We do NOT know whether the
+    #                     message went out. Discarding here would erase the only record of a message
+    #                     that may be in flight, and the retry would then double-send.
+    #
+    #    This used to be a single `except Exception` that compensated for both, on the stated
+    #    assumption that "a clean failure means nothing was transmitted" — true of a rejection, not
+    #    of a timeout.
     try:
         ses_message_id = mail.send_raw(raw, sender=sender, destinations=destinations)
-    except Exception:
+    except ClientError:
         logger.exception(
-            "SES send failed; compensating message_id=%s row_id=%s",
+            "SES rejected the send; compensating message_id=%s row_id=%s",
             message_id,
             pending.message_row_id,
         )
         with transaction(request.connection) as conn:
             email_sends.discard_pending_send(conn, request.user_id, pending)
+        raise
+    except Exception:
+        # Delivery is UNKNOWN. The pending row stays as the record that this was attempted; a
+        # retry carrying the same idempotency key will collide on the Message-ID and 409 rather
+        # than send again, which is the point of deriving the id from that key.
+        logger.exception(
+            "SES send outcome UNKNOWN — pending row kept for reconciliation. The message may "
+            "have been delivered; do not assume it was not. message_id=%s row_id=%s user_id=%s",
+            message_id,
+            pending.message_row_id,
+            request.user_id,
+        )
         raise
 
     # 5. Sent-folder copy: best-effort by decision #2, and placed before the confirm so the
@@ -235,6 +261,9 @@ def reply_to_thread(thread_id: str) -> dict:
         subject = f"Re: {subject}"
 
     send_input = EmailSendInput(
+        # Carried through from the reply, so a retried reply reproduces the same Message-ID and
+        # collides rather than sending twice — the same protection the new-message path gets.
+        idempotency_key=data.idempotency_key,
         to=data.to if data.to is not None else _reply_recipients(parent),
         cc=data.cc if data.cc is not None else parent["cc_addr"],
         subject=subject,

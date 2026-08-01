@@ -107,6 +107,12 @@ class EmailSendInput(BaseModel):
 
     Parameters
     ----------
+    idempotency_key : str
+        A value the client holds **constant across retries of the same message** (the composer
+        mints one per compose session). The server derives the ``Message-ID`` from it, so a retry
+        after an ambiguous failure collides with ``UNIQUE(user_id, message_id)`` and returns 409
+        instead of sending the message a second time. Required rather than optional: an opt-in
+        safety key is one that eventually gets forgotten.
     to : list of str
         Primary recipients; at least one.
     subject : str
@@ -132,6 +138,7 @@ class EmailSendInput(BaseModel):
         Already-uploaded attachments to include; may be empty.
     """
 
+    idempotency_key: str = Field(min_length=1, max_length=200)
     to: list[str] = Field(min_length=1)
     subject: str = Field(min_length=1, max_length=255)
     body_html: str = Field(min_length=1)
@@ -158,6 +165,12 @@ class EmailReplyInput(BaseModel):
 
     Parameters
     ----------
+    idempotency_key : str
+        A value the client holds **constant across retries of the same message** (the composer
+        mints one per compose session). The server derives the ``Message-ID`` from it, so a retry
+        after an ambiguous failure collides with ``UNIQUE(user_id, message_id)`` and returns 409
+        instead of sending the message a second time. Required rather than optional: an opt-in
+        safety key is one that eventually gets forgotten.
     body_html : str
         Full HTML body from the composer, signature included.
     in_reply_to_message_id : int or None
@@ -173,6 +186,7 @@ class EmailReplyInput(BaseModel):
         Already-uploaded attachments to include; may be empty.
     """
 
+    idempotency_key: str = Field(min_length=1, max_length=200)
     body_html: str = Field(min_length=1)
     in_reply_to_message_id: int | None = None
     to: list[str] | None = None

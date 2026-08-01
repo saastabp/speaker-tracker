@@ -24,6 +24,11 @@ export interface EmailAttachment {
 }
 
 export interface EmailSendInput {
+  /** Held **constant across retries of the same message**, fresh per compose. The server derives
+   *  the Message-ID from it, so a retry after an ambiguous failure (a timeout, where the mail may
+   *  already have gone out) returns 409 instead of sending a second copy. Required, not optional:
+   *  a safety key you can forget is one that gets forgotten. */
+  idempotency_key: string;
   to: string[];
   subject: string;
   /** Full composer HTML **including the signature** — the server never appends one. */
@@ -38,6 +43,11 @@ export interface EmailSendInput {
 }
 
 export interface EmailReplyInput {
+  /** Held **constant across retries of the same message**, fresh per compose. The server derives
+   *  the Message-ID from it, so a retry after an ambiguous failure (a timeout, where the mail may
+   *  already have gone out) returns 409 instead of sending a second copy. Required, not optional:
+   *  a safety key you can forget is one that gets forgotten. */
+  idempotency_key: string;
   body_html: string;
   /** Omit to reply to the thread's most recent *confirmed* message. */
   in_reply_to_message_id?: number | null;

@@ -15,6 +15,7 @@ read side must already handle a two-directional conversation.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 import pytest
@@ -48,6 +49,8 @@ def thread_db(seeded_db):
 def _send(conn, user_id, message_id, *, thread_id=None, contact_id=None, cc=None, **kwargs):
     """Create a pending send with sensible defaults."""
     data = EmailSendInput(
+        # Fresh per call — these helpers stand in for separate composes, not retries of one.
+        idempotency_key=uuid.uuid4().hex,
         to=["venue@example.com"],
         cc=cc or [],
         subject=kwargs.pop("subject", "Speaking at your event"),

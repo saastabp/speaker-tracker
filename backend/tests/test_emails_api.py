@@ -21,10 +21,12 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from email import message_from_bytes
 from pathlib import Path
 
 import pytest
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 import app as app_module
 from common import imap, mail, storage
@@ -135,12 +137,26 @@ def api(db_connection, monkeypatch, aws):
     return call
 
 
+def _rejected() -> ClientError:
+    """What SES raises when it received the request and refused it — a *clean* failure."""
+    return ClientError({"Error": {"Code": "MessageRejected"}}, "SendRawEmail")
+
+
 def send_body(**overrides) -> dict:
     payload = {
+        # Fresh per call — see test_email_sends_repository._send_input.
+        "idempotency_key": uuid.uuid4().hex,
         "to": ["venue@example.com"],
         "subject": "Speaking at your event",
         "body_html": "<p>Hi Jane,</p><p>Are you booking speakers?</p>",
     }
+    payload.update(overrides)
+    return payload
+
+
+def reply_body(**overrides) -> dict:
+    """A reply payload with a fresh idempotency key, like a new compose in the UI."""
+    payload = {"idempotency_key": uuid.uuid4().hex, "body_html": "<p>Following up.</p>"}
     payload.update(overrides)
     return payload
 
@@ -216,8 +232,14 @@ def test_send_logs_an_outreach_when_linked_to_a_contact(api, db_connection) -> N
 # --- acceptance #2: a clean SES failure leaves nothing --------------------------------------------
 
 
-def test_forced_ses_failure_leaves_no_rows(api, aws, db_connection) -> None:
-    aws.ses.error = RuntimeError("MessageRejected")
+def test_ses_rejection_leaves_no_rows(api, aws, db_connection) -> None:
+    """Acceptance #2 — a *clean* rejection compensates fully.
+
+    The failure is a ``ClientError``, which is what SES raises when it received the request and
+    refused it. That is the only case where discarding the intent is safe, and the only case this
+    test is about; the ambiguous one is below.
+    """
+    aws.ses.error = _rejected()
 
     status, _body = api("POST", "/emails/send", send_body())
 
@@ -227,12 +249,48 @@ def test_forced_ses_failure_leaves_no_rows(api, aws, db_connection) -> None:
     assert rows(db_connection, "SELECT * FROM outreaches") == []
 
 
+def test_ambiguous_ses_failure_keeps_the_pending_row(api, aws, db_connection, caplog) -> None:
+    """A timeout is NOT evidence that nothing was sent, so the record must survive.
+
+    This is the case the handler used to get wrong: a single ``except Exception`` compensated for
+    every failure, so a dropped response erased the only trace of a message that may well have been
+    delivered — and the retry then double-sent it.
+    """
+    aws.ses.error = EndpointConnectionError(endpoint_url="https://email.us-east-1.amazonaws.com")
+
+    with caplog.at_level(logging.ERROR):
+        status, _body = api("POST", "/emails/send", send_body())
+
+    assert status >= 500
+    pending = rows(db_connection, "SELECT * FROM email_messages")
+    assert len(pending) == 1, "the record of an attempt with unknown outcome must not be discarded"
+    assert pending[0]["sent_at"] is None
+    assert any("UNKNOWN" in r.getMessage() for r in caplog.records)
+
+
+def test_retrying_the_same_compose_conflicts_instead_of_sending_twice(api, aws) -> None:
+    """The idempotency key is what makes UNIQUE(user_id, message_id) able to fire at all.
+
+    Without it the retry mints a fresh Message-ID, sails past the constraint, and Donna's venue
+    gets the same pitch twice with nothing in the app showing it happened.
+    """
+    body = send_body()
+    first, _ = api("POST", "/emails/send", body)
+    assert first == 200
+
+    second, error = api("POST", "/emails/send", body)  # same key: a retry, not a new message
+
+    assert second == 409
+    assert len(aws.ses.calls) == 1, "the retry must not reach SES"
+    assert error is not None
+
+
 def test_forced_ses_failure_after_a_good_send_keeps_the_earlier_one(
     api, aws, db_connection
 ) -> None:
     # Compensation must remove only this attempt's rows, never an existing conversation.
     api("POST", "/emails/send", send_body())
-    aws.ses.error = RuntimeError("MessageRejected")
+    aws.ses.error = _rejected()
     api("POST", "/emails/send", send_body(subject="Second attempt"))
 
     assert len(rows(db_connection, "SELECT * FROM email_messages")) == 1
@@ -287,9 +345,7 @@ def send_and_get_thread(api) -> tuple[int, dict]:
 def test_reply_threads_via_the_parent_message_id(api, aws) -> None:
     thread_id, parent = send_and_get_thread(api)
 
-    status, body = api(
-        "POST", f"/emails/threads/{thread_id}/replies", {"body_html": "<p>Following up.</p>"}
-    )
+    status, body = api("POST", f"/emails/threads/{thread_id}/replies", reply_body())
 
     assert status == 200
     assert body["thread_id"] == thread_id, "a reply must reuse the thread, not open a new one"
@@ -302,17 +358,17 @@ def test_reply_threads_via_the_parent_message_id(api, aws) -> None:
 def test_reply_subject_gets_a_single_re_prefix(api, aws) -> None:
     thread_id, _parent = send_and_get_thread(api)
 
-    api("POST", f"/emails/threads/{thread_id}/replies", {"body_html": "<p>One</p>"})
+    api("POST", f"/emails/threads/{thread_id}/replies", reply_body(body_html="<p>One</p>"))
     assert aws.ses.last_message["Subject"] == "Re: Speaking at your event"
 
-    api("POST", f"/emails/threads/{thread_id}/replies", {"body_html": "<p>Two</p>"})
+    api("POST", f"/emails/threads/{thread_id}/replies", reply_body(body_html="<p>Two</p>"))
     assert aws.ses.last_message["Subject"] == "Re: Speaking at your event"
 
 
 def test_reply_to_our_own_message_goes_to_the_venue(api, aws) -> None:
     thread_id, _parent = send_and_get_thread(api)
 
-    api("POST", f"/emails/threads/{thread_id}/replies", {"body_html": "<p>Following up.</p>"})
+    api("POST", f"/emails/threads/{thread_id}/replies", reply_body())
 
     assert aws.ses.calls[-1]["Destinations"] == ["venue@example.com"]
 
@@ -323,14 +379,14 @@ def test_reply_recipients_can_be_overridden(api, aws) -> None:
     api(
         "POST",
         f"/emails/threads/{thread_id}/replies",
-        {"body_html": "<p>Hi</p>", "to": ["someone-else@example.com"]},
+        reply_body(body_html="<p>Hi</p>", to=["someone-else@example.com"]),
     )
 
     assert aws.ses.calls[-1]["Destinations"] == ["someone-else@example.com"]
 
 
 def test_reply_to_an_unknown_thread_is_404(api) -> None:
-    status, _body = api("POST", "/emails/threads/999999/replies", {"body_html": "<p>Hi</p>"})
+    status, _body = api("POST", "/emails/threads/999999/replies", reply_body(body_html="<p>Hi</p>"))
     assert status == 404
 
 
@@ -341,7 +397,7 @@ def test_reply_to_a_message_on_another_thread_is_rejected(api) -> None:
     status, _body = api(
         "POST",
         f"/emails/threads/{second_thread}/replies",
-        {"body_html": "<p>Hi</p>", "in_reply_to_message_id": first_message["id"]},
+        reply_body(body_html="<p>Hi</p>", in_reply_to_message_id=first_message["id"]),
     )
 
     assert status == 400

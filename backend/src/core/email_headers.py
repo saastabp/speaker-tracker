@@ -25,6 +25,7 @@ Importing ``email.utils`` *from* this module is unaffected — the hazard is a f
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from email.utils import getaddresses, parseaddr
@@ -110,18 +111,32 @@ def normalize_subject(subject: str | None) -> str:
     return _WHITESPACE_RE.sub(" ", text).strip()[:SUBJECT_MAX_LEN]
 
 
-def generate_message_id(domain: str) -> str:
-    """Mint a new globally-unique ``Message-ID`` for an outgoing message.
+def generate_message_id(domain: str, *, idempotency_key: str | None = None) -> str:
+    """Mint the ``Message-ID`` for an outgoing message.
 
     Called before the MIME is built so the same string goes into the transmitted header and into
-    ``email_messages.message_id`` (the ``UNIQUE(user_id, message_id)`` idempotency key). The local
-    part is a uuid4 hex — unguessable and collision-free without consulting the database.
+    ``email_messages.message_id`` (the ``UNIQUE(user_id, message_id)`` idempotency key).
+
+    **With an ``idempotency_key`` the id is deterministic, and that is what makes the uniqueness
+    constraint mean something.** A random id per attempt cannot tell a retry from a new message, so
+    a client resending after an ambiguous failure (a timeout, where SES may or may not have
+    delivered) would mint a fresh id, sail past the constraint, and send the message twice. Deriving
+    the id from a key the client holds steady across retries turns that second attempt into a
+    ``Conflict`` instead.
+
+    The key is **hashed, not embedded**. The local part of a Message-ID goes into a mail header, so
+    accepting client text there would invite header injection via CRLF and require sanitising
+    besides; a SHA-256 prefix is always header-safe, reveals nothing about the key, and stays
+    stable.
 
     Parameters
     ----------
     domain : str
         Right-hand side of the id, normally the sending domain (``360balancedliving.com``). A
         leading ``@`` is tolerated and stripped.
+    idempotency_key : str or None, optional
+        A value the client keeps constant across retries of the *same* message. ``None`` falls back
+        to a uuid4, which is unique but offers no retry protection.
 
     Returns
     -------
@@ -140,11 +155,19 @@ def generate_message_id(domain: str) -> str:
     True
     >>> generate_message_id("example.com") != generate_message_id("example.com")
     True
+    >>> a = generate_message_id("example.com", idempotency_key="compose-1")
+    >>> a == generate_message_id("example.com", idempotency_key="compose-1")
+    True
+    >>> a == generate_message_id("example.com", idempotency_key="compose-2")
+    False
     """
     cleaned = domain.strip().lstrip("@").strip()
     if not cleaned:
         raise ValueError("domain is required to mint a Message-ID")
-    return f"<{uuid.uuid4().hex}@{cleaned}>"
+    if idempotency_key is None:
+        return f"<{uuid.uuid4().hex}@{cleaned}>"
+    digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:32]
+    return f"<{digest}@{cleaned}>"
 
 
 def parse_message_ids(raw: str | None) -> list[str]:

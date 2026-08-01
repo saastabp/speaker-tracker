@@ -389,15 +389,86 @@ proprietary `Thread-Index` is not used; external senders don't set it.
 | EventBridge **Rule**, `rate(1 minute)` | `imap_poll.py` | Reply threading + drop-folder imports |
 | EventBridge **Scheduler**, one-shot `at()` | `followup_notify.py` | Due follow-up reminder via SES |
 
-Follow-up scheduling is ported from job-tracker: deterministic schedule name **`followup-<id>`**, so
-create/update/delete need no state read-back; `NotFound` on cancel is swallowed because a one-shot
-schedule may already have fired. `common/scheduler.py` **no-ops with a warning** when its env vars
-are unset, which lets the Api stack function before the Messaging stack exists.
+Follow-up scheduling borrows job-tracker's *mechanism* — deterministic schedule name
+**`followup-<id>`**, so create/update/delete need no state read-back; `NotFound` on cancel is
+swallowed because a one-shot schedule may already have fired. It does **not** borrow that app's
+decision to convert to UTC: the expression here is local wall-clock time with the user's IANA zone
+in `ScheduleExpressionTimezone`, so no UTC arithmetic exists in the reminder path.
+`common/scheduler.py` **no-ops with a warning** when its env vars are unset, so the API keeps
+working before the scheduler resources are deployed (they live in `<env>-Api`, not `<env>-Messaging`
+— §6).
 
 `followup_notify.py` **never touches the database** — every field needed to render the email travels
 in the schedule payload. That keeps it outside the VPC with no SES interface endpoint. The accepted
 tradeoff: payloads are snapshots, so editing a follow-up after scheduling requires
 cancel-then-recreate (which the handler does).
+
+### 5.1 Dual writes we accept
+
+Three places commit to the database **and** to something outside it. None is atomic, so each can
+leave the two halves disagreeing:
+
+| # | The pair | If the second half fails | Mitigation today |
+|---|---|---|---|
+| 1 | `follow_ups` row → EventBridge schedule | Row exists, no reminder will fire | **None.** Logged at WARNING |
+| 2 | `email_messages` row → SES send | Depends on *how* SES fails — three outcomes below | **Intent-then-confirm**, compensation scoped to clean rejections, plus a client idempotency key |
+| 3 | SES send → rider `follow_ups` row | Email sent, no reminder set | **None.** Logged, send still succeeds |
+
+**#2 in full** (`handlers/emails.py::_deliver`, steps 3–6):
+
+| SES outcome | Result | Consistent? |
+|---|---|---|
+| Clean rejection — `ClientError` | Pending row discarded, error returned | ✅ nothing sent, nothing recorded |
+| Sent, then `confirm_send` fails | Row stays `pending`; logged loudly | ⚠️ recorded but unconfirmed — recoverable |
+| **Ambiguous** — timeout, dropped response | Pending row **kept**; logged at ERROR as UNKNOWN | ⚠️ recorded, delivery unknown — recoverable |
+
+**Which failure it is, is decided by botocore's two exception roots** — the same distinction that
+matters in `common/scheduler.py`. A `ClientError` means SES received the request and refused it, so
+nothing was transmitted and compensation is safe. Anything else (`BotoCoreError`: connect timeout,
+read timeout, dropped response) means delivery is **unknown**, and discarding would erase the only
+record of a message that may already be in Donna's venue's inbox.
+
+This was previously a single `except Exception` that compensated for both, on the stated assumption
+that *"a clean failure means nothing was transmitted"* — true of a rejection, not of a timeout.
+Fixed 2026-07-31.
+
+**Retries are made safe by a client idempotency key.** `EmailSendInput` / `EmailReplyInput` require
+an `idempotency_key`, minted per compose in the SPA and held constant while that draft is open. The
+server derives the `Message-ID` from it (SHA-256 prefix — the local part goes into a header, so
+client text there would invite CRLF injection), which makes `UNIQUE(user_id, message_id)` finally
+able to fire: a second attempt at the same draft returns **409** and never reaches SES. Before this
+the id was a fresh uuid4 per attempt, so the constraint existed but could not possibly trigger.
+
+The key is **required**, not optional, in both the Pydantic models and the TypeScript interfaces —
+an opt-in safety key is one that eventually gets forgotten, and making it required let the compiler
+find every call site rather than trusting review.
+
+**Ordering is the one rule applied everywhere: the database commits first, the outside effect
+second.** A missing side effect is silent and recoverable by hand; a side effect with no row behind
+it is *actively wrong* — a reminder emailing about a follow-up that does not exist, or a schedule
+nobody can cancel because there is no row to open. When only one can fail, it should be the quiet
+one.
+
+**#2 is the exception, and shows what the fix would cost.** The send path writes a *pending* row,
+calls SES, then confirms — and compensates by discarding the pending row if SES fails cleanly
+(`handlers/emails.py::_deliver`, steps 3–6). That is a hand-rolled outbox for a single operation. It
+costs a second table state, a compensation path, and a reconciliation story for the residual case
+(SES succeeded, confirm failed → the row stays pending and is logged loudly rather than lost).
+
+**Why the general fix is not worth it here.** A transactional outbox or listen-to-yourself/CDC
+pattern would make all three reliable, at the cost of a dispatcher process, at-least-once delivery,
+and idempotency keys on every consumer. For a **single-user CRM** whose worst case is *"one reminder
+did not get set, on a day Donna can see the email in the thread anyway"*, that is more moving parts
+than the failure justifies — and it would add a second delivery mechanism alongside the IMAP poller
+this app already operates.
+
+**What would change the calculus:** more than one user (failures stop being personally visible), or
+reminders becoming load-bearing for money — invoice chasing, where a missed nudge costs a payment
+rather than a nudge.
+
+**The real gap is detection, not delivery.** Nothing reconciles the halves and nothing writes back
+when a reminder fires, so today the only evidence of any of these failures is CloudWatch. That is
+tracked as observability debt against the future tickler work rather than fixed here.
 
 ---
 

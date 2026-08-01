@@ -265,6 +265,9 @@ function ReplyBox({ threadId, contactName }: { threadId: number; contactName: st
   const signatures = useSignatures();
   const defaultSignature = (signatures.data ?? []).find((s) => s.is_default) ?? null;
   const [bodyHtml, setBodyHtml] = useState('');
+  // Stable across retries of this reply, rotated once it actually sends — so pressing Send twice
+  // after a timeout is recognised as one message, not two.
+  const [replyKey, setReplyKey] = useState(() => crypto.randomUUID());
   const [error, setError] = useState<string | null>(null);
 
   // Seed with the signature once it loads, as the composer does, so a reply carries it too.
@@ -279,7 +282,9 @@ function ReplyBox({ threadId, contactName }: { threadId: number; contactName: st
   async function handleSend() {
     setError(null);
     try {
-      await reply.mutateAsync({ body_html: bodyHtml });
+      await reply.mutateAsync({ idempotency_key: replyKey, body_html: bodyHtml });
+      // A sent reply means the next one is a new message, so the retry key rotates with the draft.
+      setReplyKey(crypto.randomUUID());
       setBodyHtml(defaultSignature ? `<p></p>${defaultSignature.body_html}` : '');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not send the reply.');

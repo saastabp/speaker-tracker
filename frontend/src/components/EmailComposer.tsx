@@ -105,6 +105,11 @@ export function EmailComposer({
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<EmailAttachmentInput[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Minted per compose and held across retries. If the send fails ambiguously (a timeout, where
+  // the mail may already have gone out), pressing Send again reuses this key, so the server
+  // recognises a retry and 409s instead of sending the venue a second copy. Regenerated only when
+  // the composer reopens on a fresh draft.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const defaultSignature = (signatures.data ?? []).find((s) => s.is_default) ?? null;
   const emailTemplates = (templates.data ?? []).filter((t) => t.channel === 'email');
@@ -124,6 +129,7 @@ export function EmailComposer({
     setTemplateId(null);
     setAttachments([]);
     setError(null);
+    setIdempotencyKey(crypto.randomUUID()); // a new draft is a new message, not a retry
     setBodyHtml(defaultSignature ? `<p></p>${defaultSignature.body_html}` : '<p></p>');
   }, [opened, contactEmail, defaultSignature?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -182,6 +188,7 @@ export function EmailComposer({
     setError(null);
     try {
       const result = await send.mutateAsync({
+        idempotency_key: idempotencyKey,
         to: recipients,
         cc: splitAddresses(cc),
         subject: subject.trim(),

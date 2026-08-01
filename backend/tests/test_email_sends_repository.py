@@ -16,6 +16,8 @@ The properties that matter:
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from common import errors
@@ -78,6 +80,9 @@ def send_db(seeded_db):
 def _send_input(**overrides) -> EmailSendInput:
     """Build a valid composer payload, overriding any field."""
     payload = {
+        # Fresh per call: a constant key is exactly what UNIQUE(user_id, message_id) now rejects,
+        # so tests that send twice must look like two different composes, not one retry.
+        "idempotency_key": uuid.uuid4().hex,
         "to": ["venue@example.com"],
         "subject": "Speaking at your event",
         "body_html": "<p>Hello</p>",
