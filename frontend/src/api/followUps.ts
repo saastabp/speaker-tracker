@@ -46,6 +46,9 @@ export interface FollowUp {
 export interface FollowUpFilters {
   contactId?: number;
   opportunityId?: number;
+  /** A venue's reminders — those on any of its gigs, or any contact affiliated with it. There is
+   *  no organization_id on follow_ups; the server reaches the venue through those two links. */
+  organizationId?: number;
   pendingOnly?: boolean;
 }
 
@@ -62,6 +65,8 @@ function toQuery(filters: FollowUpFilters): string {
   if (filters.contactId !== undefined) params.set('contact_id', String(filters.contactId));
   if (filters.opportunityId !== undefined)
     params.set('opportunity_id', String(filters.opportunityId));
+  if (filters.organizationId !== undefined)
+    params.set('organization_id', String(filters.organizationId));
   if (filters.pendingOnly) params.set('pending_only', 'true');
   const query = params.toString();
   return query ? `?${query}` : '';

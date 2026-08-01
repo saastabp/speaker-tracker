@@ -14,6 +14,7 @@ import {
 import { useOpportunities } from '../api/opportunities';
 import { AffiliationRow } from '../components/AffiliationRow';
 import { CardTitle, KV } from '../components/detailCards';
+import { FollowUpsCard } from '../components/FollowUpsCard';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { VenueFormModal } from '../components/VenueFormModal';
 import { stageColor } from '../opportunityChips';
@@ -182,6 +183,8 @@ export function VenueDetail() {
         {/* RIGHT column */}
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Stack>
+            <FollowUpsCard organizationId={v.id} />
+
             <Card withBorder radius="md">
               <CardTitle>Contacts ({v.contacts.length})</CardTitle>
               {v.contacts.length === 0 ? (

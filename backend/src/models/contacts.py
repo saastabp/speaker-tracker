@@ -7,7 +7,7 @@ person is frequently the contact for several venues. Affiliation writes are sepa
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -73,6 +73,11 @@ class ContactSummary(BaseModel):
 
     `is_power_partner` here is a rollup — true when the contact is a power partner at **any**
     affiliated venue — since the flag itself now lives per-affiliation, not on the person.
+
+    `next_follow_up_date` is the soonest **pending** reminder for this contact, or None. A date
+    rather than a boolean deliberately: the list's "Needs follow-up" filter only needs presence,
+    but the column beside it wants the date, and returning the flag would mean a second query the
+    moment that column ships.
     """
 
     id: int
@@ -81,6 +86,7 @@ class ContactSummary(BaseModel):
     warmth_tier: str | None
     is_power_partner: bool
     organization_count: int
+    next_follow_up_date: date | None
     created_at: datetime
     updated_at: datetime
 

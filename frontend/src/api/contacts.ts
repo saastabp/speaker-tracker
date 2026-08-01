@@ -29,6 +29,9 @@ export interface ContactSummary {
   warmth_tier: string | null;
   is_power_partner: boolean; // rollup: a power partner at ≥1 affiliated venue
   organization_count: number;
+  /** Soonest **pending** reminder for this contact, or null. A date rather than a flag so the
+   *  "Needs follow-up" filter and the date beside the name come from one query. */
+  next_follow_up_date: string | null;
   created_at: string;
   updated_at: string;
 }

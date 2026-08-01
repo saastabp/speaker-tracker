@@ -111,6 +111,7 @@ def list_follow_ups(
     *,
     contact_id: int | None = None,
     opportunity_id: int | None = None,
+    organization_id: int | None = None,
     pending_only: bool = False,
 ) -> list[dict]:
     """Return the caller's follow-ups, soonest first, optionally narrowed.
@@ -129,6 +130,11 @@ def list_follow_ups(
         Restrict to reminders linked to this contact.
     opportunity_id : int or None, optional
         Restrict to reminders linked to this opportunity.
+    organization_id : int or None, optional
+        Restrict to reminders that concern this venue — attached to **any gig there** or to **any
+        contact affiliated with it**. ``follow_ups`` has no ``organization_id`` of its own (a
+        reminder is about a person or a gig, never a building), so this reaches the venue through
+        those two links rather than by a column.
     pending_only : bool, optional
         When ``True``, exclude completed rows (``completed_at IS NOT NULL``). The Follow-ups page
         shows completed history by default; the detail-page panels do not.
@@ -146,6 +152,18 @@ def list_follow_ups(
     if opportunity_id is not None:
         clauses.append("f.opportunity_id = %s")
         params.append(opportunity_id)
+    if organization_id is not None:
+        # OR, not AND: a venue's reminders are the union of its gigs' and its people's. Deleted
+        # opportunities are excluded, but the affiliation subquery deliberately is not filtered on
+        # the contact's own deleted_at — a reminder about a since-removed person still concerns
+        # this venue, and the row itself is what decides whether it is live.
+        clauses.append(
+            "(f.opportunity_id IN (SELECT id FROM opportunities "
+            "                      WHERE organization_id = %s AND deleted_at IS NULL) "
+            " OR f.contact_id IN (SELECT contact_id FROM contact_organizations "
+            "                     WHERE organization_id = %s))"
+        )
+        params.extend([organization_id, organization_id])
     if pending_only:
         clauses.append("f.completed_at IS NULL")
     with conn.cursor() as cur:

@@ -71,14 +71,28 @@ def list_contacts(conn: Connection, user_id: int, query: str | None = None) -> l
     Returns
     -------
     list of dict
-        One row per contact with `warmth_tier` (short_name or None), `organization_count`, and
-        `is_power_partner` (rolled up — true when a power partner at any live affiliated venue).
+        One row per contact with `warmth_tier` (short_name or None), `organization_count`,
+        `is_power_partner` (rolled up — true when a power partner at any live affiliated venue),
+        and `next_follow_up_date` — the soonest **pending** reminder for this contact, or None.
+        That last one is what the list's "Needs follow-up" filter and its date column read; it is
+        a date, not a flag, so one query serves both.
     """
     sql = (
         "SELECT c.id, c.name, c.email, wt.short_name AS warmth_tier, "
         "       COALESCE(MAX(CASE WHEN o.id IS NOT NULL THEN co.is_power_partner ELSE 0 END), 0) "
         "         AS is_power_partner, "
-        "       c.created_at, c.updated_at, COUNT(DISTINCT o.id) AS organization_count "
+        "       c.created_at, c.updated_at, COUNT(DISTINCT o.id) AS organization_count, "
+        # The soonest pending reminder for this contact, or NULL.
+        #
+        # A correlated subquery rather than a second LEFT JOIN. A join would also be *correct*
+        # today — every aggregate above is COUNT(DISTINCT ...) or MAX(...), which row
+        # multiplication cannot disturb — but that correctness is incidental, and the first plain
+        # COUNT(*) or SUM() anyone adds would silently start counting the cross product of
+        # affiliations and reminders. The subquery keeps this query's arithmetic independent of
+        # how many follow-ups a contact happens to have.
+        "       (SELECT MIN(f.due_date) FROM follow_ups f "
+        "         WHERE f.contact_id = c.id AND f.deleted_at IS NULL "
+        "           AND f.completed_at IS NULL) AS next_follow_up_date "
         "FROM contacts c "
         "LEFT JOIN warmth_tiers wt ON wt.id = c.warmth_tier_id "
         "LEFT JOIN contact_organizations co ON co.contact_id = c.id "

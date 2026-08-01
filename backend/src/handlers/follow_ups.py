@@ -179,18 +179,22 @@ def list_follow_ups() -> dict:
     """Return the caller's follow-ups, soonest first.
 
     Optional ``contact_id`` / ``opportunity_id`` narrow to one parent's reminders (ANDed when both
-    are given); ``pending_only=true`` drops completed rows. The unfiltered call is the Follow-ups
-    page, which shows completed history too.
+    are given). ``organization_id`` is different in kind: it has no column of its own and instead
+    matches reminders on any of that venue's gigs **or** any contact affiliated with it, which is
+    what a venue page means by "our follow-ups". ``pending_only=true`` drops completed rows. The
+    unfiltered call is the Follow-ups page, which shows completed history too.
     """
     request = authenticate(router.current_event.raw_event)
     params = router.current_event.query_string_parameters or {}
     contact_id = params.get("contact_id")
     opportunity_id = params.get("opportunity_id")
+    organization_id = params.get("organization_id")
     rows = follow_ups_repo.list_follow_ups(
         request.connection,
         request.user_id,
         contact_id=path_int(contact_id, "contact_id") if contact_id else None,
         opportunity_id=path_int(opportunity_id, "opportunity_id") if opportunity_id else None,
+        organization_id=(path_int(organization_id, "organization_id") if organization_id else None),
         pending_only=str(params.get("pending_only", "")).lower() == "true",
     )
     return {"follow_ups": [FollowUpSummary(**row).model_dump(mode="json") for row in rows]}

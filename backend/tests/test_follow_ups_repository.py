@@ -248,6 +248,61 @@ def test_list_filters(followup_db) -> None:
     assert fu.list_follow_ups(conn, user_id, contact_id=ids["foreign_contact"]) == []
 
 
+def test_organization_filter_is_the_union_of_a_venues_gigs_and_its_people(followup_db) -> None:
+    """A venue has no ``organization_id`` on ``follow_ups`` — a reminder is about a person or a gig,
+    never a building — so the filter reaches it through both links, and must reach *both*."""
+    conn, user_id, ids = followup_db
+    with conn.cursor() as cur:
+        cur.execute("SELECT organization_id FROM opportunities WHERE id = %s", (ids["opp"],))
+        org = cur.fetchone()["organization_id"]
+        # Kalei is affiliated with the venue; Iris is not.
+        cur.execute(
+            "INSERT INTO contact_organizations (contact_id, organization_id) VALUES (%s, %s)",
+            (ids["kalei"], org),
+        )
+
+    on_gig = fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=TOMORROW, note="gig", opportunity_id=ids["opp"])
+    )
+    on_person = fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=TODAY, note="person", contact_id=ids["kalei"])
+    )
+    unrelated = fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=TODAY, note="not here", contact_id=ids["iris"])
+    )
+
+    found = [r["id"] for r in fu.list_follow_ups(conn, user_id, organization_id=org)]
+    assert found == [on_person, on_gig]  # soonest first
+    assert unrelated not in found
+
+
+def test_organization_filter_composes_with_pending_only(followup_db) -> None:
+    conn, user_id, ids = followup_db
+    with conn.cursor() as cur:
+        cur.execute("SELECT organization_id FROM opportunities WHERE id = %s", (ids["opp"],))
+        org = cur.fetchone()["organization_id"]
+
+    done = fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=TODAY, note="done", opportunity_id=ids["opp"])
+    )
+    open_one = fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=TODAY, note="open", opportunity_id=ids["opp"])
+    )
+    fu.patch_follow_up(conn, user_id, done, FollowUpPatch(completed=True))
+
+    pending = fu.list_follow_ups(conn, user_id, organization_id=org, pending_only=True)
+    assert [r["id"] for r in pending] == [open_one]
+    assert len(fu.list_follow_ups(conn, user_id, organization_id=org)) == 2
+
+
+def test_an_unknown_organization_matches_nothing_rather_than_everything(followup_db) -> None:
+    conn, user_id, ids = followup_db
+    fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=TODAY, note="x", contact_id=ids["kalei"])
+    )
+    assert fu.list_follow_ups(conn, user_id, organization_id=999_999) == []
+
+
 def test_pending_only_drops_completed_but_the_default_keeps_history(followup_db) -> None:
     conn, user_id, ids = followup_db
     done = fu.create_follow_up(

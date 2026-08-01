@@ -11,6 +11,11 @@ interface FollowUpsCardProps {
   contactId?: number;
   /** Scope to an opportunity's reminders; the modal preselects and locks that opportunity. */
   opportunityId?: number;
+  /** Scope to a venue's reminders — its gigs' and its people's. **Read-only**: the card lists them
+   *  but offers no "+ Schedule", because a follow-up cannot be attached to a venue. It belongs to a
+   *  person or a gig, and asking Donna to pick which from a venue page is a worse flow than doing
+   *  it from the contact or the gig itself, where the answer is already unambiguous. */
+  organizationId?: number;
 }
 
 function parseDateLocal(iso: string): Date {
@@ -34,8 +39,14 @@ function startOfToday(): Date {
  * The parent is passed through to the modal, so a reminder created from here is already attached to
  * the thing being looked at and cannot be created dangling.
  */
-export function FollowUpsCard({ contactId, opportunityId }: FollowUpsCardProps) {
-  const followUps = useFollowUps({ contactId, opportunityId, pendingOnly: true });
+export function FollowUpsCard({
+  contactId,
+  opportunityId,
+  organizationId,
+}: FollowUpsCardProps) {
+  const followUps = useFollowUps({ contactId, opportunityId, organizationId, pendingOnly: true });
+  // A venue is not a thing a reminder can hang off, so this card only reports there.
+  const readOnly = organizationId !== undefined;
   const patch = usePatchFollowUp();
   const [editing, setEditing] = useState<FollowUp | null>(null);
   const [formOpen, formHandlers] = useDisclosure(false);
@@ -61,9 +72,15 @@ export function FollowUpsCard({ contactId, opportunityId }: FollowUpsCardProps) 
     <Card withBorder radius="md">
       <CardTitle
         action={
-          <Anchor size="sm" onClick={openCreate} style={{ cursor: 'pointer' }}>
-            + Schedule follow-up
-          </Anchor>
+          readOnly ? (
+            <Text size="xs" c="dimmed">
+              on this venue&apos;s gigs and people
+            </Text>
+          ) : (
+            <Anchor size="sm" onClick={openCreate} style={{ cursor: 'pointer' }}>
+              + Schedule follow-up
+            </Anchor>
+          )
         }
       >
         Follow-ups
@@ -102,11 +119,18 @@ export function FollowUpsCard({ contactId, opportunityId }: FollowUpsCardProps) 
                       </Badge>
                     )}
                   </Group>
+                  {/* On a venue the card spans several gigs and people, so each row has to say
+                      which one it is about. On a contact or gig page that is already the context. */}
+                  {readOnly && (
+                    <Text size="xs" c="dimmed">
+                      {[f.contact_name, f.opportunity_title].filter(Boolean).join(' · ')}
+                    </Text>
+                  )}
                   <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>
                     {f.note}
                   </Text>
                 </div>
-                <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                <Group gap={4} wrap="nowrap" style={{ flexShrink: 0, display: readOnly ? 'none' : undefined }}>
                   <ActionIcon
                     variant="subtle"
                     aria-label="Mark done"

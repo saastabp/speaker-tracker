@@ -83,10 +83,49 @@ flowchart TB
 - Every data handler calls `apply_session_timezone(conn, event)` immediately after connecting, so
   `CURDATE()` and friends evaluate in the caller's local time. **Kauaʻi is UTC-10**, so "today"
   rollover is ten hours off UTC and every date-bucketed metric depends on this.
-- Auth is a Cognito JWT authorizer at the gateway in prod. In **sandbox** the authorizer is omitted
-  and `AUTH_MODE=dev` injects a fixed user.
+- Auth is a Cognito JWT authorizer **at the gateway** in prod — see §1.1, which exists because this
+  one line is easy to misread. In **sandbox** the authorizer is omitted and `AUTH_MODE=dev` injects
+  a fixed user.
 
-### 1.1 Three fixes we are *not* inheriting
+### 1.1 Where authentication actually happens
+
+**The authorizer is on the gateway. `common/auth.py` is not an authorizer**, despite the name — and
+that distinction is worth stating because the file reads like one.
+
+`api-stack.ts` builds an `HttpJwtAuthorizer` (Cognito issuer + app-client audience) and attaches it
+**per route** from the `ROUTES` table's `authRequired` flag. API Gateway validates the JWT *before*
+invoking anything: an unauthenticated request to a protected route is rejected with a 401 by the
+gateway and **never reaches the function**. Nothing in the Lambda is load-bearing for keeping
+strangers out.
+
+What `common/auth.py::principal_from_event` does is read claims the gateway has *already verified*:
+
+```python
+claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
+```
+
+That is **identity extraction, not authentication**. Its `Unauthorized` on a missing `sub` is a
+misconfiguration guard, not a security boundary — if that fires in prod, an authorizer is missing
+from a route, not an attacker got through.
+
+**Sandbox genuinely is open, and that is the deliberate exception.** It deploys no Cognito, so
+`props.auth` is undefined, every route falls back to `HttpNoneAuthorizer`, and traffic *does* reach
+the Lambda unauthenticated — where the dev principal is injected. So sandbox is a public
+`*.cloudfront.net` URL over real data with no authentication at all. Fine while the data is
+disposable; **not** fine once it holds Donna's actual contacts.
+
+The guard against that leaking into prod is at **import time**, not per request:
+
+```python
+if _AUTH_MODE == "dev" and _ENV_TYPE != "sandbox":
+    raise RuntimeError("AUTH_MODE=dev is only allowed when ENV_TYPE=sandbox")
+```
+
+A prod Lambda deployed with dev auth **fails its cold start** rather than quietly serving anonymous
+traffic, and both env vars default to their production-safe values so a *missing* `ENV_TYPE` trips
+it too. `infra/cdk/test/authorizer.test.ts` asserts the route-level wiring.
+
+### 1.2 Three fixes we are *not* inheriting
 
 legacy-tracker's equivalents of these are broken; porting them verbatim would import the bugs.
 
@@ -96,7 +135,7 @@ legacy-tracker's equivalents of these are broken; porting them verbatim would im
 | `UserNotFoundError` subclasses `LookupError`, falls into the re-raise branch, and surfaces as **500 instead of 404** | Domain exceptions map explicitly; `NotFound → 404` including the user lookup. |
 | API client never inspects response status — an **expired token returns a raw `Response`** to callers, which renders as a broken page | `useApi()` treats 401 as an auth event and triggers `signinRedirect()`, preserving the intended path. |
 
-### 1.2 Auth UX and session
+### 1.3 Auth UX and session
 
 No full-screen "Login with Cognito" splash. The app **lands on the normal shell** — nav rail, logo,
 header — with a **Sign In** link in the header and a sign-in prompt in the content area. A deep link
@@ -200,7 +239,7 @@ top-level keys — no `{"data": ...}` wrapper), `{"error": "<message>"}` on fail
 
 **Exception handlers register on `app`, never on a `Router`** — router-level propagation through
 `include_router` has been version-dependent, and centralizing them is what guarantees the single
-error shape §1.1 promises. A **single `@app.exception_handler(Exception)` catch-all** delegates to
+error shape §1.2 promises. A **single `@app.exception_handler(Exception)` catch-all** delegates to
 `common/http.py`'s `response_for_exception`, whose ordered `isinstance` map decides the status — and
 which honours Powertools' own `ServiceError.status_code`, so an unmatched route returns 404 rather
 than a false 500. This removes any dependence on Powertools' exception-handler MRO precedence: the
@@ -605,7 +644,7 @@ That halves the sandbox surface and avoids a second ACM validation.
 **🚫 Do not use `Distribution.errorResponses` for the SPA fallback.** It is **distribution-wide, not
 per-behavior**, so the usual `403 → /index.html (200)` mapping also rewrites genuine 401/403 from the
 Cognito authorizer and 404s from `@app.not_found` into an HTML page with status 200. `useApi()`'s
-401 handling would then never fire — reintroducing precisely the bug class §1.1 says we are not
+401 handling would then never fire — reintroducing precisely the bug class §1.2 says we are not
 inheriting. Instead attach a **second CloudFront Function to the default behavior only**, rewriting
 extension-less paths to `/index.html`. `/api/*` stays untouched.
 

@@ -8,12 +8,16 @@ power-partner flag (scoped to a contact↔venue edge, rolled up to the person in
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from common import errors
 from models.contacts import AffiliationInput, AffiliationUpdate, ContactInput
+from models.follow_ups import FollowUpInput, FollowUpPatch
 from models.organizations import OrganizationInput
 from repositories import contacts as contacts_repo
+from repositories import follow_ups as fu
 from repositories import organizations as orgs_repo
 
 
@@ -244,3 +248,70 @@ def test_primary_demotion_is_scoped_to_the_venue(seeded_db) -> None:
 
     assert primaries(v1) == ["Bob"]
     assert primaries(v2) == ["Ann"]
+
+
+# --- next_follow_up_date (slice 8: the "Needs follow-up" filter) ----------------------------------
+
+
+def test_next_follow_up_date_is_the_soonest_pending_reminder(seeded_db) -> None:
+    """A date, not a flag — the list filters on its presence and shows it beside the name."""
+    conn, user_id, _, _ = seeded_db
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Kalei"))
+    none_yet = contacts_repo.list_contacts(conn, user_id)[0]
+    assert none_yet["next_follow_up_date"] is None
+
+    fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=date(2026, 9, 9), note="later", contact_id=contact)
+    )
+    fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=date(2026, 9, 1), note="sooner", contact_id=contact)
+    )
+
+    row = contacts_repo.list_contacts(conn, user_id)[0]
+    assert row["next_follow_up_date"] == date(2026, 9, 1)
+
+
+def test_completed_and_deleted_reminders_do_not_count_as_needing_follow_up(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Kalei"))
+    done = fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=date(2026, 9, 1), note="done", contact_id=contact)
+    )
+    fu.patch_follow_up(conn, user_id, done, FollowUpPatch(completed=True))
+    assert contacts_repo.list_contacts(conn, user_id)[0]["next_follow_up_date"] is None
+
+    removed = fu.create_follow_up(
+        conn, user_id, FollowUpInput(due_date=date(2026, 9, 2), note="gone", contact_id=contact)
+    )
+    fu.soft_delete_follow_up(conn, user_id, removed)
+    assert contacts_repo.list_contacts(conn, user_id)[0]["next_follow_up_date"] is None
+
+
+def test_reminders_do_not_disturb_the_affiliation_counts(seeded_db) -> None:
+    """Several reminders against a contact affiliated with several venues must not skew the row.
+
+    Verified by probe (2026-08-01): a LEFT JOIN passes this too, because every aggregate here is
+    COUNT(DISTINCT ...) or MAX(...). That immunity is incidental rather than designed — the first
+    plain COUNT(*) added would start counting the cross product — so this guards the arithmetic
+    regardless of which shape the query uses."""
+    conn, user_id, org_type, _ = seeded_db
+    org_a = orgs_repo.create_organization(
+        conn, user_id, OrganizationInput(name="Venue A", organization_type=org_type)
+    )
+    org_b = orgs_repo.create_organization(
+        conn, user_id, OrganizationInput(name="Venue B", organization_type=org_type)
+    )
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Kalei"))
+    contacts_repo.add_affiliation(conn, user_id, contact, AffiliationInput(organization_id=org_a))
+    contacts_repo.add_affiliation(conn, user_id, contact, AffiliationInput(organization_id=org_b))
+
+    # Three reminders against a contact affiliated with two venues: the worst case for a join.
+    for day in (1, 2, 3):
+        fu.create_follow_up(
+            conn, user_id, FollowUpInput(due_date=date(2026, 9, day), note="x", contact_id=contact)
+        )
+
+    rows = contacts_repo.list_contacts(conn, user_id)
+    assert len(rows) == 1, "one contact, one row"
+    assert rows[0]["organization_count"] == 2
+    assert rows[0]["next_follow_up_date"] == date(2026, 9, 1)

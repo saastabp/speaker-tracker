@@ -1,8 +1,7 @@
 import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconPlus, IconStar } from '@tabler/icons-react';
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useCatalogs } from '../api/catalogs';
 import { useContacts, useCreateContact, type ContactInput } from '../api/contacts';
 import { ContactFormModal } from '../components/ContactFormModal';
@@ -15,8 +14,27 @@ export function Contacts() {
   const create = useCreateContact();
   const navigate = useNavigate();
   const [addOpen, addHandlers] = useDisclosure(false);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('everyone');
+  // Filter state lives in the URL, not in useState.
+  //
+  // Slice 8 makes Dashboard aggregates clickable, opening a list already narrowed to the records
+  // behind them — which only works if a list page can be *told* its filter by a link. Keeping it
+  // in component state would mean /contacts?filter=follow_up silently showing everyone. It also
+  // makes the view shareable and survive a reload, which local state never did.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get('q') ?? '';
+  const filter = searchParams.get('filter') ?? 'everyone';
+
+  /** Write one filter key, dropping it from the URL when it returns to its default. */
+  const setParam = (key: string, value: string, fallback: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (!value || value === fallback) {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    // replace: filtering is not navigation, and each keystroke should not be a Back-button stop.
+    setSearchParams(next, { replace: true });
+  };
 
   const warmthLabel = (shortName: string | null) =>
     shortName
@@ -31,14 +49,25 @@ export function Contacts() {
 
   const all = contacts.data ?? [];
   const powerCount = all.filter((c) => c.is_power_partner).length;
+  // Boolean(), not `!== null`: against a backend that predates this field the value is `undefined`,
+  // and `undefined !== null` is true — which would quietly mark every contact as needing follow-up.
+  const followUpCount = all.filter((c) => Boolean(c.next_follow_up_date)).length;
   const pills: FilterPill[] = [
     { value: 'everyone', label: 'Everyone', active: filter === 'everyone' },
     { value: 'power', label: 'Power partners', active: filter === 'power' },
+    { value: 'follow_up', label: 'Needs follow-up', active: filter === 'follow_up' },
   ];
   const term = search.trim().toLowerCase();
+  const matchesFilter = (c: (typeof all)[number]) => {
+    if (filter === 'power') return c.is_power_partner;
+    // "Needs follow-up" means a *pending* reminder exists. The server supplies the soonest one as
+    // a date, so presence is the test — a completed or deleted reminder leaves it null.
+    if (filter === 'follow_up') return Boolean(c.next_follow_up_date);
+    return true;
+  };
   const filtered = all.filter(
     (c) =>
-      (filter === 'everyone' || c.is_power_partner) &&
+      matchesFilter(c) &&
       (!term ||
         c.name.toLowerCase().includes(term) ||
         (c.email ?? '').toLowerCase().includes(term)),
@@ -54,6 +83,7 @@ export function Contacts() {
           <Text c="dimmed" size="sm">
             {all.length} {all.length === 1 ? 'person' : 'people'} · {powerCount} power partner
             {powerCount === 1 ? '' : 's'}
+            {followUpCount > 0 && ` · ${followUpCount} needing follow-up`}
           </Text>
         </div>
         <Button leftSection={<IconPlus size={16} />} onClick={addHandlers.open}>
@@ -77,10 +107,10 @@ export function Contacts() {
         <>
           <FilterBar
             search={search}
-            onSearch={setSearch}
+            onSearch={(value) => setParam('q', value, '')}
             searchPlaceholder="Search contacts…"
             pills={pills}
-            onPillClick={setFilter}
+            onPillClick={(value) => setParam('filter', value, 'everyone')}
           />
           {filtered.length === 0 ? (
             <Text c="dimmed">No contacts match these filters.</Text>
