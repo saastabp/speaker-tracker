@@ -466,9 +466,73 @@ this app already operates.
 reminders becoming load-bearing for money — invoice chasing, where a missed nudge costs a payment
 rather than a nudge.
 
-**The real gap is detection, not delivery.** Nothing reconciles the halves and nothing writes back
-when a reminder fires, so today the only evidence of any of these failures is CloudWatch. That is
-tracked as observability debt against the future tickler work rather than fixed here.
+**Detection was the real gap, and #1 is now closed.** A reminder that exhausts its retries is
+dead-lettered, consumed, and **surfaced in the app** — see §5.2. What remains untracked is the
+*positive* case: nothing records that a reminder was delivered, and nothing reconciles #3. Both stay
+as observability debt against the future tickler work.
+
+### 5.2 When a reminder fails — what happens, and what to do
+
+```
+EventBridge Scheduler ──invoke──> followup-notify ──> SES        (no DB, no VPC)
+         │                              │
+         │                    5 attempts / 2 hours
+         │                              ↓
+         └──────────> speaker-tracker-<env>-followup-failures  (SQS)
+                                        ↓
+                              followup-failed  ──> follow_ups.reminder_failed_at
+                                        ↓
+                        alarm on THIS function's invocations ──> SNS ──> email
+```
+
+**There is no primary queue.** EventBridge invokes the Lambda directly; the queue is a dead-letter
+*destination*, not the partner of a source queue — which is why it is named `-followup-failures` and
+not `-dlq`. Nothing feeds it on the happy path and it has no redrive policy.
+
+**The retry budget is 5 attempts over 2 hours** (`common/scheduler.py`), not EventBridge's default of
+185 over 24 hours. A reminder is a *morning nudge*: one delivered after lunch has missed its purpose,
+so grinding all day helps nobody, and against an undeliverable address it aims 185 bounces at the
+sending reputation. Two hours is the window in which the reminder is still worth having; reaching it
+means giving up **and saying so**.
+
+**The alarm watches the consumer's invocations, not the queue depth.** Depth is the obvious metric
+and became the wrong one the moment something drained the queue — a message consumed within seconds
+may never be visible at an alarm evaluation, so a depth alarm would sit green through exactly the
+failures it exists to report. An invocation of `followup-failed` *means* a reminder was
+dead-lettered.
+
+#### If the alarm fires
+
+1. **Nothing is lost.** The `follow_ups` row is untouched — still pending, still on the Dashboard —
+   and now carries `reminder_failed_at`, so the app shows a **"reminder didn't send"** badge. Donna
+   sees the follow-up; she just did not get the nudge.
+2. **Read `/aws/lambda/speaker-tracker-<env>-followup-notify`** for the cause. The consumer's own log
+   names the `follow_up_id`; the notify log says why the send failed.
+3. **Fix the cause, not the symptom.** The alarm's job is *"the reminder path is broken, and
+   tomorrow's reminders will fail too"* — it is a health signal, not a work queue.
+
+**Replay is deliberately manual, and usually wrong.** If a send failed five times over two hours, an
+immediate redrive will likely fail too; and if it succeeds an hour later it delivers a
+start-your-day nudge at lunchtime, which is worse than not delivering it. Prefer editing the
+follow-up (which clears `reminder_failed_at` and schedules afresh) over resending a stale one. To
+resend anyway, invoke the notify function with the dead-lettered payload:
+
+```bash
+aws lambda invoke --function-name speaker-tracker-<env>-followup-notify \
+  --payload fileb://payload.json /dev/stdout
+# payload.json: {"follow_up_id":…, "to_address":…, "note":…, "due_date":"YYYY-MM-DD",
+#                "contact_name":…, "opportunity_title":…}
+```
+
+⚠ **The dead-letter message shape is documented, not observed.** No reminder has failed in this app
+yet, so `handlers/followup_failed.extract_follow_up_id` also searches one level of nesting and, when
+it finds no id, logs the **raw body** at ERROR rather than dropping it silently. The first real
+failure is what will confirm the shape — check that log line before assuming the parser is right.
+
+**The happy path is observed**, and this is what it looks like (verified 2026-08-01, 07:00:42 HST):
+the notify function logs `status=sent`, the schedule **self-deletes**
+(`ActionAfterCompletion: DELETE`), the failures queue stays empty, `followup-failed` is never
+invoked, and the follow-up **stays pending** — a reminder is a nudge, not a completion.
 
 ---
 

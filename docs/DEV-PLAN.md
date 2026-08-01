@@ -456,19 +456,33 @@ ARN — the weak-reference shape that left the CloudFront origin pointing at a d
 2026-07-25. Api already has `backendBundle()`, the SES grant, and two non-API-function precedents
 (`migrate`, `imap_poll`). Settled with Brian 2026-07-29.
 
-**Frontend** — follow-up creation standalone and as an opt-in rider; due list on the Dashboard;
-mark done.
+**Frontend** — follow-up creation standalone and as an opt-in rider; due list on the Dashboard; a
+dedicated **Follow-ups page** for everything the Dashboard card omits; mark done.
 
-**Acceptance**
+**Acceptance** — ✅ **all seven met** (2026-08-01; #1 against real EventBridge and a real inbox).
 1. A follow-up scheduled for a date fires an SES email on that date in **Donna's timezone**.
-2. Editing the date **cancels and recreates** the schedule; only one email fires.
+2. Editing the date **cancels and recreates** the schedule; only one email fires. *Broader in
+   practice: **any** field the email renders forces the replace, not only the date — the note and
+   the contact/opportunity labels are equally baked into the frozen payload.*
 3. Deleting a follow-up cancels its schedule; cancelling an already-fired one is harmless.
 4. `completed_at` is the only done-state; marking done removes it from the Dashboard.
 5. A follow-up attached to neither contact nor opportunity is **rejected by the CHECK**.
 6. Sending an email with the rider **off** creates no follow-up.
+7. **Marking a follow-up done cancels its schedule.** Added during design and easy to miss: because
+   `followup_notify` never reads the database, a completed follow-up whose schedule survived would
+   email Donna about something she has already finished — the app nagging her, which is the worst
+   failure this slice can produce. #3 covers delete and #4 covers the Dashboard, but neither covers
+   this.
 
 **Verify manually:** schedule one for tomorrow, confirm the email arrives; then edit the date and
 confirm only one fires.
+
+**How #1 was actually verified**, since "wait until tomorrow" hides two traps. The sandbox dev
+principal's email was a non-deliverable placeholder, so a sandbox reminder could never arrive —
+`DEV_USER_EMAIL` is now overridable for exactly this. And an undeliverable reminder does not fail
+quietly: it retries and dead-letters, so the retry budget matters before you leave one running
+overnight. With both fixed, the reminder fired at **07:00:42 HST** on its due date and was
+delivered. See `ARCHITECTURE.md` §5.2.
 
 ---
 
