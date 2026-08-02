@@ -19,6 +19,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
+from models.follow_ups import FollowUpRider
+
 
 class OpportunityInput(BaseModel):
     """Writable descriptive/money-setup fields, for create and full-replace update.
@@ -78,11 +80,17 @@ class OpportunityCreateInput(OpportunityInput):
         ``payment_statuses`` short_name to start in. None derives it from ``comp_type``.
     lead_contact_id : int or None
         A contact to link as the lead on this gig (``is_primary``). None links no one.
+    follow_up : models.follow_ups.FollowUpRider or None
+        Opt-in request to schedule a reminder about the new gig, created in the same transaction.
+        ``None`` — the default — is the off state, so creating a gig never silently schedules
+        anything. A gig entered in ``researching`` with an event date months out is exactly what
+        goes quiet, which is why the rider is offered here at all.
     """
 
     starting_status: str | None = None
     payment_status: str | None = None
     lead_contact_id: int | None = None
+    follow_up: FollowUpRider | None = None
 
 
 class OpportunityStatusPatch(BaseModel):

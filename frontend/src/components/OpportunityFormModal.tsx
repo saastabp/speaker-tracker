@@ -11,7 +11,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
 import { useContacts } from '../api/contacts';
@@ -20,6 +20,7 @@ import { useOrganizations } from '../api/organizations';
 import { useTalks } from '../api/talks';
 import { BRAND_LINE } from '../theme';
 import { FieldLabel } from './FieldLabel';
+import { FollowUpRiderFields, type FollowUpRiderValue } from './FollowUpRiderFields';
 
 // The form works in strings (Select/SegmentedControl/TextInput values); it maps to
 // OpportunityCreateInput on submit. `title` is an optional free-text name; when left blank it falls
@@ -79,6 +80,16 @@ export function OpportunityFormModal({
   const contacts = useContacts();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Create-only, like the lifecycle seeds below it: on edit there is nothing to ride on, and
+  // re-opening the form would otherwise schedule a fresh reminder on every save.
+  const [riderOn, setRiderOn] = useState(false);
+  const [rider, setRider] = useState<FollowUpRiderValue>({ due_date: '', note: '' });
+  const errorRef = useRef<HTMLDivElement>(null);
+  // Bumped on every open to remount the form subtree. Mantine's Select keeps the *label* it is
+  // displaying in its own internal state, which `form.setValues` does not touch — so reopening
+  // this modal showed the previously chosen venue while the form value behind it was empty, and
+  // submitting answered "Venue is required" next to a venue the user could plainly see.
+  const [formGeneration, setFormGeneration] = useState(0);
 
   const isCreate = !initialValues;
 
@@ -97,6 +108,13 @@ export function OpportunityFormModal({
     },
   });
 
+  useEffect(() => {
+    // `center`, not `nearest`: the modal has a sticky header, and `nearest` parks the alert flush
+    // against the scrollport top — which is *underneath* that header, so it scrolled but stayed
+    // invisible.
+    errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [error]);
+
   // Mantine's useForm doesn't auto-sync initialValues; refresh on each open.
   useEffect(() => {
     if (opened) {
@@ -108,6 +126,10 @@ export function OpportunityFormModal({
       }
       form.setValues(values);
       setError(null);
+      // Off on every open — the rider is opt-in, and a previous use must not carry over.
+      setRiderOn(false);
+      setRider({ due_date: '', note: '' });
+      setFormGeneration((n) => n + 1);
     }
   }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -137,6 +159,10 @@ export function OpportunityFormModal({
     .map((p) => ({ value: p.short_name, label: p.description }));
 
   async function handleSubmit(values: FormValues) {
+    if (isCreate && riderOn && !rider.due_date) {
+      setError('Pick a date for the follow-up, or switch it off.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -161,6 +187,11 @@ export function OpportunityFormModal({
         if (values.comp_type === 'paid') {
           input.payment_status = values.payment_status;
         }
+        // Explicitly null when off, never omitted-because-falsy: the server treats null as the
+        // off state, and the reminder is written in the same transaction as the gig.
+        input.follow_up = riderOn
+          ? { due_date: rider.due_date, note: rider.note.trim() || null }
+          : null;
       }
       await onSubmit(input);
       onClose();
@@ -173,10 +204,13 @@ export function OpportunityFormModal({
 
   return (
     <Modal opened={opened} onClose={onClose} title={title} size="lg">
-      <form onSubmit={form.onSubmit(handleSubmit)}>
+      <form key={formGeneration} onSubmit={form.onSubmit(handleSubmit)}>
         <Stack>
+          {/* Scrolled into view when it appears. The form is long enough to scroll, and the submit
+              button sits at the bottom while this sits at the top — so without this, rejecting a
+              submission looked like the button doing nothing at all. */}
           {error && (
-            <Alert color="red" variant="light">
+            <Alert ref={errorRef} color="red" variant="light">
               {error}
             </Alert>
           )}
@@ -300,6 +334,16 @@ export function OpportunityFormModal({
             Pro bono still counts as a booking — it just carries no fee and shows a “Pro bono” chip
             instead of a dollar amount.
           </Text>
+
+          {isCreate && (
+            <FollowUpRiderFields
+              enabled={riderOn}
+              onEnabledChange={setRiderOn}
+              value={rider}
+              onChange={setRider}
+              description="Pick a date to be reminded to move this gig along."
+            />
+          )}
 
           <Group justify="space-between" mt="sm">
             <Group>

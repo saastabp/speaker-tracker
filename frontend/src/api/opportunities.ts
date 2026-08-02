@@ -6,6 +6,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { useApi } from './client';
+import type { FollowUpRiderInput } from './outreaches';
 
 // Mirrors backend models/opportunities.py. Entities travel as ids (organization_id, talk_id),
 // catalogs as short_names (opportunity_format, comp_type, current_status, payment_status). Money
@@ -31,6 +32,10 @@ export interface OpportunityCreateInput extends OpportunityInput {
   starting_status?: string | null; // opportunity_statuses short_name (non-terminal)
   payment_status?: string | null; // payment_statuses short_name
   lead_contact_id?: number | null; // contact linked as lead (is_primary) on this gig
+  /** Opt-in reminder about the new gig, created server-side **in the same transaction**. Omitted
+   *  or null is the off state. Not a second request on purpose: two calls would leave the gig
+   *  created and the reminder silently missing after the user asked for one. */
+  follow_up?: FollowUpRiderInput | null;
 }
 
 export interface OpportunitySummary {

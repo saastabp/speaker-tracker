@@ -154,7 +154,9 @@ export function Contacts() {
                       {/* The primary affiliation stands for the person; the rest become a count,
                           since a contact wearing four hats would otherwise crowd out every other
                           column. Both fields are null until a venue is attached. */}
-                      <Text size="sm">{contact.primary_title ?? ''}</Text>
+                      {/* Rendered only when present — an empty Text still occupies a line and
+                          left the org sitting under a blank one. */}
+                      {contact.primary_title && <Text size="sm">{contact.primary_title}</Text>}
                       <Group gap={6} wrap="nowrap">
                         <Text size="xs" c="dimmed">
                           {contact.primary_organization_name ?? '—'}
@@ -174,7 +176,10 @@ export function Contacts() {
                       )}
                     </Table.Td>
                     <Table.Td>
-                      <Text size="sm">{contact.source ?? '—'}</Text>
+                      {/* `||`, not `??`: the column is free text and an unset one arrives as an
+                          empty string as often as null, which `??` passes straight through — so
+                          this cell sat blank while every other empty cell showed an em dash. */}
+                      <Text size="sm">{contact.source || '—'}</Text>
                     </Table.Td>
                     <Table.Td ta="right">
                       <Text size="sm" c={contact.last_touch_date ? undefined : 'dimmed'}>

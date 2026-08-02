@@ -18,6 +18,7 @@ from common.db import transaction
 from common.logger import logger
 from core.funnel import Stage, build_funnel
 from handlers.context import authenticate
+from handlers.follow_ups import create_rider_follow_up, schedule_new_follow_up
 from handlers.params import path_int
 from handlers.responses import opportunity_response
 from models.funnel import FunnelStage
@@ -86,17 +87,40 @@ def list_opportunities() -> dict:
 
 @router.post("/opportunities")
 def create_opportunity() -> dict:
-    """Create an opportunity (seeding its starting stage / payment / lead) and return its detail."""
+    """Create an opportunity (seeding its starting stage / payment / lead) and return its detail.
+
+    An opt-in ``follow_up`` rider schedules a reminder about the new gig. It is created **in the
+    same transaction** as the opportunity, matching the outreach path: a gig and the reminder to
+    act on it should land together or not at all. Doing it as a second request from the client
+    would leave a window where the gig exists and the reminder silently does not, after the user
+    explicitly asked for one.
+
+    The reminder inherits its links from the thing being created — always the new gig, plus the
+    lead contact when one was named — so it surfaces on that person's page too rather than only on
+    the gig's. The schedule is built after the commit, so a scheduler outage costs the email and
+    not the opportunity.
+    """
     request = authenticate(router.current_event.raw_event)
     data = OpportunityCreateInput.model_validate(router.current_event.json_body or {})
     with transaction(request.connection) as conn:
         opp_id = opps_repo.create_opportunity(conn, request.user_id, data)
+        follow_up_id = create_rider_follow_up(
+            conn,
+            request.user_id,
+            data.follow_up,
+            contact_id=data.lead_contact_id,
+            opportunity_id=opp_id,
+            fallback_note="Follow up on this opportunity.",
+        )
     logger.info(
-        "Created opportunity id=%s starting_status=%s user_id=%s",
+        "Created opportunity id=%s starting_status=%s follow_up_id=%s user_id=%s",
         opp_id,
         data.starting_status or "researching",
+        follow_up_id,
         request.user_id,
     )
+    if follow_up_id is not None:
+        schedule_new_follow_up(request, follow_up_id)
     return opportunity_response(request.connection, request.user_id, opp_id)
 
 

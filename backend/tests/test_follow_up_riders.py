@@ -93,6 +93,12 @@ def api(db_connection, monkeypatch):
             (user_id,),
         )
         contact_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO organizations (user_id, organization_type_id, name) "
+            "SELECT %s, id, 'Hanalei Bay Resort' FROM organization_types WHERE short_name = 'expo'",
+            (user_id,),
+        )
+        org_id = cur.lastrowid
 
     def call(method: str, path: str, body: dict | None = None):
         event = {
@@ -113,7 +119,17 @@ def api(db_connection, monkeypatch):
         return resp["statusCode"], (json.loads(resp["body"]) if resp.get("body") else None)
 
     due = (db_now_local(db_connection).date() + timedelta(days=5)).isoformat()
-    return call, sched, {"contact": contact_id, "due": due}
+    return call, sched, {"contact": contact_id, "org": org_id, "due": due}
+
+
+def _gig_body(**overrides) -> dict:
+    payload = {
+        "title": "Wellness Wheel workshop",
+        "opportunity_format": "workshop",
+        "comp_type": "paid",
+    }
+    payload.update(overrides)
+    return payload
 
 
 def _send_body(**overrides) -> dict:
@@ -143,6 +159,16 @@ def test_sending_without_a_rider_creates_no_follow_up(api) -> None:
 def test_logging_a_touch_without_a_rider_creates_no_follow_up(api) -> None:
     call, sched, ids = api
     status, _ = call("POST", "/outreaches", {"contact_id": ids["contact"], "channel": "dm"})
+
+    assert status == 200
+    _, listed = call("GET", "/follow-ups")
+    assert listed["follow_ups"] == []
+    assert sched.calls == []
+
+
+def test_creating_a_gig_without_a_rider_creates_no_follow_up(api) -> None:
+    call, sched, ids = api
+    status, _ = call("POST", "/opportunities", _gig_body(organization_id=ids["org"]))
 
     assert status == 200
     _, listed = call("GET", "/follow-ups")
@@ -205,6 +231,71 @@ def test_touch_rider_inherits_both_links(api) -> None:
     assert len(listed["follow_ups"]) == 1
     assert listed["follow_ups"][0]["contact_id"] == ids["contact"]
     assert len(sched.calls) == 1
+
+
+def test_gig_rider_links_the_new_gig_and_schedules_it(api) -> None:
+    call, sched, ids = api
+    status, created_gig = call(
+        "POST",
+        "/opportunities",
+        _gig_body(
+            organization_id=ids["org"],
+            follow_up={"due_date": ids["due"], "note": "Draft the pitch."},
+        ),
+    )
+
+    assert status == 200
+    _, listed = call("GET", "/follow-ups")
+    assert len(listed["follow_ups"]) == 1
+    created = listed["follow_ups"][0]
+    assert created["note"] == "Draft the pitch."
+    # The gig did not exist when the request arrived, so this link can only come from the server
+    # doing both writes together — which is the reason the rider is not two client calls.
+    assert created["opportunity_id"] == created_gig["id"]
+    assert created["contact_id"] is None, "no lead was named, so there is no person to link"
+    assert sched.calls == [("create", f"followup-{created['id']}")]
+
+
+def test_gig_rider_inherits_the_lead_contact_when_one_is_named(api) -> None:
+    call, _sched, ids = api
+    status, created_gig = call(
+        "POST",
+        "/opportunities",
+        _gig_body(
+            organization_id=ids["org"],
+            lead_contact_id=ids["contact"],
+            follow_up={"due_date": ids["due"]},
+        ),
+    )
+
+    assert status == 200
+    _, listed = call("GET", "/follow-ups")
+    created = listed["follow_ups"][0]
+    assert created["opportunity_id"] == created_gig["id"]
+    assert created["contact_id"] == ids["contact"], "surfaces on the lead's page too"
+    assert created["note"] == "Follow up on this opportunity."
+
+
+def test_a_bad_gig_rider_date_rejects_the_gig_too(api) -> None:
+    """The case that rules out doing this as a second call from the client.
+
+    Two requests would leave the gig created and the reminder silently missing, after the user
+    explicitly switched the rider on. Sharing a transaction means a rejected rider takes the
+    opportunity down with it, so what Donna asked for either happened or visibly did not.
+    """
+    call, sched, ids = api
+    status, _ = call(
+        "POST",
+        "/opportunities",
+        _gig_body(organization_id=ids["org"], follow_up={"due_date": "not-a-date"}),
+    )
+
+    assert status == 400
+    _, listed = call("GET", "/follow-ups")
+    assert listed["follow_ups"] == []
+    _, board = call("GET", "/opportunities")
+    assert board["opportunities"] == [], "the gig must not survive a rejected rider"
+    assert sched.calls == [], "and nothing was scheduled"
 
 
 def test_a_bad_rider_date_rejects_the_whole_request(api) -> None:
