@@ -43,6 +43,7 @@ import pymysql.cursors
 from pymysql.connections import Connection
 from pymysql.err import InterfaceError, OperationalError
 
+from common.aws import resolve_region
 from common.logger import logger
 
 #: AWS RDS **global** CA bundle, shipped in the deployment package next to this module.
@@ -70,10 +71,7 @@ def _require_env(name: str) -> str:
 
 def _region() -> str:
     """Resolve the RDS region for IAM token generation (DB_REGION, else AWS_REGION)."""
-    region = os.environ.get("DB_REGION") or os.environ.get("AWS_REGION")
-    if not region:
-        raise RuntimeError("DB_REGION or AWS_REGION must be set for RDS IAM auth")
-    return region
+    return resolve_region("DB_REGION", "for RDS IAM auth")
 
 
 def _rds():

@@ -36,6 +36,7 @@ from typing import NamedTuple
 
 import boto3
 
+from common.aws import resolve_region
 from common.logger import logger
 
 #: Env var naming the secret holding the IMAP credentials, set by the Messaging stack.
@@ -65,10 +66,7 @@ class ImapCredentials(NamedTuple):
 
 def _region() -> str:
     """Resolve the Secrets Manager region (SECRETS_REGION, else AWS_REGION)."""
-    region = os.environ.get("SECRETS_REGION") or os.environ.get("AWS_REGION")
-    if not region:
-        raise RuntimeError("SECRETS_REGION or AWS_REGION must be set to read secrets")
-    return region
+    return resolve_region("SECRETS_REGION", "to read secrets")
 
 
 def _client():

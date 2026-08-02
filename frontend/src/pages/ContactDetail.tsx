@@ -19,7 +19,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconMail, IconMessagePlus, IconPencil, IconStar, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
 import {
   useAddAffiliation,
@@ -39,26 +39,7 @@ import { FollowUpsCard } from '../components/FollowUpsCard';
 import { EmailComposer } from '../components/EmailComposer';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { warmthColor } from '../contactChips';
-
-function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function label(
-  items: { short_name: string; description: string }[] | undefined,
-  shortName: string | null,
-): string {
-  if (!shortName) return '';
-  return items?.find((i) => i.short_name === shortName)?.description ?? shortName;
-}
+import { timestampDate, timestampDateTime } from '../dates';
 
 export function ContactDetail() {
   const { id } = useParams();
@@ -91,7 +72,7 @@ export function ContactDetail() {
   }
 
   const c = contact.data;
-  const warmthLabel = c.warmth_tier ? label(catalogs.data?.warmth_tiers, c.warmth_tier) : null;
+  const warmthLabel = c.warmth_tier ? catalogLabel(catalogs.data?.warmth_tiers, c.warmth_tier) : null;
   // The Contact detail carries no power-partner rollup; derive it like the summary does
   // (a power partner at ≥1 affiliated venue).
   const isPowerPartner = c.organizations.some((org) => org.is_power_partner);
@@ -100,12 +81,12 @@ export function ContactDetail() {
 
   function timelineTitle(item: TimelineItem): string {
     if (item.item_type === 'outreach') {
-      const channel = label(catalogs.data?.outreach_channels, item.channel);
-      const kind = label(catalogs.data?.outreach_kinds, item.kind);
+      const channel = catalogLabel(catalogs.data?.outreach_channels, item.channel);
+      const kind = catalogLabel(catalogs.data?.outreach_kinds, item.kind);
       return `Outreach · ${channel}${kind ? ` · ${kind}` : ''}`;
     }
     if (item.item_type === 'status_event') {
-      return `Moved to ${label(catalogs.data?.opportunity_statuses, item.status)}`;
+      return `Moved to ${catalogLabel(catalogs.data?.opportunity_statuses, item.status)}`;
     }
     return 'Note';
   }
@@ -320,7 +301,7 @@ export function ContactDetail() {
                         </Anchor>
                       )}
                       <Text size="xs" c="dimmed">
-                        {formatWhen(item.occurred_at)}
+                        {timestampDateTime(item.occurred_at)}
                       </Text>
                     </Timeline.Item>
                   ))}
@@ -394,7 +375,7 @@ export function ContactDetail() {
               <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px' }}>
                 {c.how_you_know?.trim() && <KV label="Warm intro">{c.how_you_know}</KV>}
                 <KV label="Source">{c.source?.trim() ? c.source : '—'}</KV>
-                <KV label="Added">{formatDate(c.created_at)}</KV>
+                <KV label="Added">{timestampDate(c.created_at)}</KV>
               </div>
             </Card>
           </Stack>

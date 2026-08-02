@@ -14,6 +14,7 @@ from pymysql.err import IntegrityError
 
 from common import errors
 from models.organizations import OrganizationInput
+from repositories import catalogs as catalogs_repo
 
 #: UNIQUE violation — a live org already has this name.
 _ER_DUP_ENTRY = 1062
@@ -33,15 +34,9 @@ _PLAIN_COLUMNS = (
 
 def _resolve_type_id(conn: Connection, short_name: str) -> int:
     """Resolve an `organization_types` short_name to its id, or raise InvalidInput."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM organization_types WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown organization_type")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(
+        conn, "organization_types", short_name, "organization_type"
+    )
 
 
 def _plain_values(data: OrganizationInput) -> tuple:

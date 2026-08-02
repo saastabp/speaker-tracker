@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from pymysql.connections import Connection
 
-from common import errors
 from models.targets import TargetInput
+from repositories import catalogs as catalogs_repo
 
 #: Response columns, target_type joined back to its short_name.
 _SUMMARY_SELECT = (
@@ -23,15 +23,7 @@ _SUMMARY_SELECT = (
 
 def _resolve_target_type_id(conn: Connection, short_name: str) -> int:
     """Resolve a ``target_types`` short_name to its id, or raise InvalidInput."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM target_types WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown target_type")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(conn, "target_types", short_name, "target_type")
 
 
 def list_targets(conn: Connection, user_id: int) -> list[dict]:

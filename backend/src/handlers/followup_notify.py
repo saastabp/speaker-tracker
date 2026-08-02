@@ -29,16 +29,11 @@ from datetime import date
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from common import mail
-from common.logger import logger
+from common.logger import elapsed_ms, logger
 from core.email_headers import generate_message_id
 
 #: Joins the contact and gig labels when a reminder names both.
 _LABEL_SEPARATOR = " · "
-
-
-def _elapsed_ms(start: float) -> int:
-    """Return milliseconds since ``start`` (a :func:`time.monotonic` reading)."""
-    return int((time.monotonic() - start) * 1000)
 
 
 def _label(payload: dict) -> str:
@@ -135,7 +130,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             "Reminder failed correlation_id=%s follow_up_id=%s duration_ms=%s",
             correlation_id,
             follow_up_id,
-            _elapsed_ms(start),
+            elapsed_ms(start),
         )
         raise
 
@@ -145,6 +140,6 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         correlation_id,
         follow_up_id,
         ses_message_id,
-        _elapsed_ms(start),
+        elapsed_ms(start),
     )
     return {"status": "sent", "follow_up_id": follow_up_id, "ses_message_id": ses_message_id}

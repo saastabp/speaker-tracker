@@ -2,11 +2,12 @@ import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Table, Text, Title 
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconPlus, IconStar } from '@tabler/icons-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { useContacts, useCreateContact, type ContactInput } from '../api/contacts';
 import { ContactFormModal } from '../components/ContactFormModal';
 import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { warmthColor } from '../contactChips';
+import { isOverdue, parseDateLocal, shortDate } from '../dates';
 
 export function Contacts() {
   const contacts = useContacts();
@@ -35,12 +36,6 @@ export function Contacts() {
     // replace: filtering is not navigation, and each keystroke should not be a Back-button stop.
     setSearchParams(next, { replace: true });
   };
-
-  const warmthLabel = (shortName: string | null) =>
-    shortName
-      ? (catalogs.data?.warmth_tiers.find((tier) => tier.short_name === shortName)?.description ??
-        shortName)
-      : '';
 
   async function handleCreate(values: ContactInput) {
     const created = await create.mutateAsync(values);
@@ -119,8 +114,11 @@ export function Contacts() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Name</Table.Th>
+                  <Table.Th>Role · Organization</Table.Th>
                   <Table.Th>Warmth</Table.Th>
-                  <Table.Th>Venues</Table.Th>
+                  <Table.Th>Source</Table.Th>
+                  <Table.Th ta="right">Last touch</Table.Th>
+                  <Table.Th ta="right">Next follow-up</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -153,13 +151,56 @@ export function Contacts() {
                       </Group>
                     </Table.Td>
                     <Table.Td>
+                      {/* The primary affiliation stands for the person; the rest become a count,
+                          since a contact wearing four hats would otherwise crowd out every other
+                          column. Both fields are null until a venue is attached. */}
+                      <Text size="sm">{contact.primary_title ?? ''}</Text>
+                      <Group gap={6} wrap="nowrap">
+                        <Text size="xs" c="dimmed">
+                          {contact.primary_organization_name ?? '—'}
+                        </Text>
+                        {contact.organization_count > 1 && (
+                          <Badge variant="light" color="gray" size="xs">
+                            +{contact.organization_count - 1} orgs
+                          </Badge>
+                        )}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
                       {contact.warmth_tier && (
                         <Badge color={warmthColor(contact.warmth_tier)} variant="light">
-                          {warmthLabel(contact.warmth_tier)}
+                          {catalogLabel(catalogs.data?.warmth_tiers, contact.warmth_tier)}
                         </Badge>
                       )}
                     </Table.Td>
-                    <Table.Td>{contact.organization_count}</Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{contact.source ?? '—'}</Text>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <Text size="sm" c={contact.last_touch_date ? undefined : 'dimmed'}>
+                        {contact.last_touch_date
+                          ? shortDate(parseDateLocal(contact.last_touch_date))
+                          : '—'}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      {/* Overdue replaces the date rather than colouring it: a date Donna has
+                          already missed is not information she needs, the fact that she missed it
+                          is. */}
+                      {!contact.next_follow_up_date ? (
+                        <Text size="sm" c="dimmed">
+                          —
+                        </Text>
+                      ) : isOverdue(contact.next_follow_up_date) ? (
+                        <Badge color="terracotta" variant="light">
+                          Overdue
+                        </Badge>
+                      ) : (
+                        <Text size="sm">
+                          {shortDate(parseDateLocal(contact.next_follow_up_date))}
+                        </Text>
+                      )}
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>

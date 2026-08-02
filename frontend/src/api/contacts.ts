@@ -26,9 +26,18 @@ export interface ContactSummary {
   id: number;
   name: string;
   email: string | null;
+  source: string | null;
   warmth_tier: string | null;
   is_power_partner: boolean; // rollup: a power partner at ≥1 affiliated venue
   organization_count: number;
+  /** The affiliation flagged primary, else the oldest. Both null before any venue is attached —
+   *  a normal early state, so the row still renders. `organization_count` supplies the "+N orgs"
+   *  beside them. */
+  primary_title: string | null;
+  primary_organization_name: string | null;
+  /** Most recent logged outreach. Pairs with `next_follow_up_date`: the due date alone restates
+   *  the filter, the two together say whether a relationship is being kept up. */
+  last_touch_date: string | null;
   /** Soonest **pending** reminder for this contact, or null. A date rather than a flag so the
    *  "Needs follow-up" filter and the date beside the name come from one query. */
   next_follow_up_date: string | null;

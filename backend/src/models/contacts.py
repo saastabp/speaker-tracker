@@ -78,14 +78,26 @@ class ContactSummary(BaseModel):
     rather than a boolean deliberately: the list's "Needs follow-up" filter only needs presence,
     but the column beside it wants the date, and returning the flag would mean a second query the
     moment that column ships.
+
+    `last_touch_date` is the most recent logged outreach, and it is the column that gives
+    `next_follow_up_date` its meaning — a due date alone mostly restates the filter, whereas the
+    pair says whether a relationship is being kept up.
+
+    `primary_title` / `primary_organization_name` describe the affiliation flagged primary, or the
+    oldest one when none is. Both are None for a contact with no live affiliation, which is a
+    normal early state rather than an error, so the row still renders.
     """
 
     id: int
     name: str
     email: str | None
+    source: str | None
     warmth_tier: str | None
     is_power_partner: bool
     organization_count: int
+    primary_title: str | None
+    primary_organization_name: str | None
+    last_touch_date: date | None
     next_follow_up_date: date | None
     created_at: datetime
     updated_at: datetime

@@ -2,13 +2,12 @@ import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Table, Text, Title 
 import { IconAlertTriangle, IconDownload } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { useOpportunities, type OpportunitySummary } from '../api/opportunities';
 import { FilterBar, type FilterPill } from '../components/FilterBar';
-import { formatMoney, paymentColor } from '../opportunityChips';
-
-type Catalog = { short_name: string; description: string }[] | undefined;
-const label = (list: Catalog, sn: string) => list?.find((c) => c.short_name === sn)?.description ?? sn;
+import { longDate, parseDateLocal, parseTimestamp } from '../dates';
+import { formatMoney } from '../format';
+import { paymentColor } from '../opportunityChips';
 
 function outcomeColor(status: string): string {
   if (status === 'delivered') return 'good';
@@ -20,19 +19,25 @@ function compColor(compType: string): string {
   if (compType === 'pro_bono') return 'gold';
   return 'gray'; // trade
 }
+/**
+ * The day a record belongs to: its event date, else the day it closed.
+ *
+ * The two fields need different parsing and that is the whole point of this helper. `event_date`
+ * is a bare `YYYY-MM-DD`, which `new Date()` reads as UTC midnight — in Hawaiʻi that renders the
+ * *previous* day and files a Jan 1 gig under the previous year, breaking the year pills.
+ * `closed_at` is a real timestamp, where `new Date()` is correct.
+ */
+function eventDay(o: OpportunitySummary): Date | null {
+  if (o.event_date) return parseDateLocal(o.event_date);
+  return o.closed_at ? parseTimestamp(o.closed_at) : null;
+}
 function eventDate(o: OpportunitySummary): string {
-  const raw = o.event_date ?? o.closed_at;
-  if (!raw) return '—';
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime())
-    ? raw
-    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const day = eventDay(o);
+  // Unparseable is shown as-is rather than as an em dash: a malformed value should look wrong.
+  return day ? longDate(day) : (o.event_date ?? o.closed_at ?? '—');
 }
 function eventYear(o: OpportunitySummary): number | null {
-  const raw = o.event_date ?? o.closed_at;
-  if (!raw) return null;
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? null : d.getFullYear();
+  return eventDay(o)?.getFullYear() ?? null;
 }
 function csvCell(v: string): string {
   return `"${v.replace(/"/g, '""')}"`;
@@ -97,12 +102,12 @@ export function History() {
       o.title,
       o.organization_name,
       o.talk_title ?? '',
-      label(catalogs.data?.opportunity_formats, o.opportunity_format),
-      label(catalogs.data?.opportunity_statuses, o.current_status),
+      catalogLabel(catalogs.data?.opportunity_formats, o.opportunity_format),
+      catalogLabel(catalogs.data?.opportunity_statuses, o.current_status),
       o.event_date ?? '',
-      label(catalogs.data?.comp_types, o.comp_type),
+      catalogLabel(catalogs.data?.comp_types, o.comp_type),
       o.fee_amount ?? '',
-      label(catalogs.data?.payment_statuses, o.payment_status),
+      catalogLabel(catalogs.data?.payment_statuses, o.payment_status),
     ]);
     const csv = [header, ...rows].map((r) => r.map((c) => csvCell(String(c))).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -177,7 +182,7 @@ export function History() {
                 {filtered.map((o) => {
                   const talkLine = [
                     o.talk_title,
-                    label(catalogs.data?.opportunity_formats, o.opportunity_format),
+                    catalogLabel(catalogs.data?.opportunity_formats, o.opportunity_format),
                   ]
                     .filter(Boolean)
                     .join(' · ');
@@ -204,16 +209,16 @@ export function History() {
                       </Table.Td>
                       <Table.Td>
                         <Badge color={outcomeColor(o.current_status)} variant="light">
-                          {label(catalogs.data?.opportunity_statuses, o.current_status)}
+                          {catalogLabel(catalogs.data?.opportunity_statuses, o.current_status)}
                         </Badge>
                       </Table.Td>
                       <Table.Td>{eventDate(o)}</Table.Td>
                       <Table.Td>
-                        {label(catalogs.data?.opportunity_formats, o.opportunity_format)}
+                        {catalogLabel(catalogs.data?.opportunity_formats, o.opportunity_format)}
                       </Table.Td>
                       <Table.Td>
                         <Badge color={compColor(o.comp_type)} variant="light">
-                          {label(catalogs.data?.comp_types, o.comp_type)}
+                          {catalogLabel(catalogs.data?.comp_types, o.comp_type)}
                         </Badge>
                       </Table.Td>
                       <Table.Td>{formatMoney(o.fee_amount, o.currency) ?? '—'}</Table.Td>
@@ -225,7 +230,7 @@ export function History() {
                             color={paymentColor(o.payment_status, settled(o.payment_status))}
                             variant="light"
                           >
-                            {label(catalogs.data?.payment_statuses, o.payment_status)}
+                            {catalogLabel(catalogs.data?.payment_statuses, o.payment_status)}
                           </Badge>
                         )}
                       </Table.Td>

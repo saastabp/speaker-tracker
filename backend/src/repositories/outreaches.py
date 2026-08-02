@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from pymysql.connections import Connection
 
-from common import errors
 from core.outreach import resolve_outreach_kind
 from models.outreach import OutreachInput
+from repositories import catalogs as catalogs_repo
 from repositories._ownership import (
     has_prior_outbound_touch,
     validate_contact,
@@ -43,15 +43,7 @@ _SUMMARY_SELECT = (
 
 def _resolve_channel_id(conn: Connection, short_name: str) -> int:
     """Resolve an ``outreach_channels`` short_name to its id, or raise InvalidInput."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM outreach_channels WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown channel")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(conn, "outreach_channels", short_name, "channel")
 
 
 def _resolve_kind_id(conn: Connection, short_name: str) -> int:
@@ -60,15 +52,7 @@ def _resolve_kind_id(conn: Connection, short_name: str) -> int:
     Also validates a caller-supplied ``kind`` override: an unknown short_name is rejected here
     rather than silently stored.
     """
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM outreach_kinds WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown outreach kind")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(conn, "outreach_kinds", short_name, "outreach kind")
 
 
 def create_outreach(conn: Connection, user_id: int, data: OutreachInput) -> int:

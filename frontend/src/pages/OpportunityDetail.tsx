@@ -22,7 +22,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
 import { useContacts } from '../api/contacts';
 import {
@@ -44,17 +44,10 @@ import { CardTitle, KV, initials } from '../components/detailCards';
 import { FollowUpsCard } from '../components/FollowUpsCard';
 import { CloseOpportunityModal } from '../components/CloseOpportunityModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
-import { formatMoney, paymentColor, stageColor } from '../opportunityChips';
+import { timestampDateTime } from '../dates';
+import { formatMoney } from '../format';
+import { paymentColor, stageColor } from '../opportunityChips';
 import { BRAND_FAINT } from '../theme';
-
-type Catalog = { short_name: string; description: string }[] | undefined;
-const label = (list: Catalog, sn: string) =>
-  list?.find((c) => c.short_name === sn)?.description ?? sn;
-
-function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-}
 
 /** A linked contact with an editable per-gig role and lead flag, plus an avatar. */
 function LinkedContactRow({
@@ -181,7 +174,7 @@ function VenueCard({ orgId, orgName }: { orgId: number; orgName: string }) {
   const catalogs = useCatalogs();
   const org = useOrganization(orgId);
   const sub = [
-    org.data ? label(catalogs.data?.organization_types, org.data.organization_type) : null,
+    org.data ? catalogLabel(catalogs.data?.organization_types, org.data.organization_type) : null,
     org.data?.location,
   ]
     .filter(Boolean)
@@ -236,10 +229,10 @@ export function OpportunityDetail() {
   }
 
   const o = opp.data;
-  const statusLabel = label(catalogs.data?.opportunity_statuses, o.current_status);
-  const formatLabel = label(catalogs.data?.opportunity_formats, o.opportunity_format);
-  const compLabel = label(catalogs.data?.comp_types, o.comp_type);
-  const paymentLabel = label(catalogs.data?.payment_statuses, o.payment_status);
+  const statusLabel = catalogLabel(catalogs.data?.opportunity_statuses, o.current_status);
+  const formatLabel = catalogLabel(catalogs.data?.opportunity_formats, o.opportunity_format);
+  const compLabel = catalogLabel(catalogs.data?.comp_types, o.comp_type);
+  const paymentLabel = catalogLabel(catalogs.data?.payment_statuses, o.payment_status);
   const settled =
     (catalogs.data?.payment_statuses ?? []).find((p) => p.short_name === o.payment_status)
       ?.is_settled ?? false;
@@ -416,7 +409,7 @@ export function OpportunityDetail() {
                         {note.body}
                       </Text>
                       <Text size="xs" c="dimmed">
-                        {formatWhen(note.occurred_at)}
+                        {timestampDateTime(note.occurred_at)}
                       </Text>
                     </div>
                     <ActionIcon
@@ -438,7 +431,7 @@ export function OpportunityDetail() {
                 {o.status_events.map((event) => (
                   <Timeline.Item
                     key={event.id}
-                    title={label(catalogs.data?.opportunity_statuses, event.status)}
+                    title={catalogLabel(catalogs.data?.opportunity_statuses, event.status)}
                   >
                     {event.note && (
                       <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
@@ -446,7 +439,7 @@ export function OpportunityDetail() {
                       </Text>
                     )}
                     <Text size="xs" c="dimmed">
-                      {formatWhen(event.occurred_at)}
+                      {timestampDateTime(event.occurred_at)}
                     </Text>
                   </Timeline.Item>
                 ))}

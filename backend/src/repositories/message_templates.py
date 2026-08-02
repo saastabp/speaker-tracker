@@ -17,6 +17,7 @@ from pymysql.connections import Connection
 
 from common import errors
 from models.message_templates import MessageTemplateInput
+from repositories import catalogs as catalogs_repo
 
 #: Response columns, catalog ids joined back to short_names. ``is_shared`` is derived from a null
 #: owner so the SPA can show the edit-in-place vs Duplicate affordances without seeing owner ids.
@@ -34,28 +35,14 @@ _VISIBLE = "(mt.user_id = %s OR mt.user_id IS NULL) AND mt.deleted_at IS NULL"
 
 def _resolve_kind_id(conn: Connection, short_name: str) -> int:
     """Resolve a ``message_template_kinds`` short_name to its id, or raise InvalidInput."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM message_template_kinds WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown message template kind")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(
+        conn, "message_template_kinds", short_name, "message template kind"
+    )
 
 
 def _resolve_channel_id(conn: Connection, short_name: str) -> int:
     """Resolve an ``outreach_channels`` short_name to its id, or raise InvalidInput."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM outreach_channels WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown channel")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(conn, "outreach_channels", short_name, "channel")
 
 
 def list_message_templates(conn: Connection, user_id: int) -> list[dict]:

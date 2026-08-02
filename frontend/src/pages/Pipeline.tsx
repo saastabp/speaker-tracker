@@ -29,7 +29,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconMessagePlus, IconPlus, IconX } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { useFunnel } from '../api/funnel';
 import {
   useCreateOpportunity,
@@ -42,7 +42,9 @@ import { CloseOpportunityModal, type CloseTarget } from '../components/CloseOppo
 import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
-import { STAGE_DOT, formatMoney, paymentColor } from '../opportunityChips';
+import { parseDateLocal, shortDate } from '../dates';
+import { formatMoney } from '../format';
+import { STAGE_DOT, paymentColor } from '../opportunityChips';
 import { BRAND_LINE, BRAND_PANEL } from '../theme';
 
 const COLUMN_WIDTH = 264;
@@ -111,7 +113,7 @@ function CardBody({
           </Badge>
           {opp.event_date && (
             <Text size="xs" c="dimmed">
-              {opp.event_date}
+              {shortDate(parseDateLocal(opp.event_date))}
             </Text>
           )}
         </Group>
@@ -341,13 +343,12 @@ export function Pipeline() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const paymentStatuses = catalogs.data?.payment_statuses ?? [];
-  const orgTypes = catalogs.data?.organization_types ?? [];
-  const formats = catalogs.data?.opportunity_formats ?? [];
   const labels: CardLabels = {
-    paymentLabel: (sn) => paymentStatuses.find((p) => p.short_name === sn)?.description ?? sn,
+    paymentLabel: (sn) => catalogLabel(paymentStatuses, sn),
+    // Not a label lookup — `is_settled` is a flag only this catalog carries, so it stays local.
     paymentSettled: (sn) => paymentStatuses.find((p) => p.short_name === sn)?.is_settled ?? false,
-    orgTypeLabel: (sn) => orgTypes.find((o) => o.short_name === sn)?.description ?? sn,
-    formatLabel: (sn) => formats.find((f) => f.short_name === sn)?.description ?? sn,
+    orgTypeLabel: (sn) => catalogLabel(catalogs.data?.organization_types, sn),
+    formatLabel: (sn) => catalogLabel(catalogs.data?.opportunity_formats, sn),
   };
 
   const statusSort = (shortName: string | null) =>

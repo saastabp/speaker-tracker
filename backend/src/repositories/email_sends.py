@@ -44,6 +44,7 @@ from common import errors
 from core.email_headers import normalize_subject
 from core.outreach import resolve_outreach_kind
 from models.emails import EmailSendInput
+from repositories import catalogs as catalogs_repo
 from repositories._ownership import (
     has_prior_outbound_touch,
     validate_contact,
@@ -77,23 +78,6 @@ class PendingSend(NamedTuple):
     thread_id: int
     outreach_id: int | None
     thread_created: bool
-
-
-def _resolve_catalog_id(conn: Connection, table: str, short_name: str, label: str) -> int:
-    """Resolve a catalog short_name to its id, or raise InvalidInput.
-
-    ``table`` is never caller-supplied — it is one of this module's two literals — so interpolating
-    it into the statement introduces no injection surface, and the short_name stays parameterized.
-    """
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT id FROM {table} WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput(f"unknown {label}")
-    return row["id"]
 
 
 def _create_thread(
@@ -147,10 +131,12 @@ def _log_outreach(
     ``core.outreach.resolve_outreach_kind`` — identical to a manually logged touch, so an emailed
     first contact counts toward the outreaches target exactly as a logged one does.
     """
-    channel_id = _resolve_catalog_id(conn, "outreach_channels", EMAIL_CHANNEL, "channel")
+    channel_id = catalogs_repo.resolve_catalog_id(
+        conn, "outreach_channels", EMAIL_CHANNEL, "channel"
+    )
     has_prior = has_prior_outbound_touch(conn, user_id, contact_id)
     kind = resolve_outreach_kind(has_prior, kind_override)
-    kind_id = _resolve_catalog_id(conn, "outreach_kinds", kind, "outreach kind")
+    kind_id = catalogs_repo.resolve_catalog_id(conn, "outreach_kinds", kind, "outreach kind")
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO outreaches "

@@ -17,7 +17,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconCircleCheck } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import {
   useDashboard,
   type ComingUpEvent,
@@ -26,28 +26,9 @@ import {
 } from '../api/dashboard';
 import { usePatchFollowUp, type FollowUp as FollowUpItem } from '../api/followUps';
 import { useAuthSession } from '../auth/session';
+import { daysSince, isOverdue, parseDateLocal } from '../dates';
+import { formatMoney } from '../format';
 import { BRAND_LINE } from '../theme';
-
-function formatMoney(amount: string, currency: string): string {
-  const n = Number(amount);
-  if (Number.isNaN(n)) {
-    return amount;
-  }
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(n);
-}
-
-/** Parse a bare ``YYYY-MM-DD`` as a *local* date (avoids the UTC-midnight day-shift `new Date(iso)`
- *  would cause in a negative-offset zone like Kauaʻi). */
-function parseDateLocal(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** Midnight today, for comparing a calendar due date without a time component getting in the way. */
-function startOfToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
 
 function greeting(name: string | null): string {
   const h = new Date().getHours();
@@ -91,12 +72,6 @@ const REASON: Record<NeedsAttentionItem['reason'], { label: string; color: strin
   awaiting_reply: { label: 'Awaiting reply', color: 'blue' },
   stale: { label: 'Gone quiet', color: 'gray' },
 };
-
-/** Whole days between `iso` and today, for the age chip on duration-shaped reasons. */
-function daysSince(iso: string): number {
-  const then = parseDateLocal(iso);
-  return Math.max(0, Math.round((startOfToday().getTime() - then.getTime()) / 86_400_000));
-}
 
 /**
  * Where a needs-attention row goes. The `reason` is what says which id-space `id` is in, so this
@@ -231,8 +206,7 @@ function FollowUpDueRow({
   style?: React.CSSProperties;
 }) {
   const patch = usePatchFollowUp();
-  const due = parseDateLocal(followUp.due_date);
-  const overdue = due < startOfToday();
+  const overdue = isOverdue(followUp.due_date);
   const target = followUp.opportunity_id
     ? `/pipeline/${followUp.opportunity_id}`
     : followUp.contact_id
@@ -288,9 +262,6 @@ export function Dashboard() {
   const dash = useDashboard();
   const { user } = useAuthSession();
 
-  const label = (list: { short_name: string; description: string }[] | undefined, short: string) =>
-    list?.find((i) => i.short_name === short)?.description ?? short;
-
   if (dash.isPending || catalogs.isPending) {
     return (
       <Group>
@@ -337,7 +308,7 @@ export function Dashboard() {
             <TargetTile
               key={`${t.target_type}:${t.cadence}`}
               tile={t}
-              label={label(catalogs.data?.target_types, t.target_type)}
+              label={catalogLabel(catalogs.data?.target_types, t.target_type)}
             />
           ))}
         </SimpleGrid>
@@ -356,7 +327,7 @@ export function Dashboard() {
                   return (
                     <Group key={f.status} gap="sm" wrap="nowrap">
                       <Text size="sm" w={140} style={{ flexShrink: 0 }}>
-                        {label(catalogs.data?.opportunity_statuses, f.status)}
+                        {catalogLabel(catalogs.data?.opportunity_statuses, f.status)}
                       </Text>
                       <div
                         style={{
@@ -395,20 +366,22 @@ export function Dashboard() {
             {/* Revenue & payments */}
             <DashCard title="Revenue & payments">
               <SimpleGrid cols={{ base: 2, sm: 4 }}>
+                {/* `?? '—'` because the shared formatter returns null for an absent amount; a
+                    zero total is the string "0" and still formats as currency. */}
                 <MoneyStat
                   label="Booked"
-                  value={formatMoney(money.booked, money.currency)}
+                  value={formatMoney(money.booked, money.currency) ?? '—'}
                   sub={`${money.booked_count} paid ${money.booked_count === 1 ? 'gig' : 'gigs'}`}
                 />
                 <MoneyStat
                   label="Received"
-                  value={formatMoney(money.received, money.currency)}
+                  value={formatMoney(money.received, money.currency) ?? '—'}
                   sub={`${money.received_count} collected`}
                   color="good.7"
                 />
                 <MoneyStat
                   label="Outstanding"
-                  value={formatMoney(money.outstanding, money.currency)}
+                  value={formatMoney(money.outstanding, money.currency) ?? '—'}
                   sub={`${money.invoiced_count} invoiced`}
                   color="warn.7"
                 />

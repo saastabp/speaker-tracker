@@ -20,6 +20,7 @@ from pymysql.err import IntegrityError
 
 from common import errors
 from models.contacts import AffiliationInput, AffiliationUpdate, ContactInput
+from repositories import catalogs as catalogs_repo
 
 #: UNIQUE violation — affiliation already exists.
 _ER_DUP_ENTRY = 1062
@@ -37,17 +38,9 @@ _PLAIN_COLUMNS = (
 
 def _resolve_warmth_id(conn: Connection, short_name: str | None) -> int | None:
     """Resolve a `warmth_tiers` short_name to its id; None stays None; unknown → InvalidInput."""
-    if short_name is None:
-        return None
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM warmth_tiers WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown warmth_tier")
-    return row["id"]
+    return catalogs_repo.resolve_optional_catalog_id(
+        conn, "warmth_tiers", short_name, "warmth_tier"
+    )
 
 
 def _plain_values(data: ContactInput) -> tuple:
@@ -76,9 +69,12 @@ def list_contacts(conn: Connection, user_id: int, query: str | None = None) -> l
         and `next_follow_up_date` — the soonest **pending** reminder for this contact, or None.
         That last one is what the list's "Needs follow-up" filter and its date column read; it is
         a date, not a flag, so one query serves both.
+
+        Also `source`, `last_touch_date`, and the `primary_title` / `primary_organization_name`
+        pair, which together make up the approved list's remaining columns.
     """
     sql = (
-        "SELECT c.id, c.name, c.email, wt.short_name AS warmth_tier, "
+        "SELECT c.id, c.name, c.email, c.source, wt.short_name AS warmth_tier, "
         "       COALESCE(MAX(CASE WHEN o.id IS NOT NULL THEN co.is_power_partner ELSE 0 END), 0) "
         "         AS is_power_partner, "
         "       c.created_at, c.updated_at, COUNT(DISTINCT o.id) AS organization_count, "
@@ -92,7 +88,26 @@ def list_contacts(conn: Connection, user_id: int, query: str | None = None) -> l
         # how many follow-ups a contact happens to have.
         "       (SELECT MIN(f.due_date) FROM follow_ups f "
         "         WHERE f.contact_id = c.id AND f.deleted_at IS NULL "
-        "           AND f.completed_at IS NULL) AS next_follow_up_date "
+        "           AND f.completed_at IS NULL) AS next_follow_up_date, "
+        # Last touch — the most recent logged outreach, as a DATE. Cast in SQL rather than in the
+        # SPA because the connection carries the caller's timezone, so midnight lands where Donna
+        # is; casting a UTC timestamp client-side would shift an evening touch to the next day.
+        "       (SELECT DATE(MAX(x.occurred_at)) FROM outreaches x "
+        "         WHERE x.contact_id = c.id AND x.deleted_at IS NULL) AS last_touch_date, "
+        # Role · Organization: the affiliation flagged primary, else the oldest one. A person can
+        # wear several hats (the list shows "+N orgs" beside this) and nothing requires one to be
+        # flagged, so the tie-break has to be deterministic or the row would flicker between
+        # venues on refetch. Oldest = the venue Donna first knew them through. Live orgs only, to
+        # agree with `organization_count` — otherwise a retired venue could show beside a count
+        # that excludes it.
+        "       (SELECT co2.title FROM contact_organizations co2 "
+        "          JOIN organizations o2 ON o2.id = co2.organization_id AND o2.deleted_at IS NULL "
+        "         WHERE co2.contact_id = c.id "
+        "         ORDER BY co2.is_primary DESC, co2.id ASC LIMIT 1) AS primary_title, "
+        "       (SELECT o2.name FROM contact_organizations co2 "
+        "          JOIN organizations o2 ON o2.id = co2.organization_id AND o2.deleted_at IS NULL "
+        "         WHERE co2.contact_id = c.id "
+        "         ORDER BY co2.is_primary DESC, co2.id ASC LIMIT 1) AS primary_organization_name "
         "FROM contacts c "
         "LEFT JOIN warmth_tiers wt ON wt.id = c.warmth_tier_id "
         "LEFT JOIN contact_organizations co ON co.contact_id = c.id "

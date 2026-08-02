@@ -25,6 +25,7 @@ import { FieldLabel } from '../components/FieldLabel';
 import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { PendingImportsCard } from '../components/PendingImportsCard';
 import { RichTextField } from '../components/RichTextEditor';
+import { timestampShortDate } from '../dates';
 
 /** Direction filters. Deliberately not "Replied": that cannot be derived from the data, and it is
  *  wrong for an inbound-first thread — a venue that emails Donna before she has contacted them. */
@@ -35,11 +36,6 @@ const FILTERS: { value: DirectionFilter; label: string }[] = [
   { value: 'sent', label: 'Sent' },
   { value: 'received', label: 'Received' },
 ];
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 function matchesSearch(thread: EmailThread, search: string): boolean {
   if (!search) return true;
@@ -166,7 +162,7 @@ export function Emails() {
                       </Group>
                     </Table.Td>
                     <Table.Td>{thread.message_count}</Table.Td>
-                    <Table.Td>{formatDate(thread.last_message_at)}</Table.Td>
+                    <Table.Td>{timestampShortDate(thread.last_message_at)}</Table.Td>
                   </Table.Tr>
                 );
               })}

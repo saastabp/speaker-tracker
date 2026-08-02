@@ -2,6 +2,7 @@ import { Alert, Badge, Button, Card, Checkbox, Group, Table, Text } from '@manti
 import { useState } from 'react';
 import type { ContactInput } from '../api/contacts';
 import { useImportPendingThread, usePendingImports, type PendingImport } from '../api/emailImports';
+import { timestampShortDate } from '../dates';
 import { ContactFormModal } from './ContactFormModal';
 import { CardTitle } from './detailCards';
 
@@ -99,7 +100,7 @@ export function PendingImportsCard() {
                   <Text size="sm">{row.subject || '(no subject)'}</Text>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="sm">{formatReceived(row.received_at)}</Text>
+                  <Text size="sm">{timestampShortDate(row.received_at)}</Text>
                 </Table.Td>
                 <Table.Td align="right">
                   <Button size="xs" variant="light" onClick={() => setImporting(row)}>
@@ -147,9 +148,4 @@ export function PendingImportsCard() {
 function initialContact(row: PendingImport | null): ContactInput | undefined {
   if (!row) return undefined;
   return { name: row.from_name ?? '', email: row.from_addr };
-}
-
-function formatReceived(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

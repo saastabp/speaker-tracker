@@ -3,6 +3,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconCheck, IconPencil } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useFollowUps, usePatchFollowUp, type FollowUp } from '../api/followUps';
+import { isOverdue, parseDateLocal } from '../dates';
 import { CardTitle } from './detailCards';
 import { FollowUpFormModal } from './FollowUpFormModal';
 
@@ -16,16 +17,6 @@ interface FollowUpsCardProps {
    *  person or a gig, and asking Donna to pick which from a venue page is a worse flow than doing
    *  it from the contact or the gig itself, where the answer is already unambiguous. */
   organizationId?: number;
-}
-
-function parseDateLocal(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function startOfToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 /**
@@ -50,8 +41,6 @@ export function FollowUpsCard({
   const patch = usePatchFollowUp();
   const [editing, setEditing] = useState<FollowUp | null>(null);
   const [formOpen, formHandlers] = useDisclosure(false);
-
-  const today = startOfToday();
 
   function openCreate() {
     setEditing(null);
@@ -95,7 +84,7 @@ export function FollowUpsCard({
       ) : (
         <Stack gap="xs">
           {followUps.data!.map((f) => {
-            const overdue = parseDateLocal(f.due_date) < today;
+            const overdue = isOverdue(f.due_date);
             return (
               <Group key={f.id} justify="space-between" wrap="nowrap" align="flex-start">
                 <div style={{ minWidth: 0 }}>

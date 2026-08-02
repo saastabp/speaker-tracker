@@ -25,6 +25,7 @@ from common import errors
 from core.funnel import is_board_stage, is_close_status
 from core.opportunities import initial_payment_status, is_closed, is_real_move
 from models.opportunities import OpportunityCreateInput, OpportunityInput
+from repositories import catalogs as catalogs_repo
 
 #: Every opportunity starts here (piece 2 create default); the first status_events row records it.
 _INITIAL_STATUS = "researching"
@@ -94,28 +95,14 @@ _DETAIL_SELECT = (
 
 def _resolve_format_id(conn: Connection, short_name: str) -> int:
     """Resolve an `opportunity_formats` short_name to its id, or raise InvalidInput."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM opportunity_formats WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown opportunity_format")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(
+        conn, "opportunity_formats", short_name, "opportunity_format"
+    )
 
 
 def _resolve_comp_type_id(conn: Connection, short_name: str) -> int:
     """Resolve a `comp_types` short_name to its id, or raise InvalidInput."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM comp_types WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown comp_type")
-    return row["id"]
+    return catalogs_repo.resolve_catalog_id(conn, "comp_types", short_name, "comp_type")
 
 
 def _resolve_status(conn: Connection, short_name: str) -> dict:

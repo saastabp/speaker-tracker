@@ -1,5 +1,7 @@
-// Shared display helpers for pipeline stage + payment chips and fee formatting — used by the board
-// (Pipeline) and the opportunity detail header so their colours/format stay in lockstep.
+// Shared display helpers for pipeline stage + payment chips — used by the board (Pipeline) and the
+// opportunity detail header so their colours stay in lockstep. Fee formatting lives in `format.ts`
+// (`formatMoney`): it is a value formatter rather than a chip, and filing it here is what let a
+// second copy grow on the Dashboard unnoticed.
 
 /** Stage marker dot colour — the mockup's cool→warm→good progression across the funnel. */
 export const STAGE_DOT: Record<string, string> = {
@@ -31,17 +33,4 @@ export function paymentColor(shortName: string, settled: boolean): string {
   if (settled) return 'good';
   if (shortName === 'invoiced' || shortName === 'partial') return 'warn';
   return 'gray';
-}
-
-/** Format a decimal fee string as currency; null when there is no fee. */
-export function formatMoney(fee: string | null | undefined, currency?: string): string | null {
-  if (!fee) return null;
-  const amount = Number(fee);
-  const cur = currency || 'USD';
-  if (Number.isNaN(amount)) return `${cur} ${fee}`;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(amount);
-  } catch {
-    return `${cur} ${amount.toFixed(2)}`;
-  }
 }

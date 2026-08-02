@@ -16,6 +16,7 @@ from pymysql.err import IntegrityError
 
 from common import errors
 from models.opportunities import OpportunityContactInput, OpportunityContactUpdate
+from repositories import catalogs as catalogs_repo
 
 #: UNIQUE violation — this contact is already linked to this opportunity.
 _ER_DUP_ENTRY = 1062
@@ -23,17 +24,9 @@ _ER_DUP_ENTRY = 1062
 
 def _resolve_role_id(conn: Connection, short_name: str | None) -> int | None:
     """Resolve a `contact_roles` short_name to its id (None passes through), or InvalidInput."""
-    if short_name is None:
-        return None
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM contact_roles WHERE short_name = %s AND deleted_at IS NULL",
-            (short_name,),
-        )
-        row = cur.fetchone()
-    if row is None:
-        raise errors.InvalidInput("unknown contact_role")
-    return row["id"]
+    return catalogs_repo.resolve_optional_catalog_id(
+        conn, "contact_roles", short_name, "contact_role"
+    )
 
 
 def _demote_other_leads(cur: Cursor, opp_id: int, keep_contact_id: int) -> None:

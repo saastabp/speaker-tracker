@@ -3,7 +3,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconMessagePlus, IconPlus } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import {
   useCreateOrganization,
   useOrganizations,
@@ -51,8 +51,7 @@ export function Venues() {
   const [readyOnly, setReadyOnly] = useState(false);
 
   const typeLabel = (shortName: string) =>
-    catalogs.data?.organization_types.find((type) => type.short_name === shortName)?.description ??
-    shortName;
+    catalogLabel(catalogs.data?.organization_types, shortName);
 
   async function handleCreate(values: OrganizationInput) {
     const created = await create.mutateAsync(values);

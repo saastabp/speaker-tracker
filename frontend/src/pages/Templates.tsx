@@ -2,7 +2,7 @@ import { Alert, Badge, Button, Card, Group, Loader, SimpleGrid, Stack, Text, Tit
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconPlus } from '@tabler/icons-react';
 import { useState } from 'react';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import {
   useCreateTemplate,
   useDeleteTemplate,
@@ -24,13 +24,6 @@ export function Templates() {
   const [editing, setEditing] = useState<MessageTemplate | null>(null);
   const update = useUpdateTemplate(editing?.id ?? 0);
   const [formOpen, formHandlers] = useDisclosure(false);
-
-  const kindLabel = (shortName: string) =>
-    catalogs.data?.message_template_kinds.find((k) => k.short_name === shortName)?.description ??
-    shortName;
-  const channelLabel = (shortName: string) =>
-    catalogs.data?.outreach_channels.find((c) => c.short_name === shortName)?.description ??
-    shortName;
 
   function openCreate() {
     setEditing(null);
@@ -107,7 +100,8 @@ export function Templates() {
                 )}
               </Group>
               <Text size="xs" c="dimmed" mb="sm">
-                {kindLabel(template.kind)} · {channelLabel(template.channel)}
+                {catalogLabel(catalogs.data?.message_template_kinds, template.kind)} ·{' '}
+                {catalogLabel(catalogs.data?.outreach_channels, template.channel)}
               </Text>
               <Text
                 size="sm"

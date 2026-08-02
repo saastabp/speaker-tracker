@@ -29,6 +29,7 @@ import { CardTitle } from '../components/detailCards';
 import { FieldLabel } from '../components/FieldLabel';
 import { RichTextField } from '../components/RichTextEditor';
 import { SafeHtml } from '../components/SafeHtml';
+import { formatBytes } from '../format';
 import { BRAND_LINE, BRAND_PANEL } from '../theme';
 
 function formatTimestamp(message: EmailMessageDetail): string {
@@ -40,13 +41,6 @@ function formatTimestamp(message: EmailMessageDetail): string {
     hour: 'numeric',
     minute: '2-digit',
   });
-}
-
-function formatSize(bytes: number | null): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function EmailThread() {
@@ -243,7 +237,7 @@ function MessageCard({ message }: { message: EmailMessageDetail }) {
               <IconPaperclip size={14} />
               <Text size="xs">{a.filename}</Text>
               <Text size="xs" c="dimmed">
-                {formatSize(a.size_bytes)}
+                {formatBytes(a.size_bytes)}
               </Text>
             </Group>
           ))}

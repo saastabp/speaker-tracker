@@ -61,7 +61,7 @@ from pymysql.connections import Connection
 
 from common import imap, imap_poll, mail_parse, storage
 from common.db import get_connection, transaction
-from common.logger import logger
+from common.logger import elapsed_ms, logger
 from common.secrets import get_imap_credentials
 from core.email_headers import addresses_in, normalize_address, normalize_subject
 from core.email_scope import (
@@ -444,7 +444,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         logger.info(
             "Poll end correlation_id=%s status=no_user duration_ms=%s",
             correlation_id,
-            _elapsed_ms(start),
+            elapsed_ms(start),
         )
         return {"status": "no_user", "folders": []}
 
@@ -462,7 +462,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
                 "Poll failed correlation_id=%s status=auth_rejected duration_ms=%s — "
                 "credentials rejected after refresh; inbound mail is NOT being processed",
                 correlation_id,
-                _elapsed_ms(start),
+                elapsed_ms(start),
             )
             raise
     except (imap.ImapError, OSError):
@@ -470,7 +470,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         logger.warning(
             "Poll skipped correlation_id=%s status=transient_error duration_ms=%s",
             correlation_id,
-            _elapsed_ms(start),
+            elapsed_ms(start),
             exc_info=True,
         )
         return {"status": "transient_error", "folders": []}
@@ -478,12 +478,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     logger.info(
         "Poll end correlation_id=%s status=ok duration_ms=%s folders=%s",
         correlation_id,
-        _elapsed_ms(start),
+        elapsed_ms(start),
         [summary._asdict() for summary in summaries],
     )
     return {"status": "ok", "folders": [summary._asdict() for summary in summaries]}
-
-
-def _elapsed_ms(start: float) -> float:
-    """Milliseconds since `start`, rounded, for the paired entry/exit log lines."""
-    return round((time.monotonic() - start) * 1000, 1)

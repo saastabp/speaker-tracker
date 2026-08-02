@@ -33,18 +33,13 @@ from typing import Any
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from common.db import get_connection, transaction
-from common.logger import logger
+from common.logger import elapsed_ms, logger
 from repositories import follow_ups as follow_ups_repo
 
 #: The zone the connection's session clock is set to. Nothing here is timezone-sensitive — the
 #: column is stamped with the database's ``CURRENT_TIMESTAMP`` — but ``get_connection`` requires a
 #: zone, and using the user's keeps the stamp consistent with every other timestamp on the row.
 CONSUMER_TIMEZONE = "Pacific/Honolulu"
-
-
-def _elapsed_ms(start: float) -> int:
-    """Return milliseconds since ``start`` (a :func:`time.monotonic` reading)."""
-    return int((time.monotonic() - start) * 1000)
 
 
 def extract_follow_up_id(body: str) -> int | None:
@@ -177,6 +172,6 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         len(records),
         marked,
         len(failures),
-        _elapsed_ms(start),
+        elapsed_ms(start),
     )
     return {"batchItemFailures": failures}

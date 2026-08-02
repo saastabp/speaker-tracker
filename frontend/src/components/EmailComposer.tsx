@@ -19,6 +19,7 @@ import { useSendEmail, useUploadAttachment, type EmailAttachmentInput } from '..
 import { useSignatures } from '../api/signatures';
 import { useTemplates } from '../api/templates';
 import { FieldLabel } from './FieldLabel';
+import { formatBytes } from '../format';
 import { FollowUpRiderFields, type FollowUpRiderValue } from './FollowUpRiderFields';
 import { RichTextField } from './RichTextEditor';
 import { fillMerge } from './TemplatePicker';
@@ -41,13 +42,6 @@ function splitAddresses(value: string): string[] {
     .split(/[,;]/)
     .map((a) => a.trim())
     .filter(Boolean);
-}
-
-function formatSize(bytes: number | null | undefined): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 interface EmailComposerProps {
@@ -290,7 +284,7 @@ export function EmailComposer({
             <Group key={a.s3_key} gap={6} px={8} py={4} bg="gray.1" style={{ borderRadius: 6 }}>
               <Text size="xs">{a.filename}</Text>
               <Text size="xs" c="dimmed">
-                {formatSize(a.size_bytes)}
+                {formatBytes(a.size_bytes)}
               </Text>
               <ActionIcon
                 size="xs"

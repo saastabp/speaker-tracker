@@ -30,19 +30,8 @@ import {
 } from '../api/followUps';
 import { FilterBar } from '../components/FilterBar';
 import { FollowUpFormModal } from '../components/FollowUpFormModal';
+import { isOverdue, parseDateLocal } from '../dates';
 import { BRAND_LINE } from '../theme';
-
-/** Parse a bare `YYYY-MM-DD` as a local date — `new Date(iso)` would read it as UTC midnight and
- *  land on the previous day in a negative-offset zone like Kauaʻi. */
-function parseDateLocal(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function startOfToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
 
 type Filter = 'all' | 'pending' | 'overdue' | 'completed';
 
@@ -70,14 +59,12 @@ export function FollowUps() {
   const [editing, setEditing] = useState<FollowUp | null>(null);
   const [formOpen, formHandlers] = useDisclosure(false);
 
-  const today = startOfToday();
-
   const visible = useMemo(() => {
     const rows = followUps.data ?? [];
     const term = search.trim().toLowerCase();
     return rows.filter((f) => {
       const pending = f.completed_at === null;
-      const overdue = pending && parseDateLocal(f.due_date) < today;
+      const overdue = pending && isOverdue(f.due_date);
       if (filter === 'pending' && !pending) return false;
       if (filter === 'overdue' && !overdue) return false;
       if (filter === 'completed' && pending) return false;
@@ -88,7 +75,7 @@ export function FollowUps() {
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [followUps.data, filter, search, today]);
+  }, [followUps.data, filter, search]);
 
   function openCreate() {
     setEditing(null);
@@ -143,7 +130,7 @@ export function FollowUps() {
         <Stack gap="xs">
           {visible.map((f) => {
             const pending = f.completed_at === null;
-            const overdue = pending && parseDateLocal(f.due_date) < today;
+            const overdue = pending && isOverdue(f.due_date);
             const target = f.opportunity_id
               ? `/pipeline/${f.opportunity_id}`
               : f.contact_id

@@ -13,6 +13,7 @@ The correlation id is injected at the API handler via
 from __future__ import annotations
 
 import os
+import time
 
 from aws_lambda_powertools import Logger
 
@@ -21,3 +22,30 @@ from aws_lambda_powertools import Logger
 SERVICE_NAME = os.environ.get("POWERTOOLS_SERVICE_NAME", "speaker-tracker")
 
 logger = Logger(service=SERVICE_NAME)
+
+
+def elapsed_ms(start: float) -> float:
+    """Return milliseconds since ``start``, for the ``duration_ms`` of an exit log line.
+
+    Lives here because ``duration_ms`` is a property of the log contract, not of any one handler.
+    Four handlers had grown their own copy and they had already diverged — two truncated to ``int``
+    and two rounded to one decimal — so the same field arrived as an integer on some lines and a
+    decimal on others, which defeats aggregating over it in a log query.
+
+    Parameters
+    ----------
+    start : float
+        A :func:`time.monotonic` reading taken at handler entry. Monotonic rather than wall clock
+        so a clock adjustment mid-request cannot produce a negative or wildly wrong duration.
+
+    Returns
+    -------
+    float
+        Milliseconds elapsed, rounded to one decimal place.
+
+    Examples
+    --------
+    >>> start = time.monotonic()
+    >>> logger.info("Request end duration_ms=%s", elapsed_ms(start))
+    """
+    return round((time.monotonic() - start) * 1000, 1)

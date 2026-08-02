@@ -25,7 +25,7 @@ from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from app import app
-from common.logger import logger
+from common.logger import elapsed_ms, logger
 
 tracer = Tracer()
 metrics = Metrics(
@@ -69,7 +69,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         # resolve should convert everything to a response via the catch-all handler; reaching
         # here means an error escaped even that (e.g. a pre-routing parse failure). Log loudly
         # and re-raise — never bury a propagating failure at INFO.
-        duration_ms = round((time.monotonic() - start) * 1000, 1)
+        duration_ms = elapsed_ms(start)
         logger.exception(
             "Request end method=%s path=%s status=unhandled duration_ms=%s",
             method,
@@ -77,7 +77,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             duration_ms,
         )
         raise
-    duration_ms = round((time.monotonic() - start) * 1000, 1)
+    duration_ms = elapsed_ms(start)
     status = response.get("statusCode")
     # Exit severity mirrors the outcome, so monitoring keys off the exit line alone.
     level = (

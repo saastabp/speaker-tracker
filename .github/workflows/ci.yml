@@ -55,7 +55,7 @@ jobs:
         run: uv run pytest
 
   frontend:
-    name: frontend (tsc + build)
+    name: frontend (tsc + test + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +70,13 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run typecheck
+      # Runs in Donna's zone: the date bugs these guard against only appear at a negative UTC
+      # offset, so a UTC runner would go green on exactly the regression worth catching.
+      - name: Test
+        working-directory: frontend
+        run: npm test
+        env:
+          TZ: Pacific/Honolulu
       - name: Build (sandbox)
         working-directory: frontend
         run: npm run build:sandbox

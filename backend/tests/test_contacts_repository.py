@@ -8,7 +8,7 @@ power-partner flag (scoped to a contact↔venue edge, rolled up to the person in
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -16,9 +16,11 @@ from common import errors
 from models.contacts import AffiliationInput, AffiliationUpdate, ContactInput
 from models.follow_ups import FollowUpInput, FollowUpPatch
 from models.organizations import OrganizationInput
+from models.outreach import OutreachInput
 from repositories import contacts as contacts_repo
 from repositories import follow_ups as fu
 from repositories import organizations as orgs_repo
+from repositories import outreaches as out
 
 
 def _org(org_type: str, name: str) -> OrganizationInput:
@@ -315,3 +317,113 @@ def test_reminders_do_not_disturb_the_affiliation_counts(seeded_db) -> None:
     assert len(rows) == 1, "one contact, one row"
     assert rows[0]["organization_count"] == 2
     assert rows[0]["next_follow_up_date"] == date(2026, 9, 1)
+
+
+# --- the remaining approved list columns ---------------------------------------------------------
+
+
+def test_last_touch_is_the_most_recent_outreach(seeded_db) -> None:
+    """The column that gives `next_follow_up_date` its meaning: kept up, or drifting."""
+    conn, user_id, _, _ = seeded_db
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Kalei"))
+    assert contacts_repo.list_contacts(conn, user_id)[0]["last_touch_date"] is None
+
+    for day in (3, 9, 6):  # out of order — the newest wins, not the last written
+        out.create_outreach(
+            conn,
+            user_id,
+            OutreachInput(
+                contact_id=contact, channel="dm", occurred_at=datetime(2026, 7, day, 14, 30)
+            ),
+        )
+    assert contacts_repo.list_contacts(conn, user_id)[0]["last_touch_date"] == date(2026, 7, 9)
+
+
+def test_deleted_outreach_stops_counting_as_a_touch(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Kalei"))
+    kept = out.create_outreach(
+        conn,
+        user_id,
+        OutreachInput(contact_id=contact, channel="dm", occurred_at=datetime(2026, 7, 3, 9, 0)),
+    )
+    removed = out.create_outreach(
+        conn,
+        user_id,
+        OutreachInput(contact_id=contact, channel="dm", occurred_at=datetime(2026, 7, 9, 9, 0)),
+    )
+    out.soft_delete_outreach(conn, user_id, removed)
+    assert contacts_repo.list_contacts(conn, user_id)[0]["last_touch_date"] == date(2026, 7, 3)
+    assert kept  # the surviving touch is what the date came from
+
+
+def test_role_and_organization_prefer_the_primary_affiliation(seeded_db) -> None:
+    # A person wearing several hats shows one, and it must be the same one every refetch — a
+    # non-deterministic pick would make the row flicker between venues.
+    conn, user_id, org_type, _ = seeded_db
+    first = orgs_repo.create_organization(conn, user_id, _org(org_type, "BNI Kauai"))
+    second = orgs_repo.create_organization(conn, user_id, _org(org_type, "PWN Hawaii"))
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Pua"))
+    contacts_repo.add_affiliation(
+        conn, user_id, contact, AffiliationInput(organization_id=first, title="Chapter colleague")
+    )
+    contacts_repo.add_affiliation(
+        conn,
+        user_id,
+        contact,
+        AffiliationInput(organization_id=second, title="Member Liaison", is_primary=True),
+    )
+
+    row = contacts_repo.list_contacts(conn, user_id)[0]
+    assert row["primary_organization_name"] == "PWN Hawaii"
+    assert row["primary_title"] == "Member Liaison"
+    assert row["organization_count"] == 2  # the list renders the rest as "+N orgs"
+
+
+def test_role_and_organization_fall_back_to_the_oldest_affiliation(seeded_db) -> None:
+    # Nothing requires an affiliation to be flagged primary, so the fallback carries most rows.
+    conn, user_id, org_type, _ = seeded_db
+    first = orgs_repo.create_organization(conn, user_id, _org(org_type, "BNI Kauai"))
+    second = orgs_repo.create_organization(conn, user_id, _org(org_type, "PWN Hawaii"))
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Pua"))
+    contacts_repo.add_affiliation(
+        conn, user_id, contact, AffiliationInput(organization_id=first, title="Chapter colleague")
+    )
+    contacts_repo.add_affiliation(conn, user_id, contact, AffiliationInput(organization_id=second))
+
+    row = contacts_repo.list_contacts(conn, user_id)[0]
+    assert row["primary_organization_name"] == "BNI Kauai"
+    assert row["primary_title"] == "Chapter colleague"
+
+
+def test_unaffiliated_contact_still_lists(seeded_db) -> None:
+    # A person added before their venue is known is a normal early state, not an error row.
+    conn, user_id, _, _ = seeded_db
+    contacts_repo.create_contact(
+        conn, user_id, ContactInput(name="Kalei", source="Kindling Report")
+    )
+    row = contacts_repo.list_contacts(conn, user_id)[0]
+    assert row["primary_organization_name"] is None
+    assert row["primary_title"] is None
+    assert row["organization_count"] == 0
+    assert row["source"] == "Kindling Report"
+
+
+def test_retired_venue_does_not_supply_the_role_column(seeded_db) -> None:
+    # Role · Organization must agree with organization_count, which excludes deleted venues —
+    # otherwise the row names a venue beside a count that does not include it.
+    conn, user_id, org_type, _ = seeded_db
+    live = orgs_repo.create_organization(conn, user_id, _org(org_type, "PWN Hawaii"))
+    retired = orgs_repo.create_organization(conn, user_id, _org(org_type, "Old Venue"))
+    contact = contacts_repo.create_contact(conn, user_id, ContactInput(name="Pua"))
+    contacts_repo.add_affiliation(
+        conn, user_id, contact, AffiliationInput(organization_id=retired, title="Former host")
+    )
+    contacts_repo.add_affiliation(
+        conn, user_id, contact, AffiliationInput(organization_id=live, title="Member Liaison")
+    )
+    orgs_repo.soft_delete_organization(conn, user_id, retired)
+
+    row = contacts_repo.list_contacts(conn, user_id)[0]
+    assert row["primary_organization_name"] == "PWN Hawaii"
+    assert row["organization_count"] == 1

@@ -2,7 +2,7 @@ import { Alert, Anchor, Badge, Button, Card, Grid, Group, Loader, Stack, Text, T
 import { useDisclosure } from '@mantine/hooks';
 import { IconMessagePlus, IconPencil, IconTrash } from '@tabler/icons-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useCatalogs } from '../api/catalogs';
+import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { ApiError } from '../api/client';
 import { useDetachAffiliation, useEditAffiliation } from '../api/contacts';
 import {
@@ -17,19 +17,9 @@ import { CardTitle, KV } from '../components/detailCards';
 import { FollowUpsCard } from '../components/FollowUpsCard';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { VenueFormModal } from '../components/VenueFormModal';
+import { timestampDate } from '../dates';
 import { stageColor } from '../opportunityChips';
 import { orgTypeColor } from '../venueChips';
-
-type Catalog = { short_name: string; description: string }[] | undefined;
-const label = (list: Catalog, sn: string) =>
-  list?.find((c) => c.short_name === sn)?.description ?? sn;
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 /** One labelled block in the Kindling research panel. */
 function KindlingField({ label: k, value }: { label: string; value: string | null | undefined }) {
@@ -68,7 +58,7 @@ export function VenueDetail() {
   }
 
   const v = venue.data;
-  const typeLabel = label(catalogs.data?.organization_types, v.organization_type);
+  const typeLabel = catalogLabel(catalogs.data?.organization_types, v.organization_type);
   const venueOpps = (opportunities.data ?? []).filter((o) => o.organization_id === venueId);
 
   async function handleUpdate(values: OrganizationInput) {
@@ -171,7 +161,7 @@ export function VenueDetail() {
                       {o.title}
                     </Anchor>
                     <Badge color={stageColor(o.current_status)} variant="light">
-                      {label(catalogs.data?.opportunity_statuses, o.current_status)}
+                      {catalogLabel(catalogs.data?.opportunity_statuses, o.current_status)}
                     </Badge>
                   </Group>
                 ))}
@@ -231,7 +221,7 @@ export function VenueDetail() {
               <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px' }}>
                 <KV label="Type">{typeLabel}</KV>
                 <KV label="Location">{v.location?.trim() ? v.location : '—'}</KV>
-                <KV label="Added">{formatDate(v.created_at)}</KV>
+                <KV label="Added">{timestampDate(v.created_at)}</KV>
               </div>
             </Card>
           </Stack>
