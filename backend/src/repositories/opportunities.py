@@ -189,6 +189,9 @@ def list_opportunities(
     user_id: int,
     closed: bool | None = None,
     status: str | None = None,
+    entered: str | None = None,
+    entered_from: date | None = None,
+    entered_to: date | None = None,
 ) -> list[dict]:
     """Return the caller's opportunities as flat board / History rows.
 
@@ -206,7 +209,16 @@ def list_opportunities(
         ``None`` returns everything; ``False`` the active board (``closed_at IS NULL``); ``True``
         History (``closed_at IS NOT NULL``).
     status : str or None
-        Optional ``opportunity_statuses`` short_name filter.
+        Optional ``opportunity_statuses`` short_name filter on where the gig sits **now**.
+    entered : str or None
+        Optional ``opportunity_statuses`` short_name: keep only gigs that **entered** this status,
+        i.e. have a ``status_events`` row for it. Historical, so it still matches a gig that has
+        since moved on or fallen out — unlike ``status``, which is where it sits today.
+    entered_from, entered_to : datetime.date or None
+        Window for ``entered``, ``[from, to)``. Ignored when ``entered`` is None. This is what lets
+        a target tile open the records behind it: ``repositories.dashboard._actual_for`` counts
+        distinct gigs with such an event in the period, and this filter is that query's ``WHERE``,
+        so the list and the tile agree by construction rather than by coincidence.
 
     Returns
     -------
@@ -222,6 +234,20 @@ def list_opportunities(
     if status is not None:
         sql += "AND st.short_name = %s "
         params.append(status)
+    if entered is not None:
+        sql += (
+            "AND EXISTS (SELECT 1 FROM status_events e "
+            "  JOIN opportunity_statuses es ON es.id = e.status_id "
+            "  WHERE e.opportunity_id = o.id AND es.short_name = %s "
+        )
+        params.append(entered)
+        if entered_from is not None:
+            sql += "AND e.occurred_at >= %s "
+            params.append(entered_from)
+        if entered_to is not None:
+            sql += "AND e.occurred_at < %s "
+            params.append(entered_to)
+        sql += ") "
     sql += "ORDER BY (o.event_date IS NULL), o.event_date, o.created_at"
     with conn.cursor() as cur:
         cur.execute(sql, tuple(params))

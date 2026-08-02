@@ -113,16 +113,35 @@ def target_actuals(conn: Connection, user_id: int, now_local: datetime) -> list[
                 "cadence": t["cadence"],
                 "goal": t["goal_count"],
                 "actual": _actual_for(conn, user_id, t["target_type"], start, end),
+                # The same bounds the actual was counted over, so the tile's drill-down asks the
+                # list for exactly the window the number came from.
+                "period_start": start.date(),
+                "period_end": end.date(),
             }
         )
     return tiles
 
 
 def funnel_counts(conn: Connection, user_id: int) -> list[dict]:
-    """Return reached-or-beyond distinct-gig counts for the four funnel stages (all present)."""
+    """Return per-stage funnel counts: reached-or-beyond, and how many sit there now.
+
+    Two numbers because they answer different questions and the card shows both. ``count`` is
+    reached-or-beyond, which is what makes the stage-to-stage percentages a funnel — each stage is
+    a subset of the one above. ``current`` is how many gigs are parked at that stage today.
+
+    The gap between them is the useful part: 5 ever reached Pitched and 1 is still sitting there
+    means four moved on or fell out. ``current`` is also what the card links to, so that clicking a
+    number opens a list of exactly that many gigs — the reached count narrows monotonically, so
+    linking *it* made the first stage a filter that matched everything.
+    """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT fs.short_name AS status, COUNT(DISTINCT reach.opportunity_id) AS count "
+            "SELECT fs.short_name AS status, COUNT(DISTINCT reach.opportunity_id) AS count, "
+            # Correlated rather than another LEFT JOIN: joining a second per-gig set against the
+            # reach set would multiply rows and quietly inflate the COUNT(DISTINCT) beside it.
+            "  (SELECT COUNT(*) FROM opportunities o "
+            "    WHERE o.user_id = %s AND o.deleted_at IS NULL "
+            "      AND o.current_status_id = fs.id) AS current "
             "FROM opportunity_statuses fs "
             "LEFT JOIN ("
             "  SELECT e.opportunity_id, MAX(s.sort_order) AS max_sort "
@@ -130,10 +149,13 @@ def funnel_counts(conn: Connection, user_id: int) -> list[dict]:
             "  WHERE e.user_id = %s GROUP BY e.opportunity_id"
             ") reach ON reach.max_sort >= fs.sort_order "
             "WHERE fs.short_name IN %s AND fs.deleted_at IS NULL "
-            "GROUP BY fs.short_name, fs.sort_order ORDER BY fs.sort_order",
-            (user_id, _FUNNEL_STAGES),
+            "GROUP BY fs.short_name, fs.sort_order, fs.id ORDER BY fs.sort_order",
+            (user_id, user_id, _FUNNEL_STAGES),
         )
-        return [{"status": r["status"], "count": int(r["count"])} for r in cur.fetchall()]
+        return [
+            {"status": r["status"], "count": int(r["count"]), "current": int(r["current"])}
+            for r in cur.fetchall()
+        ]
 
 
 def money_rollup(conn: Connection, user_id: int) -> dict:

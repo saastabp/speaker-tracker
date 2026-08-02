@@ -107,18 +107,34 @@ const MONEY_LINKS = {
 } as const;
 
 /**
- * Target tiles → the records counted toward them. Absent means **deliberately not linked**.
+ * Target tiles → the records counted toward them, using the tile's own window.
  *
- * Only `venues_researched` is a current-state count, so only it can be reproduced by a filter the
- * lists have today. `pitches` and `bookings` count status events *within the period* and
- * `outreaches` counts touches within it — none of the lists can express a period window, and
- * `outreaches` has no list page at all. Linking them to an all-time view would open a list of a
- * different size from the number clicked, which is the one thing this feature exists to avoid.
- * They light up when windowed metrics ship.
+ * The tile already knows the period its number was counted over — the server sends it — so the
+ * link just passes it through as the list's date range. That is the same shape a date-range picker
+ * would produce later; nothing here waits on windowed metrics.
+ *
+ * `outreaches` returns undefined and is **deliberately not linked**: it counts logged touches, and
+ * there is no outreaches list page to open. That is a missing destination, not a missing filter,
+ * and pointing it at Emails would be wrong — a touch can be a DM or a call, and Emails lists
+ * threads rather than touches.
  */
-const TARGET_LINKS: Record<string, string | undefined> = {
-  venues_researched: '/venues?ready=1',
-};
+function targetHref(tile: TargetTileData): string | undefined {
+  // Current-state, not windowed: how many venues are research-ready *now*. Needs no window.
+  if (tile.target_type === 'venues_researched') {
+    return '/venues?ready=1';
+  }
+  const entered = { pitches: 'pitched', bookings: 'booked' }[tile.target_type];
+  // No window, no link. Against a backend that predates these fields they are undefined, and
+  // interpolating that gives `entered_from=undefined`, which the API rejects as a malformed date —
+  // so the tile would look clickable and 400 on arrival. Better not to offer the link.
+  if (!entered || !tile.period_start || !tile.period_end) {
+    return undefined;
+  }
+  return (
+    `/pipeline?entered=${entered}` +
+    `&entered_from=${tile.period_start}&entered_to=${tile.period_end}&closed=all`
+  );
+}
 
 /** Funnel bar opacity per stage — fades as reach narrows (mockup `.fstep` opacities). */
 const FUNNEL_OPACITY = [0.92, 0.75, 0.58, 0.42, 0.34];
@@ -146,7 +162,7 @@ function TargetTile({ tile, label }: { tile: TargetTileData; label: string }) {
   const pct = tile.goal > 0 ? Math.min(100, Math.round((tile.actual / tile.goal) * 100)) : 0;
   const met = tile.goal > 0 && tile.actual >= tile.goal;
   const period = PERIOD_WORD[tile.cadence] ?? tile.cadence;
-  const href = TARGET_LINKS[tile.target_type];
+  const href = targetHref(tile);
   const card = (
     <Card withBorder radius="md" padding="md" h="100%" style={{ borderColor: BRAND_LINE }}>
       <Text tt="uppercase" fw={700} c="navy.6" style={{ fontSize: 11, letterSpacing: '0.05em' }}>
@@ -379,12 +395,14 @@ export function Dashboard() {
                   const prev = i > 0 ? d.funnel[i - 1].count : null;
                   const pct = prev && prev > 0 ? Math.round((f.count / prev) * 100) : null;
                   return (
-                    // The whole row is the target, not just the label — the bar and the count are
-                    // the parts you actually look at, so they should be the parts you can hit.
+                    // Links to `status`, not `reached`. The bar's length is reached-or-beyond, but
+                    // that set only ever narrows, so linking it made the first stage a filter
+                    // matching everything. `current` is the actionable set and the number sitting
+                    // right beside the click.
                     <Anchor
                       key={f.status}
                       component={Link}
-                      to={`/pipeline?reached=${f.status}&closed=all`}
+                      to={`/pipeline?status=${f.status}&closed=all`}
                       underline="never"
                       c="inherit"
                     >
@@ -411,14 +429,24 @@ export function Dashboard() {
                             }}
                           />
                         </div>
-                        <Text size="sm" fw={600} w={64} ta="right" style={{ flexShrink: 0 }}>
-                          {f.count}
-                          {pct !== null && (
-                            <Text span size="xs" c="dimmed" fw={400}>
-                              {' · '}
-                              {pct}%
-                            </Text>
-                          )}
+                        {/* "5 reached · 1 now": the reach count carries the funnel maths, the
+                            current count is what the row opens. Both are shown because the
+                            difference between them is the drop-off, which is the thing worth
+                            noticing and is not visible anywhere else. */}
+                        <Text size="sm" w={116} ta="right" style={{ flexShrink: 0 }}>
+                          <Text span fw={600}>
+                            {f.count}
+                          </Text>
+                          <Text span size="xs" c="dimmed" fw={400}>
+                            {' reached'}
+                            {pct !== null && ` · ${pct}%`}
+                          </Text>
+                        </Text>
+                        <Text size="sm" fw={600} w={52} ta="right" style={{ flexShrink: 0 }}>
+                          {f.current}
+                          <Text span size="xs" c="dimmed" fw={400}>
+                            {' now'}
+                          </Text>
                         </Text>
                       </Group>
                     </Anchor>

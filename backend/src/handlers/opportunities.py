@@ -19,7 +19,7 @@ from common.logger import logger
 from core.funnel import Stage, build_funnel
 from handlers.context import authenticate
 from handlers.follow_ups import create_rider_follow_up, schedule_new_follow_up
-from handlers.params import path_int
+from handlers.params import path_int, query_date
 from handlers.responses import opportunity_response
 from models.funnel import FunnelStage
 from models.opportunities import (
@@ -72,14 +72,30 @@ def list_opportunities() -> dict:
 
     ``?closed=true`` returns History, ``?closed=false`` the active board, omitted returns both;
     ``?status=<short_name>`` filters to one stage.
+
+    ``?entered=<short_name>`` with optional ``?entered_from=`` / ``?entered_to=`` (ISO dates,
+    ``[from, to)``) keeps gigs that entered that status in the window. It is what a Dashboard target
+    tile opens: the tile counts distinct gigs with such an event in its period, and this filter runs
+    the same predicate, so the list is the same size as the number that was clicked. A malformed
+    date is rejected rather than dropped — silently widening the window would show a list that
+    disagrees with the tile and give no clue why.
     """
     request = authenticate(router.current_event.raw_event)
     params = router.current_event.query_string_parameters or {}
     closed_raw = params.get("closed")
     closed = None if closed_raw is None else closed_raw.lower() in _TRUTHY
     status = params.get("status")
+    entered = params.get("entered")
+    entered_from = query_date(params.get("entered_from"), "entered_from")
+    entered_to = query_date(params.get("entered_to"), "entered_to")
     rows = opps_repo.list_opportunities(
-        request.connection, request.user_id, closed=closed, status=status
+        request.connection,
+        request.user_id,
+        closed=closed,
+        status=status,
+        entered=entered,
+        entered_from=entered_from,
+        entered_to=entered_to,
     )
     summaries = [OpportunitySummary(**row) for row in rows]
     return {"opportunities": [s.model_dump(mode="json") for s in summaries]}

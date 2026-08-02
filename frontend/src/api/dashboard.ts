@@ -11,11 +11,21 @@ export interface TargetTile {
   cadence: Cadence;
   goal: number;
   actual: number;
+  /** The window `actual` was counted over, `[start, end)`. Sent by the server rather than derived
+   *  here: the period maths (Sunday-start weeks, quarter edges) lives in `core/periods.py`, and
+   *  recomputing it in TS would be the same rules written twice. The tile's link hands these
+   *  straight to the list, which is the shape a date-range picker would produce later too. */
+  period_start: string;
+  period_end: string;
 }
 
 export interface FunnelCount {
   status: string; // opportunity_statuses short_name
+  /** Reached-or-beyond — drives the conversion percentages, and narrows monotonically. */
   count: number;
+  /** Gigs sitting at this stage today. What the row links to, so the number clicked and the list
+   *  opened are the same size; the gap against `count` is the stage's drop-off. */
+  current: number;
 }
 
 export interface MoneyRollup {

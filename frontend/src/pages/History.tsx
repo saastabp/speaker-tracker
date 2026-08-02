@@ -44,7 +44,7 @@ function csvCell(v: string): string {
 }
 
 export function History() {
-  const history = useOpportunities(true);
+  const history = useOpportunities({ closed: true });
   const catalogs = useCatalogs();
   const navigate = useNavigate();
   // Filter state lives in the URL — see `useFilterParams`.

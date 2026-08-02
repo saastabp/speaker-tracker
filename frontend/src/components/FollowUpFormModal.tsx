@@ -48,7 +48,7 @@ export function FollowUpFormModal({
   opportunityId,
 }: FollowUpFormModalProps) {
   const contacts = useContacts();
-  const opportunities = useOpportunities(false);
+  const opportunities = useOpportunities({ closed: false });
   const create = useCreateFollowUp();
   const patch = usePatchFollowUp();
 

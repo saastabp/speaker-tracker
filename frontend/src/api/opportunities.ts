@@ -115,30 +115,54 @@ export interface OpportunityNoteInput {
   occurred_at?: string | null;
 }
 
+/**
+ * Server-side filters for the board/History list.
+ *
+ * `status` is where a gig sits now; `entered` is a status it has *ever* been through, optionally
+ * bounded by `[enteredFrom, enteredTo)`. The second is what a Dashboard target tile opens, and it
+ * has to be server-side: the summary payload carries no status-event dates, so the SPA could not
+ * work it out from what it already has.
+ */
+export interface OpportunityFilters {
+  closed?: boolean;
+  status?: string;
+  entered?: string;
+  enteredFrom?: string;
+  enteredTo?: string;
+}
+
 const opportunityKeys = {
   all: ['opportunities'] as const,
   lists: () => ['opportunities', 'list'] as const,
-  list: (closed?: boolean, status?: string) =>
-    ['opportunities', 'list', { closed: closed ?? null, status: status ?? null }] as const,
+  // The whole filter set is the cache key: two different windows are two different lists, and
+  // keying on only part of it would serve one period's gigs under another's.
+  list: (filters: OpportunityFilters) => ['opportunities', 'list', filters] as const,
   detail: (id: number) => ['opportunities', id] as const,
 };
 
-/** List opportunities as flat board / History cards. ``closed`` omitted returns both; ``false``
- *  the active board (closed_at IS NULL); ``true`` History. ``status`` filters to one stage. */
+/** List opportunities as flat board / History cards. `closed` omitted returns both; `false` the
+ *  active board (closed_at IS NULL); `true` History. See {@link OpportunityFilters}. */
 export function useOpportunities(
-  closed?: boolean,
-  status?: string,
+  filters: OpportunityFilters = {},
 ): UseQueryResult<OpportunitySummary[]> {
   const api = useApi();
+  const { closed, status, entered, enteredFrom, enteredTo } = filters;
   return useQuery({
-    queryKey: opportunityKeys.list(closed, status),
+    queryKey: opportunityKeys.list(filters),
     queryFn: async () => {
       const params = new URLSearchParams();
       if (closed !== undefined) params.set('closed', String(closed));
       if (status) params.set('status', status);
+      if (entered) {
+        params.set('entered', entered);
+        // Only meaningful alongside `entered`, and the server ignores them without it.
+        if (enteredFrom) params.set('entered_from', enteredFrom);
+        if (enteredTo) params.set('entered_to', enteredTo);
+      }
       const qs = params.toString();
-      return (await api<{ opportunities: OpportunitySummary[] }>(`/opportunities${qs ? `?${qs}` : ''}`))
-        .opportunities;
+      return (
+        await api<{ opportunities: OpportunitySummary[] }>(`/opportunities${qs ? `?${qs}` : ''}`)
+      ).opportunities;
     },
   });
 }

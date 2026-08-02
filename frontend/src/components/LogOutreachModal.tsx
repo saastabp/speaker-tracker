@@ -44,7 +44,7 @@ export function LogOutreachModal({
 }: LogOutreachModalProps) {
   const catalogs = useCatalogs();
   const contacts = useContacts();
-  const opportunities = useOpportunities(false);
+  const opportunities = useOpportunities({ closed: false });
   const create = useCreateOutreach();
 
   const locked = contactId != null;

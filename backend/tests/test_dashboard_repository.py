@@ -107,7 +107,17 @@ def test_outreaches_actual_counts_only_counting_kinds_in_window(seeded_db) -> No
     )
     tiles = dashboard.target_actuals(conn, user_id, now)
     tile = next(t for t in tiles if t["target_type"] == "outreaches")
-    assert tile == {"target_type": "outreaches", "cadence": "weekly", "goal": 5, "actual": 1}
+    # The window travels with the tile so its drill-down can ask the list for exactly the period
+    # the number was counted over. Sunday-start week, end exclusive — the same bounds that put the
+    # Jul 10 touch above out of scope.
+    assert tile == {
+        "target_type": "outreaches",
+        "cadence": "weekly",
+        "goal": 5,
+        "actual": 1,
+        "period_start": date(2026, 7, 19),
+        "period_end": date(2026, 7, 26),
+    }
 
 
 def test_actuals_bucket_in_user_timezone(seeded_db) -> None:
@@ -160,13 +170,24 @@ def test_funnel_is_reached_or_beyond(seeded_db) -> None:
     )  # jumped straight to Pitched (no outreach_sent event)
     b = _opp(conn, user_id, org)
     opp.patch_status(conn, user_id, b, "booked")
-    counts = {r["status"]: r["count"] for r in dashboard.funnel_counts(conn, user_id)}
+    rows = dashboard.funnel_counts(conn, user_id)
+    counts = {r["status"]: r["count"] for r in rows}
     # All five stages present; a gig that jumped to Pitched still counts toward Outreach Sent (#3).
     # `delivered` is the display-only final row (neither gig reached it).
     assert counts == {
         "outreach_sent": 2,
         "in_conversation": 2,
         "pitched": 2,
+        "booked": 1,
+        "delivered": 0,
+    }
+    # `current` is where each gig sits *now*, so it does not accumulate down the funnel: one gig is
+    # parked at Pitched and one at Booked, and neither is counted at the stages it passed through.
+    # This is the number the card links to, precisely because it is not monotonic.
+    assert {r["status"]: r["current"] for r in rows} == {
+        "outreach_sent": 0,
+        "in_conversation": 0,
+        "pitched": 1,
         "booked": 1,
         "delivered": 0,
     }

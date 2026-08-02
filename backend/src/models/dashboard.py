@@ -33,13 +33,28 @@ class TargetTile(BaseModel):
     cadence: Cadence
     goal: int
     actual: int
+    #: The window ``actual`` was counted over, ``[period_start, period_end)`` as local dates.
+    #:
+    #: Sent rather than left for the client to re-derive: the period maths lives in
+    #: ``core.periods`` (Sunday-start weeks, quarter boundaries), and having the SPA recompute it
+    #: would be that logic written twice in two languages, drifting the first time one changed.
+    #: The tile's drill-down hands these straight to the list as its date range, which is the same
+    #: shape a date-range picker would produce later.
+    period_start: date
+    period_end: date
 
 
 class FunnelCount(BaseModel):
-    """A reached-or-beyond count for one funnel ratio stage (outreach_sent → … → booked)."""
+    """Both counts for one funnel stage: how many ever reached it, and how many are there now.
+
+    ``count`` is reached-or-beyond and drives the conversion percentages; ``current`` is where gigs
+    sit today and is what the card links to, so the number clicked and the list opened agree. The
+    difference between them is the stage's drop-off.
+    """
 
     status: str  # opportunity_statuses short_name
     count: int
+    current: int
 
 
 class MoneyRollup(BaseModel):

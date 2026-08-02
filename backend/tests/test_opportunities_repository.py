@@ -9,7 +9,7 @@ writing a terminal event *and* a reason note (#8).
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -198,6 +198,45 @@ def test_list_reports_the_high_water_mark_not_the_current_stage(pipeline_db) -> 
     # included — which is why the funnel drill-down link has to ask for closed gigs too.
     open_titles = {r["title"] for r in opp.list_opportunities(conn, user_id, closed=False)}
     assert "Fell through" not in open_titles
+
+
+def test_entered_filter_is_historical_and_window_bounded(pipeline_db) -> None:
+    """`entered` asks what a gig *did*, `status` asks where it is — a target tile needs the first.
+
+    A gig pitched inside the period and since moved on still counts toward "pitches sent" for that
+    period, so the list behind the tile has to match it on history rather than current stage.
+    """
+    conn, user_id, ids = pipeline_db
+    moved_on = opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Pitched then booked"))
+    opp.patch_status(conn, user_id, moved_on, "pitched")
+    opp.patch_status(conn, user_id, moved_on, "booked")
+    still_there = opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Still pitched"))
+    opp.patch_status(conn, user_id, still_there, "pitched")
+    opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Never pitched"))
+
+    entered = {r["title"] for r in opp.list_opportunities(conn, user_id, entered="pitched")}
+    assert entered == {"Pitched then booked", "Still pitched"}
+    # `status` sees only the one that stayed — the distinction the tile depends on.
+    current = {r["title"] for r in opp.list_opportunities(conn, user_id, status="pitched")}
+    assert current == {"Still pitched"}
+
+
+def test_entered_window_excludes_events_outside_it(pipeline_db) -> None:
+    conn, user_id, ids = pipeline_db
+    oid = opp.create_opportunity(conn, user_id, _opp(ids["org"], title="Pitched today"))
+    opp.patch_status(conn, user_id, oid, "pitched")
+    with conn.cursor() as cur:
+        cur.execute("SELECT CURRENT_DATE AS today")
+        today = cur.fetchone()["today"]
+    day = timedelta(days=1)
+
+    def titles(**kw):
+        return {r["title"] for r in opp.list_opportunities(conn, user_id, entered="pitched", **kw)}
+
+    assert titles(entered_from=today, entered_to=today + day) == {"Pitched today"}
+    # `to` is exclusive, so a window ending today excludes an event that happened today.
+    assert titles(entered_from=today - day, entered_to=today) == set()
+    assert titles(entered_from=today + day) == set()
 
 
 def test_list_orders_dated_before_undated(pipeline_db) -> None:

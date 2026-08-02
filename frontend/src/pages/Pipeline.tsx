@@ -61,9 +61,18 @@ const PAY_FILTERS: Record<string, string> = {
   received: 'paid',
 };
 
-/** Sentinel value for the pill that displays (and clears) an active `?status=` filter. Not a
- *  catalog short_name, so it cannot collide with a real one. */
+/** Sentinel values for the pills that display (and clear) the two link-driven filters. Not catalog
+ *  short_names, so they cannot collide with a real one. */
 const STATUS_PILL = '__status__';
+const ENTERED_PILL = '__entered__';
+
+/** "Jul 26 – Aug 1" for a half-open `[from, to)` window, so the pill shows the last day actually
+ *  included rather than the exclusive bound, which reads as a day too many. */
+function windowLabel(from: string, to: string): string {
+  const lastDay = parseDateLocal(to);
+  lastDay.setDate(lastDay.getDate() - 1);
+  return `${shortDate(parseDateLocal(from))} – ${shortDate(lastDay)}`;
+}
 
 interface CardLabels {
   paymentLabel: (shortName: string) => string;
@@ -331,7 +340,18 @@ export function Pipeline() {
   // sits *now* — a booked gig that was later cancelled is in the first and not the second.
   const statuses = params.get('status').split(',').filter(Boolean);
   const showClosed = params.has('closed', 'all');
-  const opps = useOpportunities(showClosed ? undefined : false);
+  // `entered` is the one filter applied server-side rather than here: it asks which gigs have a
+  // status *event* in a window, and the card payload carries no event dates to check against.
+  // It is what a Dashboard target tile opens.
+  const entered = params.get('entered');
+  const enteredFrom = params.get('entered_from');
+  const enteredTo = params.get('entered_to');
+  const opps = useOpportunities({
+    closed: showClosed ? undefined : false,
+    entered: entered || undefined,
+    enteredFrom: enteredFrom || undefined,
+    enteredTo: enteredTo || undefined,
+  });
   const patchStatus = usePatchStatus();
   const createOpp = useCreateOpportunity();
   const navigate = useNavigate();
@@ -394,7 +414,7 @@ export function Pipeline() {
 
   const all = opps.data ?? [];
   const visible = all.filter(matches);
-  const isFiltered = Boolean(term || reached || comp || pay || statuses.length);
+  const isFiltered = Boolean(term || reached || comp || pay || statuses.length || entered);
 
   const byStatus = (shortName: string) =>
     visible.filter((o) => o.current_status === shortName && !o.closed_at);
@@ -423,9 +443,26 @@ export function Pipeline() {
           },
         ]
       : []),
+    // Same reasoning as the status pill, and more necessary: `entered` is filtered server-side, so
+    // without this the board simply returns fewer cards with nothing on screen accounting for it.
+    ...(entered
+      ? [
+          {
+            value: ENTERED_PILL,
+            label: `Entered ${catalogLabel(catalogs.data?.opportunity_statuses, entered)}${
+              enteredFrom && enteredTo ? ` · ${windowLabel(enteredFrom, enteredTo)}` : ''
+            }`,
+            active: true,
+          },
+        ]
+      : []),
   ];
   function handlePill(value: string) {
-    if (value === STATUS_PILL) params.set('status', '');
+    if (value === ENTERED_PILL) {
+      params.set('entered', '');
+      params.set('entered_from', '');
+      params.set('entered_to', '');
+    } else if (value === STATUS_PILL) params.set('status', '');
     else if (value in PAY_FILTERS) params.toggle('pay', value);
     else params.toggle('comp', value);
   }
