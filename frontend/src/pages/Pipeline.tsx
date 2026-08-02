@@ -50,6 +50,21 @@ import { useFilterParams } from '../urlFilters';
 
 const COLUMN_WIDTH = 264;
 
+/** `?pay=` values → the `payment_statuses` short_name each one means.
+ *
+ *  Named rather than passed through so the URL says what the *reader* means ("outstanding") while
+ *  the predicate stays pinned to the exact status the Dashboard's money figures count. Both are
+ *  scoped to paid gigs, matching `money_rollup`: a pro bono gig is settled by definition and must
+ *  not appear under either. */
+const PAY_FILTERS: Record<string, string> = {
+  outstanding: 'invoiced',
+  received: 'paid',
+};
+
+/** Sentinel value for the pill that displays (and clears) an active `?status=` filter. Not a
+ *  catalog short_name, so it cannot collide with a real one. */
+const STATUS_PILL = '__status__';
+
 interface CardLabels {
   paymentLabel: (shortName: string) => string;
   paymentSettled: (shortName: string) => boolean;
@@ -311,6 +326,10 @@ export function Pipeline() {
   const reached = params.get('reached');
   const comp = params.get('comp');
   const pay = params.get('pay');
+  // Current status, comma-separated. Distinct from `reached`, and both are needed: the funnel
+  // counts a gig by the furthest stage it ever hit, while the money figures count it by where it
+  // sits *now* — a booked gig that was later cancelled is in the first and not the second.
+  const statuses = params.get('status').split(',').filter(Boolean);
   const showClosed = params.has('closed', 'all');
   const opps = useOpportunities(showClosed ? undefined : false);
   const patchStatus = usePatchStatus();
@@ -366,7 +385,8 @@ export function Pipeline() {
   const matches = (o: OpportunitySummary) =>
     matchesReach(o) &&
     (!comp || o.comp_type === comp) &&
-    (pay !== 'outstanding' || (o.comp_type === 'paid' && o.payment_status === 'invoiced')) &&
+    (!pay || (o.comp_type === 'paid' && o.payment_status === PAY_FILTERS[pay])) &&
+    (!statuses.length || statuses.includes(o.current_status)) &&
     (!term ||
       o.title.toLowerCase().includes(term) ||
       (o.talk_title ?? '').toLowerCase().includes(term) ||
@@ -374,7 +394,7 @@ export function Pipeline() {
 
   const all = opps.data ?? [];
   const visible = all.filter(matches);
-  const isFiltered = Boolean(term || reached || comp || pay);
+  const isFiltered = Boolean(term || reached || comp || pay || statuses.length);
 
   const byStatus = (shortName: string) =>
     visible.filter((o) => o.current_status === shortName && !o.closed_at);
@@ -389,9 +409,24 @@ export function Pipeline() {
     { value: 'paid', label: 'Paid', active: comp === 'paid' },
     { value: 'pro_bono', label: 'Pro bono', active: comp === 'pro_bono' },
     { value: 'outstanding', label: 'Outstanding', active: pay === 'outstanding' },
+    { value: 'received', label: 'Received', active: pay === 'received' },
+    // `status` has no permanent control — it arrives from a Dashboard link rather than being set
+    // here. It still needs to be *visible*: a filter that silently empties four columns leaves the
+    // reader unable to tell why, or to undo it. So it shows as a pill only while it is on, and
+    // clicking clears it.
+    ...(statuses.length
+      ? [
+          {
+            value: STATUS_PILL,
+            label: `${statuses.map((s) => catalogLabel(catalogs.data?.opportunity_statuses, s)).join(' + ')} only`,
+            active: true,
+          },
+        ]
+      : []),
   ];
   function handlePill(value: string) {
-    if (value === 'outstanding') params.toggle('pay', 'outstanding');
+    if (value === STATUS_PILL) params.set('status', '');
+    else if (value in PAY_FILTERS) params.toggle('pay', value);
     else params.toggle('comp', value);
   }
 

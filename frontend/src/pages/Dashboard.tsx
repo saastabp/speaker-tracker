@@ -89,6 +89,37 @@ function needsAttentionHref(n: NeedsAttentionItem): string {
   }
 }
 
+// Where each aggregate opens. Kept together so the link and the SQL it has to agree with can be
+// audited side by side — the whole point of the drill-down is that the list you land on is the
+// same size as the number you clicked.
+//
+// **`closed=all` on every gig link is load-bearing.** None of these aggregates stop at the open
+// board: `funnel_counts` counts a gig by the furthest stage it ever reached, and `money_rollup`
+// counts a delivered-and-paid gig that has already closed. Without it each list comes up short.
+
+/** Money figures → the gigs behind them, mirroring `repositories.dashboard.money_rollup`. */
+const MONEY_LINKS = {
+  // `st.short_name IN ('booked','delivered')` — where the gig sits *now*, not how far it got.
+  booked: '/pipeline?comp=paid&status=booked,delivered&closed=all',
+  received: '/pipeline?pay=received&closed=all',
+  outstanding: '/pipeline?pay=outstanding&closed=all',
+  proBono: '/pipeline?comp=pro_bono&status=booked,delivered&closed=all',
+} as const;
+
+/**
+ * Target tiles → the records counted toward them. Absent means **deliberately not linked**.
+ *
+ * Only `venues_researched` is a current-state count, so only it can be reproduced by a filter the
+ * lists have today. `pitches` and `bookings` count status events *within the period* and
+ * `outreaches` counts touches within it — none of the lists can express a period window, and
+ * `outreaches` has no list page at all. Linking them to an all-time view would open a list of a
+ * different size from the number clicked, which is the one thing this feature exists to avoid.
+ * They light up when windowed metrics ship.
+ */
+const TARGET_LINKS: Record<string, string | undefined> = {
+  venues_researched: '/venues?ready=1',
+};
+
 /** Funnel bar opacity per stage — fades as reach narrows (mockup `.fstep` opacities). */
 const FUNNEL_OPACITY = [0.92, 0.75, 0.58, 0.42, 0.34];
 
@@ -115,8 +146,9 @@ function TargetTile({ tile, label }: { tile: TargetTileData; label: string }) {
   const pct = tile.goal > 0 ? Math.min(100, Math.round((tile.actual / tile.goal) * 100)) : 0;
   const met = tile.goal > 0 && tile.actual >= tile.goal;
   const period = PERIOD_WORD[tile.cadence] ?? tile.cadence;
-  return (
-    <Card withBorder radius="md" padding="md" style={{ borderColor: BRAND_LINE }}>
+  const href = TARGET_LINKS[tile.target_type];
+  const card = (
+    <Card withBorder radius="md" padding="md" h="100%" style={{ borderColor: BRAND_LINE }}>
       <Text tt="uppercase" fw={700} c="navy.6" style={{ fontSize: 11, letterSpacing: '0.05em' }}>
         {label}
       </Text>
@@ -137,22 +169,33 @@ function TargetTile({ tile, label }: { tile: TargetTileData; label: string }) {
       </Group>
     </Card>
   );
+  // Tiles whose actual cannot be reproduced by a filter stay unlinked — see TARGET_LINKS.
+  if (!href) {
+    return card;
+  }
+  return (
+    <Anchor component={Link} to={href} underline="never" c="inherit" display="block" h="100%">
+      {card}
+    </Anchor>
+  );
 }
 
-/** One money-card figure with its supporting gig sub-count. */
+/** One money-card figure with its supporting gig sub-count, opening the gigs behind it. */
 function MoneyStat({
   label,
   value,
   sub,
   color,
+  href,
 }: {
   label: string;
   value: string;
   sub: string;
   color?: string;
+  href?: string;
 }) {
-  return (
-    <div>
+  const body = (
+    <>
       <Text size="xs" c="dimmed">
         {label}
       </Text>
@@ -162,7 +205,18 @@ function MoneyStat({
       <Text size="xs" c="dimmed">
         {sub}
       </Text>
-    </div>
+    </>
+  );
+  // Figures with no filter that reproduces them stay plain text rather than linking somewhere
+  // approximate — a number that opens a list of a different size is worse than one that does not
+  // open at all.
+  if (!href) {
+    return <div>{body}</div>;
+  }
+  return (
+    <Anchor component={Link} to={href} underline="never" c="inherit">
+      {body}
+    </Anchor>
   );
 }
 
@@ -325,39 +379,49 @@ export function Dashboard() {
                   const prev = i > 0 ? d.funnel[i - 1].count : null;
                   const pct = prev && prev > 0 ? Math.round((f.count / prev) * 100) : null;
                   return (
-                    <Group key={f.status} gap="sm" wrap="nowrap">
-                      <Text size="sm" w={140} style={{ flexShrink: 0 }}>
-                        {catalogLabel(catalogs.data?.opportunity_statuses, f.status)}
-                      </Text>
-                      <div
-                        style={{
-                          flex: 1,
-                          height: 20,
-                          background: 'var(--mantine-color-gray-1)',
-                          borderRadius: 8,
-                        }}
-                      >
+                    // The whole row is the target, not just the label — the bar and the count are
+                    // the parts you actually look at, so they should be the parts you can hit.
+                    <Anchor
+                      key={f.status}
+                      component={Link}
+                      to={`/pipeline?reached=${f.status}&closed=all`}
+                      underline="never"
+                      c="inherit"
+                    >
+                      <Group gap="sm" wrap="nowrap">
+                        <Text size="sm" w={140} style={{ flexShrink: 0 }}>
+                          {catalogLabel(catalogs.data?.opportunity_statuses, f.status)}
+                        </Text>
                         <div
                           style={{
-                            width: `${(f.count / funnelMax) * 100}%`,
-                            minWidth: f.count > 0 ? 4 : 0,
-                            height: '100%',
-                            background: 'var(--mantine-color-terracotta-6)',
-                            opacity: FUNNEL_OPACITY[i] ?? 0.34,
+                            flex: 1,
+                            height: 20,
+                            background: 'var(--mantine-color-gray-1)',
                             borderRadius: 8,
                           }}
-                        />
-                      </div>
-                      <Text size="sm" fw={600} w={64} ta="right" style={{ flexShrink: 0 }}>
-                        {f.count}
-                        {pct !== null && (
-                          <Text span size="xs" c="dimmed" fw={400}>
-                            {' · '}
-                            {pct}%
-                          </Text>
-                        )}
-                      </Text>
-                    </Group>
+                        >
+                          <div
+                            style={{
+                              width: `${(f.count / funnelMax) * 100}%`,
+                              minWidth: f.count > 0 ? 4 : 0,
+                              height: '100%',
+                              background: 'var(--mantine-color-terracotta-6)',
+                              opacity: FUNNEL_OPACITY[i] ?? 0.34,
+                              borderRadius: 8,
+                            }}
+                          />
+                        </div>
+                        <Text size="sm" fw={600} w={64} ta="right" style={{ flexShrink: 0 }}>
+                          {f.count}
+                          {pct !== null && (
+                            <Text span size="xs" c="dimmed" fw={400}>
+                              {' · '}
+                              {pct}%
+                            </Text>
+                          )}
+                        </Text>
+                      </Group>
+                    </Anchor>
                   );
                 })}
               </Stack>
@@ -372,23 +436,27 @@ export function Dashboard() {
                   label="Booked"
                   value={formatMoney(money.booked, money.currency) ?? '—'}
                   sub={`${money.booked_count} paid ${money.booked_count === 1 ? 'gig' : 'gigs'}`}
+                  href={MONEY_LINKS.booked}
                 />
                 <MoneyStat
                   label="Received"
                   value={formatMoney(money.received, money.currency) ?? '—'}
                   sub={`${money.received_count} collected`}
                   color="good.7"
+                  href={MONEY_LINKS.received}
                 />
                 <MoneyStat
                   label="Outstanding"
                   value={formatMoney(money.outstanding, money.currency) ?? '—'}
                   sub={`${money.invoiced_count} invoiced`}
                   color="warn.7"
+                  href={MONEY_LINKS.outstanding}
                 />
                 <MoneyStat
                   label="Pro bono"
                   value={String(money.pro_bono_count)}
                   sub="visibility gigs"
+                  href={MONEY_LINKS.proBono}
                 />
               </SimpleGrid>
             </DashCard>
