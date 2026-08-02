@@ -35,8 +35,7 @@ import os
 import time
 from typing import Final
 
-import boto3
-
+from common.aws import client_for
 from common.logger import logger
 
 #: Env var naming the content bucket, set by the Api stack.
@@ -63,8 +62,7 @@ def _client():
     """
     global _client_instance
     if _client_instance is None:
-        region = os.environ.get("AWS_REGION")
-        _client_instance = boto3.client("s3", region_name=region) if region else boto3.client("s3")
+        _client_instance = client_for("s3")
     return _client_instance
 
 

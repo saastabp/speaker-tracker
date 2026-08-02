@@ -18,7 +18,7 @@ import logging
 
 import pytest
 
-from common import storage
+from common import aws, storage
 
 BUCKET = "speaker-tracker-sandbox-content"
 SIGNED_URL = "https://s3.example.com/put?X-Amz-Signature=deadbeefsecret"
@@ -199,7 +199,10 @@ def test_client_is_cached_between_calls(monkeypatch: pytest.MonkeyPatch) -> None
         created.append(1)
         return FakeS3()
 
-    monkeypatch.setattr(storage.boto3, "client", fake_boto_client)
+    # Patched on `common.aws`, which now owns the construction — `storage` no longer imports boto3
+    # itself. The caching being asserted is still storage's: `client_for` builds a client per call,
+    # and `_client` is what makes a warm container reuse one.
+    monkeypatch.setattr(aws.boto3, "client", fake_boto_client)
     storage.reset_client()
 
     storage._client()

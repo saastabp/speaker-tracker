@@ -41,9 +41,9 @@ import json
 import os
 from typing import Any
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from common.aws import client_for
 from common.logger import logger
 
 #: Everything a scheduler call can raise. botocore has **two independent roots** —
@@ -96,10 +96,7 @@ def _client() -> Any:
     """
     global _client_instance
     if _client_instance is None:
-        region = os.environ.get("AWS_REGION")
-        _client_instance = (
-            boto3.client("scheduler", region_name=region) if region else boto3.client("scheduler")
-        )
+        _client_instance = client_for("scheduler")
     return _client_instance
 
 
