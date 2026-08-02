@@ -26,6 +26,7 @@ import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { PendingImportsCard } from '../components/PendingImportsCard';
 import { RichTextField } from '../components/RichTextEditor';
 import { timestampShortDate } from '../dates';
+import { useFilterParams } from '../urlFilters';
 
 /** Direction filters. Deliberately not "Replied": that cannot be derived from the data, and it is
  *  wrong for an inbound-first thread — a venue that emails Donna before she has contacted them. */
@@ -49,8 +50,10 @@ function matchesSearch(thread: EmailThread, search: string): boolean {
 export function Emails() {
   const navigate = useNavigate();
   const threads = useEmailThreads();
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<DirectionFilter>('all');
+  // Filter state lives in the URL — see `useFilterParams`.
+  const params = useFilterParams();
+  const search = params.get('q');
+  const filter = params.get('filter', 'all') as DirectionFilter;
   const [composerOpen, { open: openComposer, close: closeComposer }] = useDisclosure(false);
   const [signatureOpen, { toggle: toggleSignature }] = useDisclosure(false);
 
@@ -92,10 +95,10 @@ export function Emails() {
 
       <FilterBar
         search={search}
-        onSearch={setSearch}
+        onSearch={(value) => params.set('q', value)}
         searchPlaceholder="Search email…"
         pills={pills}
-        onPillClick={(value) => setFilter(value as DirectionFilter)}
+        onPillClick={(value) => params.set('filter', value, 'all')}
       />
 
       <Card withBorder radius="md" p={0}>

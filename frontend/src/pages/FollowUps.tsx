@@ -32,6 +32,7 @@ import { FilterBar } from '../components/FilterBar';
 import { FollowUpFormModal } from '../components/FollowUpFormModal';
 import { isOverdue, parseDateLocal } from '../dates';
 import { BRAND_LINE } from '../theme';
+import { useFilterParams } from '../urlFilters';
 
 type Filter = 'all' | 'pending' | 'overdue' | 'completed';
 
@@ -54,8 +55,11 @@ export function FollowUps() {
   const followUps = useFollowUps();
   const patch = usePatchFollowUp();
   const remove = useDeleteFollowUp();
-  const [filter, setFilter] = useState<Filter>('pending');
-  const [search, setSearch] = useState('');
+  // Filter state lives in the URL — see `useFilterParams`. The default here is `pending`, not
+  // `all`, so that is the value that leaves a clean URL — `?filter=all` is a deliberate widening.
+  const params = useFilterParams();
+  const filter = params.get('filter', 'pending') as Filter;
+  const search = params.get('q');
   const [editing, setEditing] = useState<FollowUp | null>(null);
   const [formOpen, formHandlers] = useDisclosure(false);
 
@@ -108,10 +112,10 @@ export function FollowUps() {
 
       <FilterBar
         search={search}
-        onSearch={setSearch}
+        onSearch={(value) => params.set('q', value)}
         searchPlaceholder="Search notes, contacts, gigs…"
         pills={FILTERS.map((f) => ({ ...f, active: filter === f.value }))}
-        onPillClick={(value) => setFilter(value as Filter)}
+        onPillClick={(value) => params.set('filter', value, 'pending')}
       />
 
       {followUps.isPending ? (

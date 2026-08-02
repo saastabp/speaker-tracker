@@ -1,6 +1,5 @@
 import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
 import { IconAlertTriangle, IconDownload } from '@tabler/icons-react';
-import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { useOpportunities, type OpportunitySummary } from '../api/opportunities';
@@ -8,6 +7,7 @@ import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { longDate, parseDateLocal, parseTimestamp } from '../dates';
 import { formatMoney } from '../format';
 import { paymentColor } from '../opportunityChips';
+import { useFilterParams } from '../urlFilters';
 
 function outcomeColor(status: string): string {
   if (status === 'delivered') return 'good';
@@ -47,10 +47,14 @@ export function History() {
   const history = useOpportunities(true);
   const catalogs = useCatalogs();
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
-  const [outcome, setOutcome] = useState('all');
-  const [comp, setComp] = useState<string | null>(null);
-  const [year, setYear] = useState<number | null>(null);
+  // Filter state lives in the URL — see `useFilterParams`.
+  const params = useFilterParams();
+  const search = params.get('q');
+  const outcome = params.get('outcome', 'all');
+  const comp = params.get('comp');
+  // Year stays a string here and is compared as one: it only ever came from a pill built out of
+  // the data, so parsing it back to a number just to compare would add a NaN case for nothing.
+  const year = params.get('year');
 
   const settled = (sn: string) =>
     (catalogs.data?.payment_statuses ?? []).find((p) => p.short_name === sn)?.is_settled ?? false;
@@ -74,14 +78,12 @@ export function History() {
     { value: 'lost', label: 'Lost', active: outcome === 'lost' },
     { value: 'paid', label: 'Paid', active: comp === 'paid' },
     { value: 'pro_bono', label: 'Pro bono', active: comp === 'pro_bono' },
-    ...years.map((y) => ({ value: `y${y}`, label: String(y), active: year === y })),
+    ...years.map((y) => ({ value: `y${y}`, label: String(y), active: year === String(y) })),
   ];
   function handlePill(value: string) {
-    if (value === 'paid' || value === 'pro_bono') setComp((c) => (c === value ? null : value));
-    else if (value.startsWith('y')) {
-      const y = Number(value.slice(1));
-      setYear((cur) => (cur === y ? null : y));
-    } else setOutcome(value);
+    if (value === 'paid' || value === 'pro_bono') params.toggle('comp', value);
+    else if (value.startsWith('y')) params.toggle('year', value.slice(1));
+    else params.set('outcome', value, 'all');
   }
 
   const term = search.trim().toLowerCase();
@@ -89,7 +91,7 @@ export function History() {
     (o) =>
       (outcome === 'all' || o.current_status === outcome) &&
       (!comp || o.comp_type === comp) &&
-      (year == null || eventYear(o) === year) &&
+      (!year || String(eventYear(o)) === year) &&
       (!term ||
         o.title.toLowerCase().includes(term) ||
         (o.talk_title ?? '').toLowerCase().includes(term) ||
@@ -158,7 +160,7 @@ export function History() {
         <>
           <FilterBar
             search={search}
-            onSearch={setSearch}
+            onSearch={(value) => params.set('q', value)}
             searchPlaceholder="Search closed gigs…"
             pills={pills}
             onPillClick={handlePill}

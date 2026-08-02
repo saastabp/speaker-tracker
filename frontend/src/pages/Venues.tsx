@@ -1,7 +1,6 @@
 import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconMessagePlus, IconPlus } from '@tabler/icons-react';
-import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { catalogLabel, useCatalogs } from '../api/catalogs';
 import {
@@ -12,6 +11,7 @@ import {
 import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { VenueFormModal } from '../components/VenueFormModal';
+import { useFilterParams } from '../urlFilters';
 import { orgTypeColor } from '../venueChips';
 
 const READY = '__ready';
@@ -46,9 +46,11 @@ export function Venues() {
   const navigate = useNavigate();
   const [addOpen, addHandlers] = useDisclosure(false);
   const [logOpen, logHandlers] = useDisclosure(false);
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [readyOnly, setReadyOnly] = useState(false);
+  // Filter state lives in the URL — see `useFilterParams`.
+  const params = useFilterParams();
+  const search = params.get('q');
+  const typeFilter = params.get('type', 'all');
+  const readyOnly = params.has('ready', '1');
 
   const typeLabel = (shortName: string) =>
     catalogLabel(catalogs.data?.organization_types, shortName);
@@ -71,8 +73,8 @@ export function Venues() {
     { value: READY, label: 'Ready only', active: readyOnly },
   ];
   function handlePill(value: string) {
-    if (value === READY) setReadyOnly((v) => !v);
-    else setTypeFilter(value);
+    if (value === READY) params.toggle('ready', '1');
+    else params.set('type', value, 'all');
   }
 
   const term = search.trim().toLowerCase();
@@ -124,7 +126,7 @@ export function Venues() {
         <>
           <FilterBar
             search={search}
-            onSearch={setSearch}
+            onSearch={(value) => params.set('q', value)}
             searchPlaceholder="Search venues…"
             pills={pills}
             onPillClick={handlePill}

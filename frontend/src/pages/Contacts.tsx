@@ -1,13 +1,14 @@
 import { Alert, Anchor, Badge, Button, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconPlus, IconStar } from '@tabler/icons-react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { useContacts, useCreateContact, type ContactInput } from '../api/contacts';
 import { ContactFormModal } from '../components/ContactFormModal';
 import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { warmthColor } from '../contactChips';
 import { isOverdue, parseDateLocal, shortDate } from '../dates';
+import { useFilterParams } from '../urlFilters';
 
 export function Contacts() {
   const contacts = useContacts();
@@ -15,27 +16,10 @@ export function Contacts() {
   const create = useCreateContact();
   const navigate = useNavigate();
   const [addOpen, addHandlers] = useDisclosure(false);
-  // Filter state lives in the URL, not in useState.
-  //
-  // Slice 8 makes Dashboard aggregates clickable, opening a list already narrowed to the records
-  // behind them — which only works if a list page can be *told* its filter by a link. Keeping it
-  // in component state would mean /contacts?filter=follow_up silently showing everyone. It also
-  // makes the view shareable and survive a reload, which local state never did.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.get('q') ?? '';
-  const filter = searchParams.get('filter') ?? 'everyone';
-
-  /** Write one filter key, dropping it from the URL when it returns to its default. */
-  const setParam = (key: string, value: string, fallback: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (!value || value === fallback) {
-      next.delete(key);
-    } else {
-      next.set(key, value);
-    }
-    // replace: filtering is not navigation, and each keystroke should not be a Back-button stop.
-    setSearchParams(next, { replace: true });
-  };
+  // Filter state lives in the URL, not in useState — see `useFilterParams` for why.
+  const params = useFilterParams();
+  const search = params.get('q');
+  const filter = params.get('filter', 'everyone');
 
   async function handleCreate(values: ContactInput) {
     const created = await create.mutateAsync(values);
@@ -102,10 +86,10 @@ export function Contacts() {
         <>
           <FilterBar
             search={search}
-            onSearch={(value) => setParam('q', value, '')}
+            onSearch={(value) => params.set('q', value)}
             searchPlaceholder="Search contacts…"
             pills={pills}
-            onPillClick={(value) => setParam('filter', value, 'everyone')}
+            onPillClick={(value) => params.set('filter', value, 'everyone')}
           />
           {filtered.length === 0 ? (
             <Text c="dimmed">No contacts match these filters.</Text>

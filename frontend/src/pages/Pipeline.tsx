@@ -28,7 +28,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertTriangle, IconMessagePlus, IconPlus, IconX } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { catalogLabel, useCatalogs } from '../api/catalogs';
 import { useFunnel } from '../api/funnel';
 import {
@@ -46,6 +46,7 @@ import { parseDateLocal, shortDate } from '../dates';
 import { formatMoney } from '../format';
 import { STAGE_DOT, paymentColor } from '../opportunityChips';
 import { BRAND_LINE, BRAND_PANEL } from '../theme';
+import { useFilterParams } from '../urlFilters';
 
 const COLUMN_WIDTH = 264;
 
@@ -302,17 +303,15 @@ function ClosedColumn({
 export function Pipeline() {
   const funnel = useFunnel();
   const catalogs = useCatalogs();
-  // The whole filter row lives in the URL, not in useState (the Contacts pattern). Slice 8 turns
-  // each dashboard aggregate into a link into the list behind it, which only works if a link can
-  // *tell* this board what to show — local state would leave /pipeline?reached=booked quietly
-  // rendering the unfiltered board. "Show closed" belongs to that row for the same reason: the
-  // funnel counts gigs that have since closed, so a drill-down link has to be able to ask for them.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const search = searchParams.get('q') ?? '';
-  const reached = searchParams.get('reached') ?? '';
-  const comp = searchParams.get('comp') ?? '';
-  const pay = searchParams.get('pay') ?? '';
-  const showClosed = searchParams.get('closed') === 'all';
+  // The whole filter row lives in the URL — see `useFilterParams`. "Show closed" belongs to that
+  // row rather than to component state: the funnel counts gigs that have since closed, so a
+  // drill-down link has to be able to ask for them or its count comes up short.
+  const params = useFilterParams();
+  const search = params.get('q');
+  const reached = params.get('reached');
+  const comp = params.get('comp');
+  const pay = params.get('pay');
+  const showClosed = params.has('closed', 'all');
   const opps = useOpportunities(showClosed ? undefined : false);
   const patchStatus = usePatchStatus();
   const createOpp = useCreateOpportunity();
@@ -327,18 +326,6 @@ export function Pipeline() {
   const flashTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
-
-  /** Write one filter key, dropping it from the URL when it returns to its default. */
-  const setParam = (key: string, value: string, fallback: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (!value || value === fallback) {
-      next.delete(key);
-    } else {
-      next.set(key, value);
-    }
-    // replace: filtering is not navigation, and each keystroke should not be a Back-button stop.
-    setSearchParams(next, { replace: true });
-  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -404,8 +391,8 @@ export function Pipeline() {
     { value: 'outstanding', label: 'Outstanding', active: pay === 'outstanding' },
   ];
   function handlePill(value: string) {
-    if (value === 'outstanding') setParam('pay', pay === 'outstanding' ? '' : 'outstanding', '');
-    else setParam('comp', comp === value ? '' : value, '');
+    if (value === 'outstanding') params.toggle('pay', 'outstanding');
+    else params.toggle('comp', value);
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -461,7 +448,7 @@ export function Pipeline() {
           <Switch
             label="Show closed"
             checked={showClosed}
-            onChange={(event) => setParam('closed', event.currentTarget.checked ? 'all' : '', '')}
+            onChange={(event) => params.set('closed', event.currentTarget.checked ? 'all' : '')}
           />
           <Button
             variant="default"
@@ -479,7 +466,7 @@ export function Pipeline() {
       {all.length > 0 && (
         <FilterBar
           search={search}
-          onSearch={(value) => setParam('q', value, '')}
+          onSearch={(value) => params.set('q', value)}
           searchPlaceholder="Search venues, gigs…"
           pills={pills}
           onPillClick={handlePill}
@@ -493,7 +480,7 @@ export function Pipeline() {
               placeholder="Reached any stage"
               aria-label="Filter by furthest stage reached"
               value={reached || null}
-              onChange={(value) => setParam('reached', value ?? '', '')}
+              onChange={(value) => params.set('reached', value ?? '')}
               data={(funnel.data ?? []).map((stage) => ({
                 value: stage.short_name,
                 label: `${stage.label} or beyond`,
