@@ -25,6 +25,7 @@ import {
 import { NavLink as RouterNavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuthSession } from '../auth/session';
 import { BRAND_CREAM } from '../theme';
+import { versionLabel } from '../version';
 import classes from './AppShell.module.css';
 
 interface NavItem {
@@ -233,6 +234,14 @@ export function AppShell() {
               Sign In
             </Button>
           )}
+          {/* Below the sign-out control and outside the auth branches on purpose: which build this
+              is stays answerable even on the signed-out screen, which is where a broken deploy is
+              most likely to strand someone. */}
+          {/* Same grey as the email above rather than something quieter: the one job this has is
+              being readable in a screenshot of a problem. */}
+          <Text size="xs" mt={8} style={{ color: '#7E93A1' }} truncate>
+            {versionLabel()}
+          </Text>
         </div>
       </MantineAppShell.Navbar>
 

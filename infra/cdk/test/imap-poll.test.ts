@@ -13,6 +13,7 @@
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { ApiStack, ApiStackProps } from '../lib/api-stack';
+import { PROD, SANDBOX } from '../lib/config';
 import { TEST_EMAIL_CONFIG, TEST_POLL_CONFIG } from './fixtures';
 
 const ENV = { account: '111111111111', region: 'us-west-2' };
@@ -91,6 +92,22 @@ describe('the schedule', () => {
     const rules = Object.values(template.findResources('AWS::Events::Rule'));
     expect(rules).toHaveLength(1);
     expect(rules[0].Properties.Targets).toHaveLength(1);
+  });
+
+  test('exactly one environment polls the mailbox, and it is prod', () => {
+    // An assertion about the real config, not a synthesized template — the disaster this guards
+    // against is someone editing config.ts, and every other test here passes `pollEnabled` in
+    // explicitly, so all of them stay green with both environments polling.
+    //
+    // Two pollers against one WorkMail mailbox race for the Import folder every minute: whichever
+    // moves a message to Processed first wins and the other never sees it, so a dragged email
+    // lands in one database at random and is unrecoverable from the app. config.ts explains this
+    // at length; this makes it fail the build instead of the mailbox.
+    //
+    // Pinned to 'prod' rather than merely counting one: turning polling on for sandbox again
+    // should require proving it has its own mailbox, and editing this line is that proof.
+    const polling = [SANDBOX, PROD].filter((env) => env.pollEnabled).map((env) => env.envType);
+    expect(polling).toEqual(['prod']);
   });
 });
 

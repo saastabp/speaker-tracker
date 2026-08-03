@@ -11,3 +11,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Injected by `vite.config.ts` at build time — see `src/version.ts`, which is what to import. */
+declare const __APP_VERSION__: string;
+declare const __BUILD_REF__: string;

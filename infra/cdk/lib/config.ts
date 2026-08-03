@@ -109,9 +109,13 @@ export interface EnvConfig {
    *  message to `Processed` first wins, and the other environment never sees it. A dragged email
    *  would then land in one database at random.
    *
-   *  Sandbox polls today because prod does not exist. When prod launches this must flip — either
-   *  turn sandbox off, or give sandbox its own mailbox. The flag exists so that is one visible
-   *  line rather than a surprise. */
+   *  Sandbox polled until prod launched (2026-08-03); prod owns the mailbox now. The flag exists so
+   *  that switch is one visible line rather than a surprise. **Order matters when moving it:** take
+   *  polling away from one environment and deploy that before granting it to the other.
+   *
+   *  Consequence worth knowing: sandbox no longer receives inbound mail at all, so 6b's import flow
+   *  cannot be exercised there. Giving sandbox its own mailbox is the fix if that becomes limiting
+   *  — not flipping both of these on. */
   readonly pollEnabled: boolean;
 }
 
@@ -121,7 +125,10 @@ export const SANDBOX: EnvConfig = {
   dbName: 'speakertracker_sandbox',
   logRetention: logs.RetentionDays.ONE_MONTH,
   reservedConcurrency: { poll: 1 },
-  pollEnabled: true, // prod does not exist yet; flip this when it does
+  // Off since prod launched. One mailbox, one poller — see `pollEnabled`. Turning this back on
+  // means inbound mail lands in whichever database wins a per-minute race, so if sandbox ever
+  // needs inbound again, give it its own mailbox rather than flipping this back.
+  pollEnabled: false,
 };
 
 export const PROD: EnvConfig = {
@@ -130,6 +137,7 @@ export const PROD: EnvConfig = {
   dbName: 'speakertracker',
   logRetention: logs.RetentionDays.THREE_MONTHS,
   reservedConcurrency: { api: 5, migrate: 1, poll: 1 },
-  // Turning this on requires turning sandbox off first — one mailbox, one poller.
-  pollEnabled: false,
+  // Prod owns the mailbox. Sandbox must already be deployed with polling off — deploying this
+  // first leaves both pollers running against it.
+  pollEnabled: true,
 };
