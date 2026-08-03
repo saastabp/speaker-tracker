@@ -1,4 +1,4 @@
-import { CfnOutput, Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { ArnFormat, CfnOutput, Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
@@ -113,7 +113,23 @@ export class AuthStack extends Stack {
         {
           eventSource: 'userNotification',
           logLevel: 'ERROR',
-          cloudWatchLogsConfiguration: { logGroupArn: authLogs.logGroupArn },
+          // NOT `authLogs.logGroupArn` — that ends in `:*` (the wildcard form IAM wants for
+          // "every stream in this group"), and Cognito validates the ARN against a pattern that
+          // rejects it outright:
+          //
+          //   Value 'arn:…:log-group:…:*' at 'cloudWatchLogsConfiguration.logGroupArn'
+          //   failed to satisfy constraint
+          //
+          // The deploy fails at CREATE and rolls the whole stack back, so this takes the SES email
+          // change down with it. Composed here instead, which yields the bare group ARN.
+          cloudWatchLogsConfiguration: {
+            logGroupArn: this.formatArn({
+              service: 'logs',
+              resource: 'log-group',
+              resourceName: authLogs.logGroupName,
+              arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+            }),
+          },
         },
       ],
     });

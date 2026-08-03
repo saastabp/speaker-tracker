@@ -59,6 +59,19 @@ describe('auth logging', () => {
     });
   });
 
+  test('the log group ARN has no ":*" suffix, which Cognito rejects', () => {
+    // `logGroup.logGroupArn` ends in `:*` — the wildcard form IAM policies want. Cognito validates
+    // this field against a pattern that refuses it, and the deploy fails at CREATE and rolls the
+    // whole stack back, taking the SES email change with it. Asserting the config merely *exists*
+    // did not catch that; only its shape does.
+    const config = Object.values(
+      template().findResources('AWS::Cognito::LogDeliveryConfiguration'),
+    )[0].Properties.LogConfigurations[0];
+    const arn = JSON.stringify(config.CloudWatchLogsConfiguration.LogGroupArn);
+    expect(arn).not.toContain(':*');
+    expect(arn).not.toContain('"Fn::GetAtt"'); // the GetAtt form is the one that carries the suffix
+  });
+
   test('the log group is retained long enough to investigate a report', () => {
     // A user reports "I never got the email" days later, not minutes.
     template().hasResourceProperties('AWS::Logs::LogGroup', { RetentionInDays: 90 });
