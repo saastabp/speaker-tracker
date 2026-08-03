@@ -21,3 +21,14 @@ export const TEST_POLL_CONFIG = {
   pollEnabled: false,
   alarmEmail: 'alarms@example.test',
 } as const;
+
+/** SES sender for Cognito's invitation and password-reset mail (`AuthStackProps.authEmail`).
+ *
+ *  A distinct address from `TEST_EMAIL_CONFIG.mailFromAddress` on purpose — mirroring production,
+ *  where auth mail must not come from the mailbox the IMAP poller reads. */
+export const TEST_AUTH_EMAIL = {
+  fromAddress: 'no-reply@example.com',
+  fromName: 'Test App',
+  sesRegion: 'us-east-1',
+  sesVerifiedDomain: 'example.com',
+} as const;

@@ -57,6 +57,22 @@ export const imapSecretName = (envType: 'sandbox' | 'prod'): string =>
 export const MAIL_FROM_ADDRESS = 'donna.king@360balancedliving.com';
 export const MAIL_FROM_NAME = 'Donna King';
 
+/** Sender for Cognito's own mail — invitations and password resets.
+ *
+ *  Deliberately **not** `MAIL_FROM_ADDRESS`. That is the mailbox 6b's poller reads, so bounces and
+ *  stray replies to an auth email would land in `Speaker Tracker/Import` and be processed as
+ *  inbound correspondence. It also should not look like Donna personally sent someone a password.
+ *
+ *  Covered by the domain identity, so it needs no separate verification — but replies go nowhere,
+ *  which is right for auth mail and wrong for anything else. */
+export const AUTH_EMAIL_FROM = 'no-reply@360balancedliving.com';
+export const AUTH_EMAIL_FROM_NAME = 'Speaker Tracker';
+
+/** The verified domain backing `AUTH_EMAIL_FROM`. The identity lives in `SES_REGION` (us-east-1)
+ *  while the user pool is in `PRIMARY_REGION` (us-west-2), which is why Cognito must be told both
+ *  explicitly rather than inferring a same-region identity. */
+export const SES_VERIFIED_DOMAIN = '360balancedliving.com';
+
 /** Where the IMAP poller's failure alarm goes.
  *
  *  Brian, not Donna, and deliberately: the alarm fires on a rejected mailbox password, which is an

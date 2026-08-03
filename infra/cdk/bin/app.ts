@@ -9,6 +9,8 @@ import {
   ACCOUNT,
   ALARM_EMAIL,
   APP_NAME,
+  AUTH_EMAIL_FROM,
+  AUTH_EMAIL_FROM_NAME,
   CERT_REGION,
   COGNITO_DOMAIN_PREFIX,
   contentCorsOrigins,
@@ -22,6 +24,8 @@ import {
   PROD_DOMAIN,
   SANDBOX,
   SES_IDENTITY_ARN,
+  SES_REGION,
+  SES_VERIFIED_DOMAIN,
 } from '../lib/config';
 
 /**
@@ -73,6 +77,12 @@ const prodAuth = new AuthStack(app, `${APP_NAME}-prod-Auth`, {
   env: primaryEnv,
   appUrl: `https://${PROD_DOMAIN}`,
   cognitoDomainPrefix: COGNITO_DOMAIN_PREFIX,
+  authEmail: {
+    fromAddress: AUTH_EMAIL_FROM,
+    fromName: AUTH_EMAIL_FROM_NAME,
+    sesRegion: SES_REGION,
+    sesVerifiedDomain: SES_VERIFIED_DOMAIN,
+  },
 });
 
 // Cert must live in us-east-1 for CloudFront; prod-Frontend (us-west-2) consumes it

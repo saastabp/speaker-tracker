@@ -1,5 +1,6 @@
 import { CfnOutput, Duration, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 
 export interface AuthStackProps extends StackProps {
@@ -7,6 +8,15 @@ export interface AuthStackProps extends StackProps {
   readonly appUrl: string;
   /** Cognito hosted domain prefix, e.g. speakertracker-app-381492047863. */
   readonly cognitoDomainPrefix: string;
+  /** SES sender for invitations and password resets. Passed in rather than imported so the stack
+   *  stays testable without the real verified domain. */
+  readonly authEmail: {
+    readonly fromAddress: string;
+    readonly fromName: string;
+    /** Region holding the verified identity — not necessarily this stack's region. */
+    readonly sesRegion: string;
+    readonly sesVerifiedDomain: string;
+  };
 }
 
 /**
@@ -39,6 +49,19 @@ export class AuthStack extends Stack {
       mfa: cognito.Mfa.OPTIONAL,
       mfaSecondFactor: { sms: false, otp: true },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      // SES, not Cognito's built-in mailer.
+      //
+      // COGNITO_DEFAULT sends from `no-reply@verificationemail.com`, caps at ~50/day, and lands in
+      // spam often enough that Donna's invitation never arrived — which left her with no way in at
+      // all, because Cognito refuses a password reset for a user who has never set one. Auth mail
+      // is the one category with no in-app fallback: if it does not arrive, the user is locked out
+      // and only an admin can help.
+      email: cognito.UserPoolEmail.withSES({
+        fromEmail: props.authEmail.fromAddress,
+        fromName: props.authEmail.fromName,
+        sesRegion: props.authEmail.sesRegion,
+        sesVerifiedDomain: props.authEmail.sesVerifiedDomain,
+      }),
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
@@ -70,6 +93,29 @@ export class AuthStack extends Stack {
       userPoolId: this.userPool.userPoolId,
       clientId: this.userPoolClient.userPoolClientId,
       useCognitoProvidedValues: true,
+    });
+
+    // Cognito logs nothing by default, which is why the failed invitation left no trace anywhere:
+    // not in CloudTrail (hosted-UI events carry no error detail), not in our Lambdas (auth never
+    // reaches them), not in the pool. ERROR-level notification logs record mail Cognito could not
+    // deliver — the question that actually recurs, since every future password reset depends on it.
+    //
+    // `userAuthEvents`, which would log a failed password change, is deliberately NOT enabled: it
+    // requires the PLUS feature plan — a standing per-user cost for a diagnostic used about once a
+    // year, and one that cannot be turned on retroactively for an incident already past.
+    const authLogs = new logs.LogGroup(this, 'UserPoolLogs', {
+      retention: logs.RetentionDays.THREE_MONTHS,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    new cognito.CfnLogDeliveryConfiguration(this, 'UserPoolLogDelivery', {
+      userPoolId: this.userPool.userPoolId,
+      logConfigurations: [
+        {
+          eventSource: 'userNotification',
+          logLevel: 'ERROR',
+          cloudWatchLogsConfiguration: { logGroupArn: authLogs.logGroupArn },
+        },
+      ],
     });
 
     // No post_confirmation/post_authentication trigger by design — the API owns users-row

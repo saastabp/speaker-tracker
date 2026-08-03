@@ -3,7 +3,7 @@ import { Template } from 'aws-cdk-lib/assertions';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { ApiStack } from '../lib/api-stack';
 import { AuthStack } from '../lib/auth-stack';
-import { TEST_EMAIL_CONFIG, TEST_POLL_CONFIG } from './fixtures';
+import { TEST_AUTH_EMAIL, TEST_EMAIL_CONFIG, TEST_POLL_CONFIG } from './fixtures';
 
 const ENV = { account: '111111111111', region: 'us-west-2' };
 
@@ -44,6 +44,7 @@ describe('API Gateway authorizer wiring (security invariant, not runtime enforce
       env: ENV,
       appUrl: 'https://speaker-tracker.example.com',
       cognitoDomainPrefix: 'speakertracker-test',
+      authEmail: TEST_AUTH_EMAIL,
     });
     const stack = new ApiStack(app, 'prod-Api', {
       env: ENV,
