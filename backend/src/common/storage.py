@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Sequence
 from typing import Final
 
 from common.aws import client_for
@@ -51,6 +52,11 @@ CONTENT_BUCKET_ENV = "CONTENT_BUCKET"
 RAW_MESSAGE_PREFIX: Final = "email/raw/"
 ATTACHMENT_PREFIX: Final = "email/attachments/"
 MATERIAL_PREFIX: Final = "materials/"
+
+#: Prefixes whose objects a caller may attach to an outgoing email: their own ad-hoc uploads and
+#: their own materials. ``RAW_MESSAGE_PREFIX`` is **deliberately absent** — a stored message is not
+#: an attachment, and allowing it would let a send exfiltrate mail.
+ATTACHABLE_PREFIXES: Final = (ATTACHMENT_PREFIX, MATERIAL_PREFIX)
 
 #: Lifetime of a presigned upload URL. Long enough for a slow connection to finish a one-sheet,
 #: short enough that a leaked URL is not a durable write grant.
@@ -232,6 +238,44 @@ def presigned_put_url(
     # The URL embeds a signature; log the key and TTL, never the URL itself.
     logger.info("S3 presigned PUT issued bucket=%s key=%s ttl_s=%d", bucket, key, ttl)
     return url
+
+
+def owns_key(user_id: int, key: str, prefixes: Sequence[str]) -> bool:
+    """Return whether ``key`` is one of this user's objects under one of ``prefixes``.
+
+    **A key that arrives from a client is a claim, not a capability.** Every key in this bucket is
+    written as ``<prefix><user_id>/…`` by server-side code, so ownership is decidable from the
+    string — and must be decided, every time, before an object is read, signed for, or attached.
+    Skipping it turns any endpoint that takes a key into an arbitrary read of the whole bucket.
+
+    Lives here rather than in a handler because two paths need the same rule: the materials library
+    (its own prefix only) and the email composer (:data:`ATTACHABLE_PREFIXES`). Two copies of an
+    ownership check is one copy too many.
+
+    Parameters
+    ----------
+    user_id : int
+        The caller.
+    key : str
+        The object key being claimed.
+    prefixes : Sequence[str]
+        Which prefixes are acceptable for this operation.
+
+    Returns
+    -------
+    bool
+        True iff the key sits under one of ``prefixes`` and is scoped to this user.
+
+    Examples
+    --------
+    >>> owns_key(7, "materials/7/abc/one-sheet.pdf", [MATERIAL_PREFIX])
+    True
+    >>> owns_key(7, "materials/8/abc/theirs.pdf", [MATERIAL_PREFIX])
+    False
+    >>> owns_key(7, "email/raw/7/a-message.eml", ATTACHABLE_PREFIXES)
+    False
+    """
+    return any(key.startswith(f"{prefix}{user_id}/") for prefix in prefixes)
 
 
 def presigned_get_url(

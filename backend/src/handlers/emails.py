@@ -64,10 +64,29 @@ def _sender_domain(sender: str) -> str:
     return domain
 
 
-def _fetch_attachments(attachments) -> list[mail.Attachment]:
-    """Read each already-uploaded attachment out of S3 for MIME assembly."""
+def _fetch_attachments(attachments, user_id: int) -> list[mail.Attachment]:
+    """Read each already-uploaded attachment out of S3 for MIME assembly.
+
+    **Every key is checked against the caller before it is read.** The client names the objects to
+    attach, and without this the send path is an arbitrary read of the whole bucket: naming
+    ``email/raw/<someone-else>/<message>.eml`` would fetch another user's stored mail and post it
+    out as an attachment. Only the caller's own ad-hoc uploads and their own materials qualify —
+    a stored message is not an attachment, which is why ``RAW_MESSAGE_PREFIX`` is not attachable.
+
+    Raises
+    ------
+    common.errors.InvalidInput
+        When a key is not the caller's, or sits outside the attachable prefixes.
+    """
     fetched: list[mail.Attachment] = []
     for item in attachments:
+        if not storage.owns_key(user_id, item.s3_key, storage.ATTACHABLE_PREFIXES):
+            logger.warning(
+                "Refused an attachment key outside the caller's own uploads user_id=%s key=%s",
+                user_id,
+                item.s3_key,
+            )
+            raise errors.InvalidInput("attachment is not one of your files")
         fetched.append(
             mail.Attachment(
                 filename=item.filename,
@@ -107,7 +126,7 @@ def _deliver(
         cc=data.cc,
         in_reply_to=in_reply_to,
         references=references,
-        attachments=_fetch_attachments(data.attachments),
+        attachments=_fetch_attachments(data.attachments, request.user_id),
     )
 
     # 2. The stored copy is byte-identical to what SES and IMAP receive.

@@ -47,11 +47,15 @@ def _own_key_prefix(user_id: int) -> str:
 def _validate_own_key(user_id: int, s3_key: str) -> str:
     """Return ``s3_key`` if it belongs to this user, else refuse.
 
-    The check that stops a client naming somebody else's object. Rejected as InvalidInput rather
-    than NotFound: the caller supplied a key that is not theirs to use, which is a bad request, and
-    distinguishing "exists but not yours" from "does not exist" would leak whether it exists.
+    The check that stops a client naming somebody else's object. Shares
+    :func:`common.storage.owns_key` with the email composer, which enforces the same rule over a
+    wider set of prefixes — one definition of "is this yours", not two.
+
+    Rejected as InvalidInput rather than NotFound: the caller supplied a key that is not theirs to
+    use, which is a bad request, and distinguishing "exists but not yours" from "does not exist"
+    would leak whether it exists.
     """
-    if not s3_key.startswith(_own_key_prefix(user_id)):
+    if not storage.owns_key(user_id, s3_key, [storage.MATERIAL_PREFIX]):
         logger.warning(
             "Rejected a material key outside the caller's prefix user_id=%s key=%s", user_id, s3_key
         )

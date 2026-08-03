@@ -5,17 +5,19 @@ import {
   FileButton,
   Group,
   Loader,
+  Menu,
   Modal,
   Select,
   Stack,
   Text,
   TextInput,
 } from '@mantine/core';
-import { IconPaperclip, IconX } from '@tabler/icons-react';
+import { IconFolder, IconPaperclip, IconX } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../api/client';
 import { useContacts } from '../api/contacts';
 import { useSendEmail, useUploadAttachment, type EmailAttachmentInput } from '../api/emails';
+import { useMaterials, type Material } from '../api/materials';
 import { useSignatures } from '../api/signatures';
 import { useTemplates } from '../api/templates';
 import { FieldLabel } from './FieldLabel';
@@ -88,6 +90,9 @@ export function EmailComposer({
   const signatures = useSignatures();
   const send = useSendEmail();
   const upload = useUploadAttachment();
+  // The reusable library. Attaching from here sends the *existing* object's key rather than
+  // uploading the file again — which is the point of keeping a library at all.
+  const materials = useMaterials();
   // Only fetched when the caller did not name a contact, so opening from a contact page costs
   // nothing extra.
   const contacts = useContacts(undefined, opened && !contactId);
@@ -164,6 +169,30 @@ export function EmailComposer({
     } catch (err) {
       setError(err instanceof ApiError ? err.message : `Could not attach ${file.name}.`);
     }
+  }
+
+  /**
+   * Attach a material by reference — no upload, no copy.
+   *
+   * The library object already sits in S3 under a key this user owns, so the send path can read it
+   * directly. The bytes are copied into the message at send time, which is why replacing the
+   * material later never alters a mail that has already gone out.
+   */
+  function attachMaterial(material: Material) {
+    setError(null);
+    setAttachments((current) =>
+      current.some((a) => a.s3_key === material.s3_key)
+        ? current
+        : [
+            ...current,
+            {
+              s3_key: material.s3_key,
+              filename: material.name,
+              content_type: material.content_type,
+              size_bytes: material.size_bytes,
+            },
+          ],
+    );
   }
 
   const recipients = splitAddresses(to);
@@ -311,6 +340,38 @@ export function EmailComposer({
               </Button>
             )}
           </FileButton>
+
+          {/* Only offered when there is a library to offer. An empty menu is worse than no menu,
+              and a first-time user has no materials yet. */}
+          {(materials.data?.length ?? 0) > 0 && (
+            <Menu position="bottom-start" withinPortal>
+              <Menu.Target>
+                <Button size="xs" variant="light" leftSection={<IconFolder size={14} />}>
+                  From materials
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>Attach a saved file</Menu.Label>
+                {materials.data?.map((material) => {
+                  const already = attachments.some((a) => a.s3_key === material.s3_key);
+                  return (
+                    <Menu.Item
+                      key={material.id}
+                      disabled={already}
+                      onClick={() => attachMaterial(material)}
+                      rightSection={
+                        <Text size="xs" c="dimmed">
+                          {already ? 'attached' : formatBytes(material.size_bytes)}
+                        </Text>
+                      }
+                    >
+                      {material.name}
+                    </Menu.Item>
+                  );
+                })}
+              </Menu.Dropdown>
+            </Menu>
+          )}
         </Group>
 
         {error && (

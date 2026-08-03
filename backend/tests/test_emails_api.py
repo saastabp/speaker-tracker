@@ -441,6 +441,76 @@ def test_attachments_are_listed_from_the_stored_mime(api, aws) -> None:
     assert [a["filename"] for a in attachments] == ["one-sheet.pdf"]
 
 
+def test_a_material_can_be_attached_without_re_uploading_it(api, aws) -> None:
+    """The composer's whole reason for a library: attach the stored one-sheet as it is."""
+    aws.s3.objects["materials/1/abc/One-Sheet.pdf"] = b"%PDF-1.4 the real one-sheet"
+    status, body = api(
+        "POST",
+        "/emails/send",
+        send_body(
+            attachments=[
+                {
+                    "s3_key": "materials/1/abc/One-Sheet.pdf",
+                    "filename": "One-Sheet.pdf",
+                    "content_type": "application/pdf",
+                }
+            ]
+        ),
+    )
+
+    assert status == 200
+    _status, detail = api("GET", f"/emails/threads/{body['thread_id']}")
+    assert [a["filename"] for a in detail["messages"][0]["attachments"]] == ["One-Sheet.pdf"]
+
+
+def test_a_send_cannot_attach_someone_elses_file(api, aws) -> None:
+    """Without this the send path is an arbitrary read of the bucket.
+
+    The client names the objects to attach, so an unchecked key lets a caller post another user's
+    material out to an address of their choosing.
+    """
+    aws.s3.objects["materials/999/theirs/private.pdf"] = b"not yours"
+    status, _ = api(
+        "POST",
+        "/emails/send",
+        send_body(
+            attachments=[
+                {
+                    "s3_key": "materials/999/theirs/private.pdf",
+                    "filename": "private.pdf",
+                    "content_type": "application/pdf",
+                }
+            ]
+        ),
+    )
+
+    assert status == 400
+
+
+def test_a_send_cannot_attach_a_stored_message(api, aws) -> None:
+    """A stored message is not an attachment, even the caller's own.
+
+    `email/raw/` holds sent and received mail. Allowing it would turn "compose an email" into a way
+    to forward the archive out of the app, one message at a time.
+    """
+    aws.s3.objects["email/raw/1/a-private-thread.eml"] = b"From: someone\r\n\r\nsecrets"
+    status, _ = api(
+        "POST",
+        "/emails/send",
+        send_body(
+            attachments=[
+                {
+                    "s3_key": "email/raw/1/a-private-thread.eml",
+                    "filename": "thread.eml",
+                    "content_type": "message/rfc822",
+                }
+            ]
+        ),
+    )
+
+    assert status == 400
+
+
 def test_unreadable_body_degrades_instead_of_failing_the_thread(api, aws, caplog) -> None:
     thread_id, _parent = send_and_get_thread(api)
     aws.s3.fail_gets_for = set(aws.s3.objects)  # the object vanished from the bucket
