@@ -563,32 +563,65 @@ the received message carries the file.
 
 ---
 
-## Slice 10 — Dashboard date window
+## Slice 10 — Dashboard week picker
 
-**Size: M.** Depends on slice 8's drill-down links, which have to keep matching once the numbers
-they open become windowed.
+**Size: S.** Scope settled 2026-08-02; this section previously described a much larger slice, and the
+reasoning for cutting it is recorded below because the discarded options keep looking attractive.
 
-The Dashboard's money and funnel figures are **all-time**; only the target tiles are windowed, each
-by its own cadence. This slice adds a **window picker** — weekly / monthly / quarterly / annual — and
-makes every aggregate honour it.
+The Dashboard already shows a week — `currentWeekLabel()` renders "Week of Jul 19 – 25" as the page
+subtitle. It is computed from today and cannot be changed. This slice makes that week
+**navigable**, backward and forward, one week at a time.
 
-**`annual` does not exist yet.** `core.periods.CADENCES` is weekly/monthly/quarterly, and so is the
-`Cadence` literal and the targets catalog. Adding it is the first checkpoint, not an afterthought.
+**The picker drives the target tiles and nothing else.** Every other element on the page keeps the
+behaviour it has now.
 
-**The design question this slice must answer first: what does a window *mean* for money?** "Booked
-this quarter" could be gigs whose event date falls in it, gigs that *entered* `booked` in it, or
-gigs invoiced in it — three different numbers from the same words. Each figure needs its rule
-decided and written down before any of it is built, because **the drill-down links have to carry the
-same rule** or the lists stop matching the numbers, which is the property slice 8 exists to hold.
+### Why only the tiles
 
-Also to settle: whether the target tiles follow the picker or keep their own cadence. A weekly touch
-target displayed over a quarter is a different tile, not a rescaled one.
+The tiles are the only elements that are *already* windowed, so sliding them is meaningful and
+requires no new definition of anything. The rest do not survive being viewed historically:
+
+- **Outstanding is a balance, not a flow.** An unpaid invoice for a July 10 event is money owed
+  *today*. Windowing it by event date would show it only on the week of July 10, so "what am I owed
+  right now?" — which the all-time figure answers correctly — becomes answerable only by walking
+  backward week by week and summing. Small is not the problem; wrong is.
+- **The funnel is a snapshot of where gigs sit now**, and event date cannot window it at all: a
+  Researched or Pitched gig has no event date yet. The only coherent weekly funnel is "what *entered*
+  each stage this week", which is a different card, not this one viewed through a window.
+- **Booked and Received** over a single week are usually `$0` — a few gigs a month means most weeks
+  are empty. Not wrong, but not worth reading.
+
+**Recorded for whenever money does get windowed: key it off the `event_date`.** "Booked in Q3" means
+gigs *happening* in Q3 — an invoice sent in June for an October event belongs to October. That answer
+needs a period long enough to be worth reading (a quarter, not a week), which is why it is not built
+here. ⚠ `opportunities.event_date` is `DATE NULL` and nothing enforces that booking sets one, so a
+dated-less booked gig would drop out of every window and take its fee with it, silently. Surface
+those rather than swallow them.
+
+**There is no cadence selector, and `annual` is not being added.** `core.periods.CADENCES` stays
+weekly/monthly/quarterly.
+
+### Shape
+
+The whole change is **one anchor date replacing `now_local`**. `build_dashboard` takes the anchor;
+each tile computes `period_bounds(cadence, anchor)` exactly as it computes `period_bounds(cadence,
+now_local)` today. A tile keeps **its own cadence** — sliding back three weeks shows a monthly tile
+the month containing that week. The anchor is a single date, which keeps that deterministic when a
+Sunday-start week straddles two months.
+
+Slice 8's drill-down links need no work: each tile already carries `period_start`/`period_end` in its
+payload and builds its link from them, so a slid tile links to the slid list by construction.
+
+**Move the week label out of the page subtitle and down to the tile grid.** A control at the top of
+the page that visibly changes nothing below the tile row misdescribes what it does — the same honesty
+problem as today's subtitle, inverted.
 
 **Acceptance**
-1. Picking a window changes the money and funnel figures, and the picked window is visible.
-2. Every drill-down link still opens a list the same size as the number clicked, in the chosen
-   window — the slice-8 property, preserved.
-3. The window survives a reload and is shareable (it lives in the URL, like every list filter).
+1. The week can be moved backward and forward, and the week being shown is visible.
+2. Each target tile's number recomputes for the shown week, over its own cadence; its drill-down link
+   opens a list of exactly that size.
+3. The chosen week survives a reload and is shareable — it lives in the URL (`?week_of=YYYY-MM-DD`)
+   via `useFilterParams`, like every list filter.
+4. Money, funnel, Needs attention and Coming up are unchanged by the picker.
 
 ---
 
@@ -617,8 +650,8 @@ Slices **3 and 4 can run in parallel** after 2 — they touch different tables a
 existing aggregate, while 10 rewrites every one of them. Everything else is a chain.
 
 9 depends on 3 for the talks API it finishes, and on 6a for the composer it adds an attachment
-source to. 10 depends on 8 because its whole risk is keeping the drill-down counts matching once the
-numbers they open are windowed.
+source to. 10 depends on 8 only lightly: the tiles it slides already carry their own period bounds
+and build their drill-down links from them, so the links follow for free.
 
 **Risk register**
 
@@ -627,7 +660,7 @@ numbers they open are windowed.
 | ~~WorkMail IMAP connection quota unknown~~ | 6b | ✅ **Resolved** — 10 per user+IP; reserved concurrency 1 + rotating Lambda IPs make it non-binding |
 | **Silent IMAP auth failure** — password rotated, poller finds nothing, nobody notices for weeks | 6b | Auth errors alarm rather than log-and-continue; acceptance #11 tests it by breaking the secret |
 | **An uploaded file previewed on our own origin** could run script beside the ID token | 9 | Previews load from the presigned S3 URL only — a different origin, and never inlined into our DOM |
-| Windowing changes a number but not the link that opens it | 10 | Acceptance #2 is the slice-8 count-matching property, re-asserted per window |
+| A slid tile shows one week's number but links to another week's list | 10 | Acceptance #2 — the link is built from the same `period_start`/`period_end` the number was counted over |
 | UIDVALIDITY handling is the classic poller bug | 6b | Explicit acceptance test #6; unit-test the reset path |
 | Optimistic drag desyncs from the status journal | 3 | Rollback on failure is acceptance #2; server owns ordering |
 | Timezone bucketing (UTC-10) silently off by a day | 5 | Acceptance #1 uses a 22:00 local touch specifically |
