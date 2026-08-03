@@ -1,11 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DockerImage } from 'aws-cdk-lib';
+import { AssetHashType, DockerImage, FileSystem } from 'aws-cdk-lib';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 
 /** frontend/ project root, relative to this file (infra/cdk/lib). */
 const FRONTEND_DIR = path.resolve(__dirname, '..', '..', '..', 'frontend');
+
+/** Build output and deps stay out of the fingerprint: the deployed content comes from
+ *  buildFrontend's copy, and hashing node_modules/dist would churn the asset and bloat synth. */
+const EXCLUDE = ['node_modules', 'dist', '.vite'];
 
 /**
  * Build the Vite SPA for the given env and return it as an s3-deployment Source, natively (no
@@ -18,9 +22,26 @@ const FRONTEND_DIR = path.resolve(__dirname, '..', '..', '..', 'frontend');
  */
 export function frontendBundle(mode: 'sandbox' | 'production'): s3deploy.ISource {
   return s3deploy.Source.asset(FRONTEND_DIR, {
-    // Keep build output and deps out of the source fingerprint (the deployed content comes from
-    // buildFrontend's copy; hashing node_modules/dist would churn the asset and bloat synth).
-    exclude: ['node_modules', 'dist', '.vite'],
+    exclude: EXCLUDE,
+    // ⚠ The build mode MUST be in the hash, or both environments share one artifact.
+    //
+    // The source tree is byte-identical for sandbox and production — `mode` changes only which npm
+    // script runs. CDK's default hash for a bundled asset is
+    // `sha256(fingerprint(source) + JSON.stringify(bundling))`, and `bundling.local` is a
+    // *function*, which `JSON.stringify` drops. So both modes hash identically, CDK bundles once
+    // and hands the same output to both Frontend stacks — that is how production shipped the
+    // *sandbox* bundle on its first deploy: `VITE_AUTH_MODE=dev`, Cognito never contacted, every
+    // API call answered `unauthorized`. Nothing in the infrastructure was wrong; the two stacks
+    // were serving one artifact.
+    //
+    // The hash must still track the source, or an edit would deploy a stale bundle — so it is the
+    // source fingerprint CDK would have computed, with the mode appended. `assetHash` also feeds
+    // `AssetStaging`'s cache key, which is what makes the second build actually run.
+    //
+    // `assetHashType: OUTPUT` does *not* work here, and was tried: the bundling result is cached
+    // on that same key before any output exists to hash, so the second build never happens.
+    assetHash: `${FileSystem.fingerprint(FRONTEND_DIR, { exclude: EXCLUDE })}-${mode}`,
+    assetHashType: AssetHashType.CUSTOM,
     bundling: {
       // Docker fallback is unreachable — buildFrontend throws on failure rather than returning
       // false — but BundlingOptions requires an image.
