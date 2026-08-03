@@ -183,6 +183,73 @@ def test_non_auth_login_failure_is_not_reported_as_an_auth_error(
     assert not isinstance(excinfo.value, imap.ImapAuthError)
 
 
+#: The exact rejection WorkMail sent on 2026-08-02, including the bytes repr `imapclient` produces
+#: and the trailing timestamp that a naive bracket match would read as a response code.
+WORKMAIL_TRANSIENT = "b'[UNAVAILABLE] Temporary authentication failure. [2026-08-03 06:00:06]'"
+
+
+def test_a_transient_rejection_is_not_an_auth_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The false alarm of 2026-08-02: WorkMail was busy, not the password wrong.
+
+    Raised as a plain ImapError so the poller skips the cycle and lets the next minute retry,
+    rather than failing the invocation and firing an alarm whose advice was to check a rotated
+    password — for a secret that does not rotate.
+    """
+    install(monkeypatch, FakeImap(login_error=LoginError(WORKMAIL_TRANSIENT)))
+
+    with pytest.raises(imap.ImapError) as excinfo:
+        with imap.connection():
+            pass
+
+    assert not isinstance(excinfo.value, imap.ImapAuthError)
+
+
+@pytest.mark.parametrize("code", sorted(imap.TRANSIENT_LOGIN_CODES))
+def test_every_transient_code_is_treated_as_transient(
+    monkeypatch: pytest.MonkeyPatch, code: str
+) -> None:
+    install(monkeypatch, FakeImap(login_error=LoginError(f"[{code}] server says wait")))
+
+    with pytest.raises(imap.ImapError) as excinfo:
+        with imap.connection():
+            pass
+
+    assert not isinstance(excinfo.value, imap.ImapAuthError)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "[AUTHENTICATIONFAILED] Invalid credentials",
+        "[EXPIRED] That password is no longer accepted",
+        "Login failed.",  # no response code at all
+        "[2026-08-03 06:00:06] no letters, so not a code",
+    ],
+)
+def test_anything_not_recognisably_transient_still_alarms(
+    monkeypatch: pytest.MonkeyPatch, message: str
+) -> None:
+    """Fails toward alarming. A false alarm is recoverable; a silenced one stops inbound mail."""
+    install(monkeypatch, FakeImap(login_error=LoginError(message)))
+
+    with pytest.raises(imap.ImapAuthError):
+        with imap.connection():
+            pass
+
+
+def test_a_transient_rejection_never_logs_the_password(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    install(monkeypatch, FakeImap(login_error=LoginError(WORKMAIL_TRANSIENT)))
+
+    with caplog.at_level(logging.DEBUG), pytest.raises(imap.ImapError) as excinfo:
+        with imap.connection():
+            pass
+
+    assert PASSWORD not in caplog.text
+    assert PASSWORD not in str(excinfo.value)
+
+
 def test_rejected_login_never_logs_the_password(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

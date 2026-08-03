@@ -133,8 +133,17 @@ describe('the failure alarm (acceptance #11)', () => {
     const alarm = Object.values(
       templateFor().findResources('AWS::CloudWatch::Alarm'),
     )[0];
-    expect(alarm.Properties.AlarmDescription).toMatch(/password/i);
-    expect(alarm.Properties.AlarmDescription).toMatch(/NOT being processed/i);
+    const description = alarm.Properties.AlarmDescription;
+    // Names concrete places to look, not just a symptom.
+    expect(description).toMatch(/Secrets Manager/i);
+    expect(description).toMatch(/credentials rejected after refresh/i);
+    expect(description).toMatch(/NOT being processed/i);
+    // It must not blame rotation. This alarm once advised checking for a rotated password against
+    // a secret that does not rotate, and fired on a transient [UNAVAILABLE] that healed in a
+    // minute — remediation naming a cause that cannot occur is how an alarm gets muted.
+    expect(description).not.toMatch(/rotat/i);
+    // And it must say the transient case does not reach here, or the next reader re-derives it.
+    expect(description).toMatch(/UNAVAILABLE/);
   });
 
   test('exists in both environments, because an alarm nobody has seen fire is not an alarm', () => {

@@ -681,7 +681,8 @@ and build their drill-down links from them, so the links follow for free.
 | Risk | Slice | Mitigation |
 |---|---|---|
 | ~~WorkMail IMAP connection quota unknown~~ | 6b | ✅ **Resolved** — 10 per user+IP; reserved concurrency 1 + rotating Lambda IPs make it non-binding |
-| **Silent IMAP auth failure** — password rotated, poller finds nothing, nobody notices for weeks | 6b | Auth errors alarm rather than log-and-continue; acceptance #11 tests it by breaking the secret |
+| **Silent IMAP auth failure** — credentials refused, poller finds nothing, nobody notices for weeks | 6b | Auth errors alarm rather than log-and-continue; acceptance #11 tests it by breaking the secret |
+| **The auth alarm gets muted for crying wolf** — a transient `[UNAVAILABLE]` looked identical to a bad password and paged on a mailbox that healed in a minute | 6b (fixed post-10) | The IMAP response code decides: transient codes skip a cycle, anything unrecognised still alarms |
 | **An uploaded file previewed on our own origin** could run script beside the ID token | 9 | Previews load from the presigned S3 URL only — a different origin, and never inlined into our DOM |
 | A slid tile shows one week's number but links to another week's list | 10 | Acceptance #2 — the link is built from the same `period_start`/`period_end` the number was counted over |
 | UIDVALIDITY handling is the classic poller bug | 6b | Explicit acceptance test #6; unit-test the reset path |

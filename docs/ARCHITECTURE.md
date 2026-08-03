@@ -408,10 +408,20 @@ in `cdk.out/`, the CDK staging bucket, and CloudFormation. Mailbox is
 `donna.king@360balancedliving.com` at `imap.mail.us-east-1.awsapps.com:993`; no MFA, so plain
 username/password authenticates.
 
-**IMAP auth failure must alarm.** A wrong or rotated password produces a *silent* failure mode: the
-poller runs on schedule, authenticates nothing, finds nothing, and inbound threading stops with no
-error surface. Treat auth errors as an alarm, distinct from the transient network errors the poller
+**IMAP auth failure must alarm.** A wrong password produces a *silent* failure mode: the poller runs
+on schedule, authenticates nothing, finds nothing, and inbound threading stops with no error
+surface. Treat auth errors as an alarm, distinct from the transient network errors the poller
 retries.
+
+**But a rejected login is not always an auth failure.** WorkMail answers
+`[UNAVAILABLE] Temporary authentication failure` when it is busy or the per-user connection quota is
+reached, and the client raises the same `LoginError` a bad password does. `common/imap.py` reads the
+IMAP response code (`TRANSIENT_LOGIN_CODES`) and raises transient rejections as plain `ImapError`,
+which the poller already skips and retries the following minute; anything else stays `ImapAuthError`
+and alarms. **An unrecognised rejection counts as an auth failure** — a false alarm is recoverable,
+a silenced one is the exact silent failure this section exists to prevent. Learned the hard way: the
+alarm fired on a healthy mailbox on 2026-08-02 and advised checking for a rotated password, for a
+secret that does not rotate.
 
 **Write invariant:** a send writes `email_messages` + `email_threads` + `outreaches` (+ optionally
 `follow_ups`) in **one transaction**. A partial write loses the touch or orphans the thread.

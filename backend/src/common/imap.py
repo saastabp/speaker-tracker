@@ -13,10 +13,20 @@ fallback logs at WARNING — a silent fallback here would mean sent mail quietly
 Outlook with nothing to alert on.
 
 **Authentication failures are their own exception type.** :class:`ImapAuthError` lets a caller
-retry once with ``get_imap_credentials(refresh=True)`` when a rotation is the likely cause, and
-lets 6b satisfy acceptance #11 — a wrong password must alarm, never look like "no new mail". The
-underlying library reports it as a distinct :class:`~imapclient.exceptions.LoginError`, so the
-distinction rests on a type rather than on which call happened to raise.
+retry once with ``get_imap_credentials(refresh=True)``, and lets 6b satisfy acceptance #11 — a
+wrong password must alarm, never look like "no new mail". The underlying library reports it as a
+distinct :class:`~imapclient.exceptions.LoginError`, so the distinction rests on a type rather than
+on which call happened to raise.
+
+**But a rejected login is not always about the credentials.** WorkMail answers
+``[UNAVAILABLE] Temporary authentication failure`` when it is busy or the per-user connection quota
+is reached, and ``imapclient`` raises the same ``LoginError`` it raises for a bad password. Treating
+the two alike alarmed on a healthy mailbox that recovered a minute later, and told the operator to
+check for a rotated password — for a secret that does not rotate. The response code now decides
+(:data:`TRANSIENT_LOGIN_CODES`): a transient one raises plain :class:`ImapError`, which the poller
+already handles by skipping the cycle and letting the next minute retry, while anything else stays
+:class:`ImapAuthError` and still alarms. **An unrecognised rejection counts as an auth failure** —
+a false alarm is recoverable, a silenced one means inbound mail stops with nobody told.
 
 **The `APPEND` is best-effort and time-boxed** (decision #2). It runs *after* SES has accepted the
 message, so it can never un-send anything; the worst case must be a logged WARNING, not a failed
@@ -43,6 +53,7 @@ day, a bounded blocking call is the simpler correct thing.
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -80,11 +91,38 @@ class ImapError(Exception):
 
 
 class ImapAuthError(ImapError):
-    """Authentication was rejected — wrong or rotated credentials.
+    """Authentication was rejected and the credentials are the likely cause.
 
     Distinct from :class:`ImapError` so a caller can retry once with refreshed credentials, and so
     monitoring can alarm on it specifically rather than on generic mailbox noise.
+
+    **Not every rejected login lands here.** A rejection carrying a transient response code is
+    raised as a plain :class:`ImapError` instead — see :data:`TRANSIENT_LOGIN_CODES`.
     """
+
+
+#: IMAP response codes on a rejected login that mean "try again later", not "your credentials are
+#: wrong" (RFC 5530). WorkMail returns ``[UNAVAILABLE] Temporary authentication failure`` under load
+#: and when the per-user connection quota is reached — the same exception a bad password raises, and
+#: until this existed, indistinguishable from one. That cost a false alarm on 2026-08-02 whose
+#: advice was to check a rotated password, for a secret that does not rotate.
+TRANSIENT_LOGIN_CODES = frozenset({"UNAVAILABLE", "SERVERBUG", "CONTACTADMIN", "INUSE", "LIMIT"})
+
+#: The response code leading an IMAP status line: ``[UNAVAILABLE] Temporary authentication failure.
+#: [2026-08-03 06:00:06]``. Letters only, so the trailing timestamp cannot be read as a code.
+_RESPONSE_CODE = re.compile(r"\[([A-Za-z]+)\]")
+
+
+def _is_transient_login_failure(exc: BaseException) -> bool:
+    """Return whether a rejected login was the server's fault rather than the credentials'.
+
+    **Defaults to False**, including when no response code is present. The two mistakes are not
+    symmetric: calling a genuine auth failure "transient" silences the alarm and lets inbound mail
+    stop with nobody told, while calling a transient an auth failure costs only a false alarm. When
+    in doubt, alarm.
+    """
+    match = _RESPONSE_CODE.search(str(exc))
+    return bool(match) and match.group(1).upper() in TRANSIENT_LOGIN_CODES
 
 
 def imap_host() -> str:
@@ -160,8 +198,18 @@ def connection(*, refresh_credentials: bool = False) -> Iterator[IMAPClient]:
         conn.login(credentials.username, credentials.password)
     except LoginError as exc:
         # The password is never logged, and never included in the message.
-        logger.error("IMAP login rejected host=%s user=%s", host, credentials.username)
         _logout_quietly(conn)
+        if _is_transient_login_failure(exc):
+            # Raised as a plain ImapError so the poller's transient branch takes it: log, skip this
+            # cycle, let the next minute retry. Refreshing the secret cannot help a server-side
+            # condition, and reconnecting immediately is worse if the cause is the connection quota.
+            logger.warning(
+                "IMAP login temporarily unavailable host=%s user=%s — server-side, not credentials",
+                host,
+                credentials.username,
+            )
+            raise ImapError(f"IMAP temporarily unavailable at {host}") from exc
+        logger.error("IMAP login rejected host=%s user=%s", host, credentials.username)
         raise ImapAuthError(f"IMAP login rejected for {credentials.username}") from exc
     except (IMAPClientError, OSError) as exc:
         logger.exception("IMAP login failed at the socket host=%s", host)

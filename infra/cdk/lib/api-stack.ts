@@ -452,10 +452,13 @@ export class ApiStack extends Stack {
     const pollAlarm = new cloudwatch.Alarm(this, 'ImapPollFailureAlarm', {
       alarmName: `${props.appName}-${props.envType}-imap-poll-failures`,
       alarmDescription:
-        'The IMAP poller failed. Most likely the mailbox password was rotated: the handler ' +
-        'retries once with a freshly fetched secret and then lets the error fail the ' +
-        'invocation, which is what fires this. Inbound mail is NOT being processed until it is ' +
-        'fixed. Check the function log for "credentials rejected after refresh".',
+        'The IMAP poller could not authenticate to the mailbox, and inbound mail is NOT being ' +
+        'processed until it is fixed. Transient server-side rejections ([UNAVAILABLE] and the ' +
+        'other codes in common/imap.TRANSIENT_LOGIN_CODES) do NOT reach here — they skip one ' +
+        'cycle and the next minute retries — so this firing means the credentials themselves ' +
+        'were refused, or were refused in a way we do not recognise. Check the function log for ' +
+        '"credentials rejected after refresh", then the secret in Secrets Manager and whether ' +
+        'the WorkMail mailbox is still enabled.',
       metric: pollFn.metricErrors({ period: Duration.minutes(5) }),
       threshold: 1,
       evaluationPeriods: 1,

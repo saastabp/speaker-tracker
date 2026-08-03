@@ -604,6 +604,37 @@ def test_a_rejected_password_raises_after_one_refresh_rather_than_no_opping(poll
     assert len(attempts) == 2, "expected one retry with refreshed credentials, then propagation"
 
 
+def test_a_temporarily_unavailable_server_does_not_alarm_or_refresh_the_secret(poller) -> None:
+    """The 2026-08-02 false alarm, end to end.
+
+    WorkMail answers ``[UNAVAILABLE]`` when it is busy or the per-user connection quota is reached.
+    That used to reach the auth branch: retried 2s later with a freshly fetched secret — which
+    cannot help a server-side condition, and opens a second connection against the very quota that
+    may be the cause — then failed the invocation and paged, advising a password rotation for a
+    secret that does not rotate. It must now skip the cycle silently and let the next minute retry.
+    """
+    attempts = []
+
+    class Unavailable:
+        def __getattr__(self, name):
+            def raise_login_error(*args, **kwargs):
+                raise imap.LoginError(
+                    "b'[UNAVAILABLE] Temporary authentication failure. [2026-08-03 06:00:06]'"
+                )
+
+            if name == "login":
+                attempts.append(1)
+            return raise_login_error
+
+    poller.server = Unavailable()
+    poll_handler.imap._connect = lambda host: poller.server
+
+    result = poller.run()  # must not raise: raising is what ticks Errors and fires the alarm
+
+    assert result["status"] == "transient_error"
+    assert len(attempts) == 1, "a transient must not burn a second connection refreshing the secret"
+
+
 def test_a_transient_failure_is_swallowed_for_the_next_minute(poller, monkeypatch) -> None:
     """A minute of missed mail costs nothing; paging on network noise would train everyone to
     ignore the alarm that matters."""
