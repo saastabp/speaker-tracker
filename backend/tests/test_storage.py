@@ -27,11 +27,19 @@ SIGNED_URL = "https://s3.example.com/put?X-Amz-Signature=deadbeefsecret"
 class FakeS3:
     """Stand-in for the boto3 S3 client, recording calls."""
 
-    def __init__(self, *, body: bytes = b"", url: str = SIGNED_URL) -> None:
+    def __init__(
+        self,
+        *,
+        body: bytes = b"",
+        url: str = SIGNED_URL,
+        head_content_type: str = "application/pdf",
+    ) -> None:
         self.body = body
         self.url = url
+        self.head_content_type = head_content_type
         self.gets: list[dict] = []
         self.puts: list[dict] = []
+        self.heads: list[dict] = []
         self.presigns: list[tuple[str, dict, int]] = []
 
     def get_object(self, **kwargs) -> dict:
@@ -45,6 +53,10 @@ class FakeS3:
     def generate_presigned_url(self, operation: str, Params: dict, ExpiresIn: int) -> str:  # noqa: N803 - boto3's parameter names
         self.presigns.append((operation, Params, ExpiresIn))
         return self.url
+
+    def head_object(self, **kwargs) -> dict:
+        self.heads.append(kwargs)
+        return {"ContentLength": len(self.body), "ContentType": self.head_content_type}
 
 
 @pytest.fixture(autouse=True)
@@ -187,6 +199,59 @@ def test_presigned_url_is_never_logged(
 
     assert SIGNED_URL not in caplog.text
     assert "X-Amz-Signature" not in caplog.text
+
+
+# --- presigned GET / head (the materials library) ------------------------------------------------
+
+
+def test_presigned_get_is_inline_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A preview wants the browser to display the object, not save it."""
+    client = install(monkeypatch)
+
+    url = storage.presigned_get_url(f"{storage.MATERIAL_PREFIX}7/one-sheet.pdf")
+
+    assert url == SIGNED_URL
+    operation, params, ttl = client.presigns[0]
+    assert operation == "get_object"
+    assert params["Bucket"] == BUCKET
+    assert params["Key"] == "materials/7/one-sheet.pdf"
+    assert "ResponseContentDisposition" not in params
+    assert ttl == storage.PRESIGNED_GET_TTL_S
+
+
+def test_presigned_get_can_force_a_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = install(monkeypatch)
+
+    storage.presigned_get_url("materials/7/x.pdf", download_as="Donna One-Sheet.pdf")
+
+    _, params, _ = client.presigns[0]
+    assert params["ResponseContentDisposition"] == 'attachment; filename="Donna One-Sheet.pdf"'
+
+
+def test_presigned_get_strips_quotes_from_the_filename(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quote in the name would otherwise break out of the header it is embedded in."""
+    client = install(monkeypatch)
+
+    storage.presigned_get_url("materials/7/x.pdf", download_as='we"ird.pdf')
+
+    _, params, _ = client.presigns[0]
+    assert params["ResponseContentDisposition"] == 'attachment; filename="weird.pdf"'
+
+
+def test_head_object_reports_size_and_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = install(monkeypatch, body=b"x" * 1234, head_content_type="application/pdf")
+
+    size, content_type = storage.head_object("materials/7/one-sheet.pdf")
+
+    assert (size, content_type) == (1234, "application/pdf")
+    assert client.heads[0] == {"Bucket": BUCKET, "Key": "materials/7/one-sheet.pdf"}
+
+
+def test_head_object_defaults_a_missing_content_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = install(monkeypatch, body=b"abc")
+    client.head_content_type = ""
+
+    assert storage.head_object("materials/7/x")[1] == "application/octet-stream"
 
 
 # --- client caching ---------------------------------------------------------------------------

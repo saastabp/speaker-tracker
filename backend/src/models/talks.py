@@ -19,8 +19,10 @@ class TalkInput(BaseModel):
     ----------
     title : str
         Display title; 1-255 characters.
-    length_minutes : int or None
-        Optional run time in minutes.
+    duration : str or None
+        Optional run time, **free text** — "45–60 min", "flexible length". Deliberately not a
+        number: nothing sums, sorts or compares it, and the real answers are ranges and
+        qualifications a single integer cannot hold.
     one_liner : str or None
         Optional one-sentence description.
     sort_order : int
@@ -28,7 +30,7 @@ class TalkInput(BaseModel):
     """
 
     title: str = Field(min_length=1, max_length=255)
-    length_minutes: int | None = None
+    duration: str | None = Field(default=None, max_length=64)
     one_liner: str | None = None
     sort_order: int = 0
 
@@ -38,7 +40,7 @@ class TalkSummary(BaseModel):
 
     id: int
     title: str
-    length_minutes: int | None
+    duration: str | None
     one_liner: str | None
     sort_order: int
     created_at: datetime

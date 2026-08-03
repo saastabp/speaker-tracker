@@ -16,12 +16,20 @@ def _talk(title: str = "Boundaries 101", **kw) -> TalkInput:
 
 def test_create_and_get(seeded_db) -> None:
     conn, user_id, _, _ = seeded_db
-    talk_id = talks.create_talk(conn, user_id, _talk(length_minutes=45, one_liner="A talk"))
+    # Duration is free text — the values that matter are ranges and qualifications, not integers.
+    talk_id = talks.create_talk(conn, user_id, _talk(duration="45–60 min", one_liner="A talk"))
     row = talks.get_talk(conn, user_id, talk_id)
     assert row["title"] == "Boundaries 101"
-    assert row["length_minutes"] == 45
+    assert row["duration"] == "45–60 min"
     assert row["one_liner"] == "A talk"
     assert row["sort_order"] == 0
+
+
+def test_duration_accepts_a_non_numeric_answer(seeded_db) -> None:
+    """The case an INT column could not hold, which is why the column changed."""
+    conn, user_id, _, _ = seeded_db
+    talk_id = talks.create_talk(conn, user_id, _talk("Wellness Wheel", duration="flexible length"))
+    assert talks.get_talk(conn, user_id, talk_id)["duration"] == "flexible length"
 
 
 def test_list_orders_by_sort_order_then_title(seeded_db) -> None:

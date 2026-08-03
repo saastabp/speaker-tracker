@@ -510,6 +510,88 @@ since everything is dated; `core/periods.py` already has the period math.
 
 ---
 
+## Slice 9 — Talks & Materials
+
+**Size: M.** The last nav item without a page. Depends on nothing outstanding: the talks API already
+exists, and `common/storage.py` already reserves the `materials/` prefix and has the presigned-PUT
+machinery the composer uses for ad-hoc attachments.
+
+Two halves behind one page.
+
+**Talks are almost done already.** The table, model, repository and the full
+list/create/update/soft-delete route set shipped with slice 3 so the opportunity form could pick a
+talk; `Talks & Materials` has simply never had a page and falls through to the catch-all
+Placeholder. What is missing is the page, plus one schema change: `length_minutes` is an `INT`, and
+the approved card shows **"45–60 min"** and **"flexible length"**, neither of which is a number.
+It becomes free text — nothing computes on a duration, and the user knows their own formats.
+
+**Deliberately dropped from the mockup card:** the kind/category chip ("Keynote / workshop",
+"Interactive") and the usage line ("Pitched 6× · delivered 2×"). The first is a distinction the user
+makes in their own wording — the same talk is a keynote at one venue and a workshop at another — and
+the second is a metric nobody asked to act on.
+
+**Materials are new.** A small reusable library of files — one-sheets, speaker menus, headshots —
+stored in S3 under the existing `materials/` prefix, listed on this page, and **offered as
+attachments in the email composer**, which is the point of keeping them rather than re-uploading
+each time. Upload reuses `presigned_put_url`; download needs the presigned **GET** that
+`storage.py` has deliberately gone without until now, since it had no caller. Removal is a soft
+delete: the row is hidden and the object stays, so a material referenced by an already-sent email is
+never orphaned.
+
+**Preview, and its honest limits.** Images and PDFs render from the presigned URL; markdown shows as
+text. **`.docx` gets no preview** — nothing renders it in a browser without shipping a converter, so
+it shows a download-to-view state rather than a broken frame. Media and archives (mp3/mp4/zip) are
+download-only by design.
+
+> **Previews must load from the presigned S3 URL, never be inlined into the app's DOM.** An uploaded
+> file rendered on our own origin is script running next to the ID token — the same reason email
+> bodies go through `SafeHtml`. An `<img>` or `<iframe>` pointed at S3 is a different origin and
+> cannot reach it. This is the security property of the slice; nothing else here is risky.
+
+**Acceptance**
+1. A talk can be created, edited, and removed; a removed talk disappears from the page **and from
+   the opportunity form's picker**, while gigs already referencing it still show its title.
+2. A material can be uploaded, appears in the list with its size and updated date, and downloads
+   intact — byte-identical to what was uploaded.
+3. A removed material disappears from the list and from the composer's picker; an email already sent
+   with it attached is unaffected.
+4. The composer can attach a material from the library without re-uploading it.
+5. An image and a PDF preview in place; a `.docx` offers download instead of a broken preview.
+
+**Verify manually:** upload a real one-sheet, attach it to an email from the composer, and confirm
+the received message carries the file.
+
+---
+
+## Slice 10 — Dashboard date window
+
+**Size: M.** Depends on slice 8's drill-down links, which have to keep matching once the numbers
+they open become windowed.
+
+The Dashboard's money and funnel figures are **all-time**; only the target tiles are windowed, each
+by its own cadence. This slice adds a **window picker** — weekly / monthly / quarterly / annual — and
+makes every aggregate honour it.
+
+**`annual` does not exist yet.** `core.periods.CADENCES` is weekly/monthly/quarterly, and so is the
+`Cadence` literal and the targets catalog. Adding it is the first checkpoint, not an afterthought.
+
+**The design question this slice must answer first: what does a window *mean* for money?** "Booked
+this quarter" could be gigs whose event date falls in it, gigs that *entered* `booked` in it, or
+gigs invoiced in it — three different numbers from the same words. Each figure needs its rule
+decided and written down before any of it is built, because **the drill-down links have to carry the
+same rule** or the lists stop matching the numbers, which is the property slice 8 exists to hold.
+
+Also to settle: whether the target tiles follow the picker or keep their own cadence. A weekly touch
+target displayed over a quarter is a different tile, not a rescaled one.
+
+**Acceptance**
+1. Picking a window changes the money and funnel figures, and the picked window is visible.
+2. Every drill-down link still opens a list the same size as the number clicked, in the chosen
+   window — the slice-8 property, preserved.
+3. The window survives a reload and is shareable (it lives in the URL, like every list filter).
+
+---
+
 ## Sequencing and risk
 
 ```mermaid
@@ -525,10 +607,18 @@ flowchart LR
     S3 --> S7["7 · Follow-ups"]
     S6A --> S7
     S5 --> S8["8 · Dashboard drill-down"]
+    S3 --> S9["9 · Talks + materials"]
+    S6A --> S9
+    S8 --> S10["10 · Dashboard date window"]
 ```
 
 Slices **3 and 4 can run in parallel** after 2 — they touch different tables and different pages.
-Everything else is a chain.
+**9 and 10 are independent of each other** and can run in either order: 9 is additive and touches no
+existing aggregate, while 10 rewrites every one of them. Everything else is a chain.
+
+9 depends on 3 for the talks API it finishes, and on 6a for the composer it adds an attachment
+source to. 10 depends on 8 because its whole risk is keeping the drill-down counts matching once the
+numbers they open are windowed.
 
 **Risk register**
 
@@ -536,6 +626,8 @@ Everything else is a chain.
 |---|---|---|
 | ~~WorkMail IMAP connection quota unknown~~ | 6b | ✅ **Resolved** — 10 per user+IP; reserved concurrency 1 + rotating Lambda IPs make it non-binding |
 | **Silent IMAP auth failure** — password rotated, poller finds nothing, nobody notices for weeks | 6b | Auth errors alarm rather than log-and-continue; acceptance #11 tests it by breaking the secret |
+| **An uploaded file previewed on our own origin** could run script beside the ID token | 9 | Previews load from the presigned S3 URL only — a different origin, and never inlined into our DOM |
+| Windowing changes a number but not the link that opens it | 10 | Acceptance #2 is the slice-8 count-matching property, re-asserted per window |
 | UIDVALIDITY handling is the classic poller bug | 6b | Explicit acceptance test #6; unit-test the reset path |
 | Optimistic drag desyncs from the status journal | 3 | Rollback on failure is acceptance #2; server owns ordering |
 | Timezone bucketing (UTC-10) silently off by a day | 5 | Acceptance #1 uses a 22:00 local touch specifically |

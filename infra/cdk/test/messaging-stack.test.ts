@@ -141,15 +141,19 @@ describe('Api stack email permissions', () => {
     }
   });
 
-  test('the content bucket allows browser PUTs from the app origin', () => {
+  test('the content bucket allows browser PUTs and GETs from the app origin', () => {
     // Composer attachments are PUT to a presigned URL by the browser, which makes the bucket a
     // cross-origin target. Without a CORS rule the preflight fails and every upload is blocked —
     // a failure that only ever appears in a browser, never in synth or a unit test.
+    //
+    // GET is here for the materials library's *text* previews. An image or PDF previews via
+    // `<img>`/`<iframe>`, which need no CORS; reading a markdown file to display it means `fetch`,
+    // which does. Same class of failure: browser-only, invisible to synth.
     apiTemplate().hasResourceProperties('AWS::S3::Bucket', {
       CorsConfiguration: {
         CorsRules: [
           Match.objectLike({
-            AllowedMethods: ['PUT'],
+            AllowedMethods: ['PUT', 'GET', 'HEAD'],
             AllowedOrigins: ['https://example.test'],
           }),
         ],
@@ -157,12 +161,33 @@ describe('Api stack email permissions', () => {
     });
   });
 
-  test('the content bucket grant is prefix-scoped to email/*', () => {
-    // Matches common/storage.py's prefixes; materials/* is deliberately absent until that slice.
+  test('the content bucket grant covers both documented prefixes and nothing else', () => {
+    // Matches common/storage.py's constants. A key built outside these is denied at runtime, so
+    // the grant and the code have to move together — materials/* arrived with slice 9.
     const policies = apiTemplate().findResources('AWS::IAM::Policy');
     const rendered = JSON.stringify(Object.values(policies));
 
     expect(rendered).toContain('email/*');
-    expect(rendered).not.toContain('materials/*');
+    expect(rendered).toContain('materials/*');
+  });
+
+  test('nothing may delete a stored email object', () => {
+    // `email/raw/` holds the only copy of what was actually sent or received — the thread view
+    // rebuilds bodies and attachments from it, and nothing can regenerate it. `grantReadWrite`
+    // quietly bundles s3:DeleteObject*, which is how this capability existed unnoticed until
+    // slice 9 needed a delete for materials and went looking. Read + put only, here on purpose.
+    const policies = apiTemplate().findResources('AWS::IAM::Policy');
+    const statements = Object.values(policies).flatMap(
+      (policy) =>
+        (policy as never as { Properties: { PolicyDocument: { Statement: unknown[] } } }).Properties
+          .PolicyDocument.Statement,
+    );
+    const deleteStatements = statements.filter((statement) =>
+      JSON.stringify((statement as { Action?: unknown }).Action ?? '').includes('s3:DeleteObject'),
+    );
+
+    // Materials still need one, for cleaning up a file that has been replaced.
+    expect(JSON.stringify(deleteStatements)).toContain('materials/*');
+    expect(JSON.stringify(deleteStatements)).not.toContain('email/*');
   });
 });

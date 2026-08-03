@@ -68,6 +68,17 @@ const ROUTES: RouteDef[] = [
   { method: apigwv2.HttpMethod.PUT, path: '/talks/{id}', authRequired: true },
   { method: apigwv2.HttpMethod.DELETE, path: '/talks/{id}', authRequired: true },
 
+  // Materials (slice 9). `/materials/upload-url` is declared before `/materials/{id}` for
+  // readability only — API Gateway prefers a literal segment over a variable one regardless of
+  // order, so `upload-url` can never be swallowed as an id.
+  { method: apigwv2.HttpMethod.GET, path: '/materials', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/materials', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/materials/upload-url', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/materials/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.PUT, path: '/materials/{id}/file', authRequired: true },
+  { method: apigwv2.HttpMethod.GET, path: '/materials/{id}/url', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/materials/{id}', authRequired: true },
+
   { method: apigwv2.HttpMethod.GET, path: '/funnel', authRequired: true },
   { method: apigwv2.HttpMethod.GET, path: '/opportunities', authRequired: true },
   { method: apigwv2.HttpMethod.POST, path: '/opportunities', authRequired: true },
@@ -230,7 +241,12 @@ export class ApiStack extends Stack {
       // stacks for the CloudFront domain is what silently broke the origin on 2026-07-25.
       cors: [
         {
-          allowedMethods: [s3.HttpMethods.PUT],
+          // PUT for composer attachments and material uploads. GET/HEAD for the materials
+          // library's **text** previews only: an image or a PDF previews through `<img>` or
+          // `<iframe>`, which need no CORS at all, but reading a markdown file's contents to
+          // display it means `fetch`, and that does. Without GET here the preflight fails and a
+          // .md file silently offers download instead of the preview it was promised.
+          allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET, s3.HttpMethods.HEAD],
           allowedOrigins: props.contentCorsOrigins,
           // Content-Type is signed into the presigned URL and must be sent verbatim; the rest are
           // whatever the browser adds to a PUT.
@@ -285,10 +301,20 @@ export class ApiStack extends Stack {
     // Email permissions — the API function only; the migrate function has no business sending
     // mail or reading the mailbox credential.
     //
-    // Prefix-scoped to `email/*`, matching common/storage.py's constants: a key built outside the
-    // documented prefixes is then denied at runtime rather than silently working. `materials/*`
-    // is deliberately absent until that slice exists.
-    contentBucket.grantReadWrite(apiFn, 'email/*');
+    // Prefix-scoped, matching common/storage.py's constants: a key built outside the documented
+    // prefixes is denied at runtime rather than silently working.
+    //
+    // **`email/*` is read+put, deliberately without delete.** `grantReadWrite` bundles
+    // `s3:DeleteObject*`, which this had until slice 9 went looking. Nothing deletes an email
+    // object — `email/raw/` holds the only copy of what was actually sent or received, and the
+    // thread view reconstructs bodies and attachments from it — so the capability was pure
+    // downside: a bug could erase the record of a real message with nothing to restore it from.
+    contentBucket.grantRead(apiFn, 'email/*');
+    contentBucket.grantPut(apiFn, 'email/*');
+
+    // `materials/*` does need delete: replacing a material cleans up the file it superseded, and a
+    // material can be re-uploaded, so the blast radius is a file the user still has.
+    contentBucket.grantReadWrite(apiFn, 'materials/*');
 
     // SendRawEmail is authorized against the *identity*, so the resource is the identity ARN
     // rather than '*'. The identity is referenced by ARN and never created here.
@@ -373,9 +399,11 @@ export class ApiStack extends Stack {
     });
     db.grantConnect(pollFn);
 
-    // Same prefix scoping as the API function: a key built outside `email/` is denied at runtime
-    // rather than silently working.
-    contentBucket.grantReadWrite(pollFn, 'email/*');
+    // Same prefix scoping — and same absence of delete — as the API function: a key built outside
+    // `email/` is denied at runtime, and the poller only ever writes what it fetched. It has even
+    // less business deleting a stored message than the API does.
+    contentBucket.grantRead(pollFn, 'email/*');
+    contentBucket.grantPut(pollFn, 'email/*');
 
     // The mailbox password. The trailing `-*` matters for the same reason it does above — Secrets
     // Manager appends a random suffix to the ARN.

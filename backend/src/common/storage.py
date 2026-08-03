@@ -14,10 +14,15 @@ second access path:
                       reconstruct a body and list attachments — neither is a column.
 ``email/attachments/`` Ad-hoc composer uploads, PUT directly by the browser via a presigned URL
                       and read back here when the MIME is assembled (slice 6a acceptance #6).
-``materials/``        Reusable one-sheets and speaker menus. **Not used yet** — the materials
-                      library is a later slice, which will add a presigned *GET* here for
-                      downloads. That function is deliberately absent until it has a caller.
+``materials/``        Reusable one-sheets and speaker menus (slice 9). Uploaded by presigned PUT
+                      like an attachment, then read back by presigned *GET* for download and
+                      preview — the caller that function was waiting for.
 ===================== =========================================================================
+
+**A material is read through a presigned URL, never proxied through the API, and that is a security
+property rather than a performance one.** The URL's origin is S3, so a previewed file renders in a
+different origin from the SPA and cannot reach the ID token in its memory. Inlining a material into
+our own DOM would undo that — the rule email bodies obey via ``SafeHtml``, for the same reason.
 
 **The bucket lives in the Api stack, not the Messaging stack.** Its only consumer is the API
 Lambda, for both email attachments and (later) materials; materials are not messaging. Putting it
@@ -50,6 +55,16 @@ MATERIAL_PREFIX: Final = "materials/"
 #: Lifetime of a presigned upload URL. Long enough for a slow connection to finish a one-sheet,
 #: short enough that a leaked URL is not a durable write grant.
 PRESIGNED_PUT_TTL_S = 900
+
+#: Lifetime of a presigned download URL. Shorter than the upload's: a read URL is handed to the
+#: browser on every listing and preview, so it leaks more easily and needs to expire sooner. Still
+#: long enough to start a 25 MB download over a poor connection.
+PRESIGNED_GET_TTL_S = 300
+
+#: Largest material accepted, in bytes. Chosen against SES's 40 MB message limit rather than S3's:
+#: a material exists to be attached to an email, so one too large to send is one that cannot do its
+#: job. The margin covers base64 encoding (~1.37×) plus the body and signature.
+MAX_MATERIAL_BYTES = 25 * 1024 * 1024
 
 _client_instance = None
 
@@ -217,6 +232,107 @@ def presigned_put_url(
     # The URL embeds a signature; log the key and TTL, never the URL itself.
     logger.info("S3 presigned PUT issued bucket=%s key=%s ttl_s=%d", bucket, key, ttl)
     return url
+
+
+def presigned_get_url(
+    key: str, *, download_as: str | None = None, expires_in: int | None = None
+) -> str:
+    """Return a presigned URL the browser can read an object from directly.
+
+    The counterpart to :func:`presigned_put_url`, and the reason the materials library can preview
+    and download without the bytes passing back through the API.
+
+    **This URL's origin is the security property, not an implementation detail.** It points at S3,
+    so a previewed material renders in a different origin from the SPA and cannot reach the ID
+    token held in the app's memory. A material must never be inlined into our own DOM instead —
+    that is the same rule email bodies obey via ``SafeHtml``.
+
+    Parameters
+    ----------
+    key : str
+        Object key, normally under :data:`MATERIAL_PREFIX`.
+    download_as : str or None, optional
+        Filename to force a download under, via ``Content-Disposition: attachment``. ``None`` lets
+        the browser display the object inline, which is what a preview wants.
+    expires_in : int or None, optional
+        URL lifetime in seconds; defaults to :data:`PRESIGNED_GET_TTL_S`.
+
+    Returns
+    -------
+    str
+        The presigned URL.
+    """
+    bucket = bucket_name()
+    ttl = expires_in if expires_in is not None else PRESIGNED_GET_TTL_S
+    params: dict = {"Bucket": bucket, "Key": key}
+    if download_as:
+        # Quoted so a filename containing a comma or a quote cannot break out of the header.
+        escaped = download_as.replace('"', "")
+        params["ResponseContentDisposition"] = f'attachment; filename="{escaped}"'
+    url = _client().generate_presigned_url("get_object", Params=params, ExpiresIn=ttl)
+    # The URL embeds a signature; log the key and TTL, never the URL itself.
+    logger.info("S3 presigned GET issued bucket=%s key=%s ttl_s=%d", bucket, key, ttl)
+    return url
+
+
+def head_object(key: str) -> tuple[int, str]:
+    """Return an object's ``(size_bytes, content_type)`` without fetching its body.
+
+    Used to record a material's size and type from **S3 rather than from the client**. The browser
+    uploads straight to a presigned URL, so a client-reported size is an unverified claim — and it
+    is the number the upload cap is enforced against. A HEAD costs one request and makes both
+    facts true by construction.
+
+    Parameters
+    ----------
+    key : str
+        Object key.
+
+    Returns
+    -------
+    tuple of (int, str)
+        Size in bytes, and the stored content type (``application/octet-stream`` when S3 has none).
+
+    Raises
+    ------
+    botocore.exceptions.ClientError
+        Propagated unchanged when the object is missing — which is the signal that a claimed upload
+        never actually happened.
+    """
+    response = _client().head_object(Bucket=bucket_name(), Key=key)
+    return int(response["ContentLength"]), response.get("ContentType") or "application/octet-stream"
+
+
+def delete_object_best_effort(key: str) -> bool:
+    """Delete an object, returning whether it went; a failure is logged, never raised.
+
+    For objects nothing points at any more — the file a material used to hold after it has been
+    replaced. It is called *after* the row already points at the new key, so a failure here leaks
+    storage but breaks nothing, and failing the user's request over it would turn a successful
+    replacement into an error.
+
+    Logged at WARNING rather than swallowed, so an S3 permission problem that starts orphaning
+    every superseded upload is visible to monitoring instead of silently accumulating.
+
+    Parameters
+    ----------
+    key : str
+        Object key to remove.
+
+    Returns
+    -------
+    bool
+        True when the delete call succeeded.
+    """
+    try:
+        _client().delete_object(Bucket=bucket_name(), Key=key)
+    except Exception:
+        logger.warning(
+            "Could not delete superseded object key=%s; it is now orphaned", key, exc_info=True
+        )
+        return False
+    logger.info("S3 delete key=%s", key)
+    return True
 
 
 def reset_client() -> None:

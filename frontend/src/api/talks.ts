@@ -5,7 +5,9 @@ import { useApi } from './client';
 
 export interface TalkInput {
   title: string;
-  length_minutes?: number | null;
+  /** Free text — "45–60 min", "flexible length". Not a number: nothing computes on it, and the
+   *  honest answers are ranges and qualifications an integer cannot hold. */
+  duration?: string | null;
   one_liner?: string | null;
   sort_order?: number;
 }
@@ -13,7 +15,7 @@ export interface TalkInput {
 export interface TalkSummary {
   id: number;
   title: string;
-  length_minutes: number | null;
+  duration: string | null;
   one_liner: string | null;
   sort_order: number;
   created_at: string;

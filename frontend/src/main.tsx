@@ -19,6 +19,7 @@ import { History } from './pages/History';
 import { OpportunityDetail } from './pages/OpportunityDetail';
 import { Pipeline } from './pages/Pipeline';
 import { Placeholder } from './pages/Placeholder';
+import { TalksMaterials } from './pages/TalksMaterials';
 import { Targets } from './pages/Targets';
 import { FollowUps } from './pages/FollowUps';
 import { Templates } from './pages/Templates';
@@ -53,6 +54,7 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
                   <Route path="targets" element={<Targets />} />
                   <Route path="emails" element={<Emails />} />
                   <Route path="emails/:id" element={<EmailThread />} />
+                  <Route path="talks" element={<TalksMaterials />} />
                   <Route path="*" element={<Placeholder />} />
                 </Route>
               </Routes>

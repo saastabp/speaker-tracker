@@ -14,10 +14,10 @@ from pymysql.connections import Connection
 from models.talks import TalkInput
 
 #: Writable columns that map 1:1 from the input.
-_PLAIN_COLUMNS = ("title", "length_minutes", "one_liner", "sort_order")
+_PLAIN_COLUMNS = ("title", "duration", "one_liner", "sort_order")
 
 #: Columns returned by the list/get reads (shared so summary and detail stay in step).
-_READ_COLUMNS = "id, title, length_minutes, one_liner, sort_order, created_at, updated_at"
+_READ_COLUMNS = "id, title, duration, one_liner, sort_order, created_at, updated_at"
 
 
 def _plain_values(data: TalkInput) -> tuple:

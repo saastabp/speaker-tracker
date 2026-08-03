@@ -28,6 +28,7 @@ from handlers import (
     emails,
     follow_ups,
     health,
+    materials,
     message_templates,
     opportunities,
     opportunity_contacts,
@@ -48,6 +49,7 @@ app.include_router(email_imports.router)
 app.include_router(emails.router)
 app.include_router(follow_ups.router)
 app.include_router(health.router)
+app.include_router(materials.router)
 app.include_router(message_templates.router)
 app.include_router(opportunities.router)
 app.include_router(opportunity_contacts.router)
