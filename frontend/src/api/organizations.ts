@@ -31,6 +31,12 @@ export interface OrganizationSummary {
   why_it_fits: string | null;
   contact_count: number;
   research_ready: boolean;
+  /** When this venue first met the research-ready bar, or null if it never has.
+   *
+   *  Distinct from `research_ready` on purpose: a venue that has since lost its last contact is
+   *  not ready *now* but still counts toward the month it was researched, which is what the
+   *  dashboard's "new venues researched" tile links to. */
+  research_ready_at: string | null;
   created_at: string;
   updated_at: string;
 }

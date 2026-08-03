@@ -23,6 +23,21 @@ from models.follow_ups import FollowUpSummary
 from models.targets import Cadence
 
 
+class Week(BaseModel):
+    """The week the target tiles were anchored to, ``[start, end)`` as local dates.
+
+    Sent so the SPA can label the week it is showing without recomputing Sunday-start boundaries —
+    the same reasoning as :attr:`TargetTile.period_start`, and the reason ``currentWeekLabel()``
+    could be deleted from the Dashboard page. It is **always** present, including when no weekly
+    target is set, so the navigator has a week to render even with an empty tile grid.
+
+    ``end`` is exclusive: the week of Jul 19 is ``start=2026-07-19``, ``end=2026-07-26``.
+    """
+
+    start: date
+    end: date
+
+
 class TargetTile(BaseModel):
     """One actual-vs-target tile: a (target_type, cadence) goal and its current-period actual.
 
@@ -120,8 +135,13 @@ class ComingUpEvent(BaseModel):
 
 
 class Dashboard(BaseModel):
-    """The full dashboard payload — one composite response for the home screen."""
+    """The full dashboard payload — one composite response for the home screen.
 
+    ``week`` anchors the target tiles only. Every other field reports on now regardless of the week
+    being viewed (DEV-PLAN slice 10 acceptance #4).
+    """
+
+    week: Week
     targets: list[TargetTile]
     funnel: list[FunnelCount]
     money: MoneyRollup

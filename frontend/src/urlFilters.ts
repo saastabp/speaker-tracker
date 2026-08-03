@@ -17,6 +17,9 @@ export interface FilterParams {
   has: (key: string, value: string) => boolean;
   /** Write one filter, dropping the key from the URL when it returns to its default. */
   set: (key: string, value: string, fallback?: string) => void;
+  /** Write several filters in one update, dropping the keys whose value is empty. Use this — not
+   *  repeated `set` calls — whenever a single control changes more than one key. */
+  setMany: (values: Record<string, string>) => void;
   /** Toggle a filter between `value` and its default — the pill behaviour. */
   toggle: (key: string, value: string, fallback?: string) => void;
 }
@@ -47,10 +50,30 @@ export function useFilterParams(): FilterParams {
     setSearchParams(next, { replace: true });
   };
 
+  /** Write several filters at once, deleting the keys whose value is empty.
+   *
+   * Necessary whenever one control changes more than one key. Sequential `set` calls each rebuild
+   * from the *same* render's `searchParams`, so they clobber one another and only the last
+   * survives — which is how Pipeline's "entered" pill came to clear one of its three keys and
+   * appear to do nothing at all.
+   */
+  const setMany = (values: Record<string, string>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(values)) {
+      if (!value) {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+    }
+    setSearchParams(next, { replace: true });
+  };
+
   return {
     get,
     has: (key, value) => searchParams.get(key) === value,
     set,
+    setMany,
     toggle: (key, value, fallback = '') =>
       set(key, get(key, fallback) === value ? fallback : value, fallback),
   };

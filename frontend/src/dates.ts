@@ -23,6 +23,27 @@ export function parseDateLocal(iso: string): Date {
   return new Date(y, m - 1, d);
 }
 
+/**
+ * A `Date` back to a bare `YYYY-MM-DD`, in **local** time.
+ *
+ * Not `toISOString().slice(0, 10)` — that converts to UTC first, so Sunday midnight in Kauaʻi comes
+ * back as the *Saturday* before. Round-trips with `parseDateLocal`, which is the whole point: the
+ * week navigator reads a date out of the URL and writes the neighbouring one back.
+ */
+export function isoDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** `n` days from `d` (negative to go back), as a new local `Date`. DST-safe: `setDate` normalises
+ *  month and year rollover, and midnight-to-midnight arithmetic never crosses a DST boundary in a
+ *  way that shifts the calendar day. */
+export function addDays(d: Date, n: number): Date {
+  const next = new Date(d);
+  next.setDate(d.getDate() + n);
+  return next;
+}
+
 /** Parse a **timestamp** (an instant, not a calendar day), or null if it is unparseable. */
 export function parseTimestamp(iso: string): Date | null {
   const d = new Date(iso);
@@ -49,6 +70,12 @@ export function daysSince(iso: string): number {
 /** "Jul 9" — the compact form the list columns use. */
 export function shortDate(d: Date): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** "Jul 26 – Aug 1" for a half-open `[from, to)` window, so a pill shows the last day actually
+ *  included rather than the exclusive bound, which reads as a day too many. */
+export function windowLabel(from: string, to: string): string {
+  return `${shortDate(parseDateLocal(from))} – ${shortDate(addDays(parseDateLocal(to), -1))}`;
 }
 
 /** "Jul 9, 2026" — a full calendar date. */

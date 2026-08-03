@@ -39,6 +39,7 @@ def list_organizations() -> dict:
             research_ready=is_research_ready(
                 row["what_it_is"], row["why_it_fits"], row["how_to_approach"], row["contact_count"]
             ),
+            research_ready_at=row["research_ready_at"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

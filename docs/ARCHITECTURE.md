@@ -282,11 +282,11 @@ table.
 | `message_templates.py` | GET/POST `/templates`, GET/PUT/DELETE `/templates/{id}`, POST `/templates/{id}/duplicate` |
 | `follow_ups.py` | GET/POST `/follow-ups`, PUT/DELETE `/follow-ups/{id}`, POST `/follow-ups/{id}/complete` |
 | `targets.py` | GET/PUT `/targets`, DELETE `/targets/{targetType}/{cadence}` |
-| `dashboard.py` | GET `/dashboard` |
+| `dashboard.py` | GET `/dashboard` — `?week_of=YYYY-MM-DD` anchors the **target tiles only**; every other section reports on now whichever week is asked for |
 | `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, PATCH `/emails/threads/{id}` (read / close), POST `/emails/send`, POST `/emails/threads/{id}/reply` |
 | `email_imports.py` | GET `/emails/imports`, PUT `/emails/threads/{id}/contact`, PUT `/emails/threads/{id}/opportunity` — **PUT, not POST**: these set a property, so re-sending the same value succeeds, unlike the `/close` verb whose second call is a 404 |
 | `talks.py` | GET/POST `/talks`, PUT/DELETE `/talks/{id}` |
-| `materials.py` | GET/POST `/materials`, POST `/materials/presign`, DELETE `/materials/{id}` |
+| `materials.py` | GET/POST `/materials`, POST `/materials/upload-url`, PUT/DELETE `/materials/{id}`, PUT `/materials/{id}/file` (replace the bytes, keeping id/name/talk), GET `/materials/{id}/url` (presigned GET; `?disposition=attachment` to download) |
 | `imap_poll.py` | *(separate function — EventBridge, 1-minute)* |
 | `followup_notify.py` | *(separate function — EventBridge Scheduler target)* |
 

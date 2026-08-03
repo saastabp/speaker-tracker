@@ -1,11 +1,15 @@
-import { Button, Group, TextInput } from '@mantine/core';
-import { IconSearch } from '@tabler/icons-react';
+import { Button, Group, TextInput, Tooltip } from '@mantine/core';
+import { IconSearch, IconX } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 
 export interface FilterPill {
   value: string;
   label: string;
   active: boolean;
+  /** Renders an × and a "clear" tooltip. For a pill that *removes itself* when clicked — one that
+   *  arrived from a link — as against a toggle standing for a choice made here. Without it the two
+   *  look identical, and nothing suggests the pill is anything but a label. */
+  removable?: boolean;
 }
 
 interface FilterBarProps {
@@ -40,18 +44,28 @@ export function FilterBar({
         onChange={(event) => onSearch(event.currentTarget.value)}
         w={240}
       />
-      {pills?.map((pill) => (
-        <Button
-          key={pill.value}
-          size="xs"
-          radius="xl"
-          variant={pill.active ? 'light' : 'default'}
-          color={pill.active ? 'terracotta' : 'gray'}
-          onClick={() => onPillClick?.(pill.value)}
-        >
-          {pill.label}
-        </Button>
-      ))}
+      {pills?.map((pill) => {
+        const button = (
+          <Button
+            key={pill.value}
+            size="xs"
+            radius="xl"
+            variant={pill.active ? 'light' : 'default'}
+            color={pill.active ? 'terracotta' : 'gray'}
+            rightSection={pill.removable ? <IconX size={13} stroke={2.5} /> : undefined}
+            onClick={() => onPillClick?.(pill.value)}
+          >
+            {pill.label}
+          </Button>
+        );
+        return pill.removable ? (
+          <Tooltip key={pill.value} label="Clear this filter" withArrow>
+            {button}
+          </Tooltip>
+        ) : (
+          button
+        );
+      })}
       {extra}
     </Group>
   );

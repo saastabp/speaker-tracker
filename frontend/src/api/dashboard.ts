@@ -65,7 +65,18 @@ export interface ComingUpEvent {
   current_status: string;
 }
 
+export interface Week {
+  /** Inclusive Sunday. */
+  start: string;
+  /** Exclusive — the following Sunday. */
+  end: string;
+}
+
 export interface Dashboard {
+  /** The week the tiles report on. Server-resolved, so the navigator labels itself without
+   *  reimplementing Sunday-start boundaries in TS — the same reason `TargetTile.period_start`
+   *  is sent. Always present, even when no weekly target is set. */
+  week: Week;
   targets: TargetTile[];
   funnel: FunnelCount[];
   money: MoneyRollup;
@@ -81,13 +92,22 @@ export interface Dashboard {
  *  literal — a rename then fails to compile instead of silently leaving stale counts. */
 export const dashboardKeys = {
   all: ['dashboard'] as const,
+  /** One cache entry per week viewed. Prefix-matched by `all`, so the existing invalidations after
+   *  a write still clear every week, not just the one on screen. */
+  week: (weekOf: string) => ['dashboard', weekOf] as const,
 };
 
-/** Load the composite dashboard payload. */
-export function useDashboard(): UseQueryResult<Dashboard> {
+/** Load the composite dashboard payload.
+ *
+ * `weekOf` is any day in the week the target tiles should report on; omitted means the current
+ * week. Only the tiles move with it — money, funnel, Needs attention and Coming up always describe
+ * now, whichever week is being viewed.
+ */
+export function useDashboard(weekOf?: string): UseQueryResult<Dashboard> {
   const api = useApi();
   return useQuery({
-    queryKey: dashboardKeys.all,
-    queryFn: () => api<Dashboard>('/dashboard'),
+    queryKey: weekOf ? dashboardKeys.week(weekOf) : dashboardKeys.all,
+    queryFn: () =>
+      api<Dashboard>(weekOf ? `/dashboard?week_of=${encodeURIComponent(weekOf)}` : '/dashboard'),
   });
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addDays,
   daysSince,
   dateTime,
   isOverdue,
+  isoDate,
   longDate,
   parseDateLocal,
   parseTimestamp,
@@ -35,6 +37,44 @@ describe('parseDateLocal', () => {
   it('lands at local midnight, not at some offset into the day', () => {
     const d = parseDateLocal('2026-07-24');
     expect([d.getHours(), d.getMinutes(), d.getSeconds()]).toEqual([0, 0, 0]);
+  });
+});
+
+describe('isoDate', () => {
+  it('round-trips with parseDateLocal, in every timezone', () => {
+    for (const iso of ['2026-07-19', '2026-01-01', '2026-12-31', '2026-02-28']) {
+      expect(isoDate(parseDateLocal(iso))).toBe(iso);
+    }
+  });
+
+  it('does not shift the day the way toISOString would', () => {
+    // The trap this exists to avoid: `new Date(2026, 6, 19).toISOString().slice(0, 10)` converts
+    // to UTC first, so Sunday midnight in Hawaiʻi comes back as the Saturday before — which would
+    // have made the week navigator drift one day earlier on every click.
+    expect(isoDate(new Date(2026, 6, 19))).toBe('2026-07-19');
+  });
+
+  it('zero-pads single-digit months and days', () => {
+    expect(isoDate(new Date(2026, 0, 5))).toBe('2026-01-05');
+  });
+});
+
+describe('addDays', () => {
+  it('moves a week forward and back without leaving the calendar day', () => {
+    const sunday = parseDateLocal('2026-07-19');
+    expect(isoDate(addDays(sunday, 7))).toBe('2026-07-26');
+    expect(isoDate(addDays(sunday, -7))).toBe('2026-07-12');
+  });
+
+  it('rolls over month and year boundaries', () => {
+    expect(isoDate(addDays(parseDateLocal('2026-12-28'), 7))).toBe('2027-01-04');
+    expect(isoDate(addDays(parseDateLocal('2026-03-01'), -7))).toBe('2026-02-22');
+  });
+
+  it('does not mutate its argument', () => {
+    const d = parseDateLocal('2026-07-19');
+    addDays(d, 7);
+    expect(isoDate(d)).toBe('2026-07-19');
   });
 });
 

@@ -30,14 +30,14 @@ def api(db_connection, monkeypatch):
     )
     monkeypatch.setattr(context, "get_connection", lambda tz: db_connection)
 
-    def call(method: str, path: str, body: dict | None = None):
+    def call(method: str, path: str, body: dict | None = None, params: dict | None = None):
         event = {
             "version": "2.0",
             "routeKey": f"{method} {path}",
             "rawPath": path,
-            "rawQueryString": "",
+            "rawQueryString": "&".join(f"{k}={v}" for k, v in (params or {}).items()),
             "headers": {"content-type": "application/json"},
-            "queryStringParameters": None,
+            "queryStringParameters": params or None,
             "requestContext": {
                 "stage": "$default",
                 "http": {"method": method, "path": path, "sourceIp": "1.2.3.4", "userAgent": "t"},
@@ -94,6 +94,7 @@ def test_dashboard_returns_all_sections(api) -> None:
     status, body = api("GET", "/dashboard")
     assert status == 200
     assert set(body) == {
+        "week",
         "targets",
         "funnel",
         "money",
@@ -103,3 +104,21 @@ def test_dashboard_returns_all_sections(api) -> None:
     }
     assert len(body["funnel"]) == 5  # all five funnel stages always present
     assert body["money"]["currency"] == "USD"
+
+
+def test_the_dashboard_can_be_asked_for_a_past_week(api) -> None:
+    status, body = api("GET", "/dashboard", params={"week_of": "2026-07-15"})
+    assert status == 200
+    # Any day in the week resolves to its Sunday-start bounds, and the response says which week it
+    # answered for — the SPA labels the navigator from this rather than recomputing week maths.
+    assert body["week"] == {"start": "2026-07-12", "end": "2026-07-19"}
+    for tile in body["targets"]:
+        if tile["cadence"] == "weekly":
+            assert tile["period_start"] == "2026-07-12"
+
+
+def test_an_unparseable_week_is_refused(api) -> None:
+    """400 rather than falling back to this week under a label the user cannot see is wrong."""
+    status, body = api("GET", "/dashboard", params={"week_of": "last-tuesday"})
+    assert status == 400
+    assert "week_of" in json.dumps(body)

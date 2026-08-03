@@ -13,6 +13,7 @@ from pymysql.connections import Connection
 from pymysql.err import IntegrityError
 
 from common import errors
+from core.research import research_ready_sql
 from models.organizations import OrganizationInput
 from repositories import catalogs as catalogs_repo
 
@@ -64,6 +65,7 @@ def list_organizations(conn: Connection, user_id: int) -> list[dict]:
         cur.execute(
             "SELECT o.id, ot.short_name AS organization_type, o.name, o.location, "
             "       o.what_it_is, o.why_it_fits, o.how_to_approach, o.created_at, o.updated_at, "
+            "       o.research_ready_at, "
             "       COUNT(c.id) AS contact_count "
             "FROM organizations o "
             "JOIN organization_types ot ON ot.id = o.organization_type_id "
@@ -228,7 +230,47 @@ def update_organization(
             if exc.args[0] == _ER_DUP_ENTRY:
                 raise errors.Conflict("an organization with this name already exists") from exc
             raise
+    # Filling the last Kindling field is one of the two ways a venue crosses the bar.
+    stamp_research_ready(conn, user_id, org_id)
     return True
+
+
+def stamp_research_ready(conn: Connection, user_id: int, org_id: int) -> bool:
+    """Record the moment a venue first meets the research-ready bar.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection (inside a transaction).
+    user_id : int
+        The owning user.
+    org_id : int
+        The organization that may have just crossed the bar.
+
+    Returns
+    -------
+    bool
+        True if this call stamped it — i.e. the venue just became research-ready. False if it
+        already was, or still is not. Callers log the True case as a state transition.
+
+    Notes
+    -----
+    Idempotent by construction: the ``research_ready_at IS NULL`` guard stamps only the *first*
+    crossing, so a venue that loses its last contact and regains one keeps its original date. It
+    was not researched twice.
+
+    Call after any write that can make the predicate true — filling the Kindling fields, or
+    attaching the first contact. Creating an organization cannot: a new venue has no affiliations
+    yet, so the contact half of the rule is always false.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE organizations o SET o.research_ready_at = CURRENT_TIMESTAMP "
+            "WHERE o.id = %s AND o.user_id = %s AND o.deleted_at IS NULL "
+            "AND o.research_ready_at IS NULL AND " + research_ready_sql("o"),
+            (org_id, user_id),
+        )
+        return cur.rowcount > 0
 
 
 def soft_delete_organization(conn: Connection, user_id: int, org_id: int) -> bool:

@@ -62,6 +62,14 @@ class OrganizationSummary(BaseModel):
     why_it_fits: str | None
     contact_count: int
     research_ready: bool
+    #: When this venue first met the research-ready bar, or null if it never has. Carried on the
+    #: summary so the dashboard's "new venues researched" tile can link to exactly the venues its
+    #: number counted — the list filters on this the same way it already filters on
+    #: ``research_ready``, client-side.
+    #:
+    #: Distinct from ``research_ready`` on purpose: a venue that has since lost its last contact is
+    #: not ready *now*, but still counts toward the month it was researched.
+    research_ready_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

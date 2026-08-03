@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import {
   Alert,
   Anchor,
@@ -11,11 +11,17 @@ import {
   Loader,
   Progress,
   SimpleGrid,
+  ActionIcon,
   Stack,
   Text,
   Title,
 } from '@mantine/core';
-import { IconAlertTriangle, IconCircleCheck } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconChevronLeft,
+  IconChevronRight,
+  IconCircleCheck,
+} from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { catalogLabel, useCatalogs } from '../api/catalogs';
 import {
@@ -23,11 +29,22 @@ import {
   type ComingUpEvent,
   type NeedsAttentionItem,
   type TargetTile as TargetTileData,
+  type Week as WeekData,
 } from '../api/dashboard';
 import { usePatchFollowUp, type FollowUp as FollowUpItem } from '../api/followUps';
 import { useAuthSession } from '../auth/session';
-import { daysSince, isOverdue, parseDateLocal } from '../dates';
+import {
+  addDays,
+  daysSince,
+  isOverdue,
+  isoDate,
+  longDate,
+  parseDateLocal,
+  shortDate,
+  startOfToday,
+} from '../dates';
 import { formatMoney } from '../format';
+import { useFilterParams } from '../urlFilters';
 import { BRAND_LINE } from '../theme';
 
 function greeting(name: string | null): string {
@@ -36,20 +53,54 @@ function greeting(name: string | null): string {
   return name ? `${part}, ${name}` : part;
 }
 
-/** The current week as the backend defines it — Sunday-start (matches the weekly-target window),
- *  formatted like "Week of Jul 19 – 25" (collapsing the month when the week stays within one). */
-function currentWeekLabel(): string {
-  const now = new Date();
-  const start = new Date(now);
-  start.setDate(now.getDate() - now.getDay()); // back to Sunday
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6); // Saturday
-  const startMonth = start.toLocaleDateString(undefined, { month: 'short' });
-  const endLabel =
-    start.getMonth() === end.getMonth()
-      ? `${end.getDate()}`
-      : `${end.toLocaleDateString(undefined, { month: 'short' })} ${end.getDate()}`;
-  return `Week of ${startMonth} ${start.getDate()} – ${endLabel}`;
+/** "Week of Jul 19 – 25", collapsing the month when the week stays inside one.
+ *  Takes the server's bounds rather than computing the week: `core/periods.py` owns where a week
+ *  starts, and this having its own opinion was how the two could drift. */
+function weekLabel(startIso: string): string {
+  const start = parseDateLocal(startIso);
+  const end = addDays(start, 6); // Saturday — the payload's `end` is exclusive
+  const sameMonth = start.getMonth() === end.getMonth();
+  return `Week of ${shortDate(start)} – ${sameMonth ? end.getDate() : shortDate(end)}`;
+}
+
+/** Whether a `[start, end)` window contains today. String compare is safe on `YYYY-MM-DD`. */
+function contains(startIso: string, endIso: string, day: string): boolean {
+  return startIso <= day && day < endIso;
+}
+
+function WeekNavigator({ week, onChange }: { week: WeekData; onChange: (weekOf: string) => void }) {
+  const start = parseDateLocal(week.start);
+  const isCurrent = contains(week.start, week.end, isoDate(startOfToday()));
+  return (
+    <Group gap={4}>
+      <ActionIcon
+        variant="subtle"
+        c="navy.7"
+        aria-label="Previous week"
+        onClick={() => onChange(isoDate(addDays(start, -7)))}
+      >
+        <IconChevronLeft size={16} />
+      </ActionIcon>
+      <Text fw={650} fz={13} ta="center" miw={150}>
+        {weekLabel(week.start)}
+      </Text>
+      <ActionIcon
+        variant="subtle"
+        c="navy.7"
+        aria-label="Next week"
+        onClick={() => onChange(isoDate(addDays(start, 7)))}
+      >
+        <IconChevronRight size={16} />
+      </ActionIcon>
+      {/* Only offered when it would do something — and it clears the key rather than writing
+          today's date, so the default view keeps a clean URL. */}
+      {!isCurrent && (
+        <Button variant="subtle" size="compact-xs" onClick={() => onChange('')}>
+          This week
+        </Button>
+      )}
+    </Group>
+  );
 }
 
 /** The viewer's short timezone name (e.g. "HST") — the same zone the API buckets metrics in. */
@@ -57,6 +108,13 @@ function timezoneAbbrev(): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(new Date());
   return parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
 }
+
+/** sessionStorage key holding the week the Dashboard was last showing.
+ *
+ *  Session-scoped rather than persisted: opening the app tomorrow should land on this week, but
+ *  stepping out to a drill-down list and back should not silently reset what you were reading.
+ *  The URL still wins when it carries a week, so a shared or reloaded link is unaffected. */
+const WEEK_KEY = 'dashboard.weekOf';
 
 /** Cadence → the period word folded into the tile value ("… this month"). */
 const PERIOD_WORD: Record<string, string> = {
@@ -119,9 +177,14 @@ const MONEY_LINKS = {
  * threads rather than touches.
  */
 function targetHref(tile: TargetTileData): string | undefined {
-  // Current-state, not windowed: how many venues are research-ready *now*. Needs no window.
+  // Windowed since slice 10's follow-up: the tile counts venues that crossed the research-ready
+  // bar inside its period, so the link has to ask for that period too — a current-state
+  // `?ready=1` list would no longer be the number it sits under.
   if (tile.target_type === 'venues_researched') {
-    return '/venues?ready=1';
+    if (!tile.period_start || !tile.period_end) {
+      return undefined;
+    }
+    return `/venues?ready_from=${tile.period_start}&ready_to=${tile.period_end}`;
   }
   const entered = { pitches: 'pitched', bookings: 'booked' }[tile.target_type];
   // No window, no link. Against a backend that predates these fields they are undefined, and
@@ -162,6 +225,8 @@ function TargetTile({ tile, label }: { tile: TargetTileData; label: string }) {
   const pct = tile.goal > 0 ? Math.min(100, Math.round((tile.actual / tile.goal) * 100)) : 0;
   const met = tile.goal > 0 && tile.actual >= tile.goal;
   const period = PERIOD_WORD[tile.cadence] ?? tile.cadence;
+  // "this week" stops being true the moment the navigator moves off the current one.
+  const current = contains(tile.period_start, tile.period_end, isoDate(startOfToday()));
   const href = targetHref(tile);
   const card = (
     <Card withBorder radius="md" padding="md" h="100%" style={{ borderColor: BRAND_LINE }}>
@@ -173,7 +238,7 @@ function TargetTile({ tile, label }: { tile: TargetTileData; label: string }) {
           {tile.actual}
         </Text>
         <Text c="dimmed">
-          / {tile.goal} this {period}
+          / {tile.goal} {current ? 'this' : 'that'} {period}
         </Text>
       </Group>
       <Progress value={pct} color={met ? 'good' : 'terracotta'} radius="xl" mt="sm" />
@@ -329,8 +394,37 @@ function FollowUpDueRow({
 
 export function Dashboard() {
   const catalogs = useCatalogs();
-  const dash = useDashboard();
+  const filters = useFilterParams();
+  // Absent means the current week — the hook then omits the param entirely, so the default view
+  // both keeps a clean URL and shares a cache entry with every other page that invalidates it.
+  const weekOf = filters.get('week_of');
+  const dash = useDashboard(weekOf || undefined);
   const { user } = useAuthSession();
+
+  // Mount-only: restore the week this session was last showing when arriving without one, and
+  // remember one that arrived by link. Deliberately not re-run — after mount the navigator owns
+  // the value, and re-running would fight the user the moment they cleared it.
+  useEffect(() => {
+    if (weekOf) {
+      sessionStorage.setItem(WEEK_KEY, weekOf);
+    } else {
+      const remembered = sessionStorage.getItem(WEEK_KEY);
+      if (remembered) {
+        filters.set('week_of', remembered);
+      }
+    }
+  }, []);
+
+  function chooseWeek(next: string) {
+    // Clearing must forget, not just navigate: otherwise "This week" would be undone the instant
+    // you visited a list and came back.
+    if (next) {
+      sessionStorage.setItem(WEEK_KEY, next);
+    } else {
+      sessionStorage.removeItem(WEEK_KEY);
+    }
+    filters.set('week_of', next);
+  }
 
   if (dash.isPending || catalogs.isPending) {
     return (
@@ -359,7 +453,7 @@ export function Dashboard() {
           {greeting(user?.name ?? null)}
         </Title>
         <Text c="dimmed" size="sm">
-          {currentWeekLabel()} · {timezoneAbbrev()}
+          {longDate(new Date())} · {timezoneAbbrev()}
         </Text>
       </div>
 
@@ -373,15 +467,20 @@ export function Dashboard() {
           to track progress here.
         </Text>
       ) : (
-        <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>
-          {d.targets.map((t) => (
-            <TargetTile
-              key={`${t.target_type}:${t.cadence}`}
-              tile={t}
-              label={catalogLabel(catalogs.data?.target_types, t.target_type)}
-            />
-          ))}
-        </SimpleGrid>
+        // The navigator sits with the tiles, not in the page subtitle: it moves these numbers and
+        // nothing else on the page, and a control at the top would claim to move all of it.
+        <Stack gap="xs">
+          <WeekNavigator week={d.week} onChange={chooseWeek} />
+          <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }}>
+            {d.targets.map((t) => (
+              <TargetTile
+                key={`${t.target_type}:${t.cadence}`}
+                tile={t}
+                label={catalogLabel(catalogs.data?.target_types, t.target_type)}
+              />
+            ))}
+          </SimpleGrid>
+        </Stack>
       )}
 
       {/* Two column stacks — align at the top like the approved layout (no row stagger). */}

@@ -25,13 +25,14 @@ Actuals and needs-attention take an injected ``now_local`` (the caller passes th
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from pymysql.connections import Connection
 
 from common.db import db_now_local
-from core.periods import awaiting_reply_cutoff, period_bounds, stale_cutoff
+from core.periods import WEEKLY, awaiting_reply_cutoff, period_bounds, stale_cutoff
+from core.research import research_ready_sql
 from repositories.follow_ups import list_due
 
 #: Money totals assume a single currency (the app default); Donna's gigs are all USD.
@@ -40,17 +41,6 @@ _CURRENCY = "USD"
 #: The funnel ratio stages in order (DATABASE.md §"funnel ratio stages"), plus `delivered` which the
 #: dashboard funnel card shows as its final row (the approved mockup renders 5 rows).
 _FUNNEL_STAGES = ("outreach_sent", "in_conversation", "pitched", "booked", "delivered")
-
-#: Research-ready predicate as SQL — mirrors ``core.research.is_research_ready`` (all three Kindling
-#: fields filled AND ≥1 non-deleted affiliated contact).
-_RESEARCH_READY = (
-    "TRIM(COALESCE(o.what_it_is, '')) <> '' "
-    "AND TRIM(COALESCE(o.why_it_fits, '')) <> '' "
-    "AND TRIM(COALESCE(o.how_to_approach, '')) <> '' "
-    "AND EXISTS (SELECT 1 FROM contact_organizations co "
-    "            JOIN contacts c ON c.id = co.contact_id AND c.deleted_at IS NULL "
-    "            WHERE co.organization_id = o.id)"
-)
 
 
 def _scalar(conn: Connection, sql: str, params: tuple) -> int:
@@ -74,12 +64,19 @@ def _actual_for(
             (user_id, start, end),
         )
     if target_type == "venues_researched":
-        # Current-state: how many orgs are research-ready now (not windowed).
+        # A *flow*, not a stock: venues that crossed the research-ready bar inside the window.
+        # This counted the all-time ready total until slice 10 gave the dashboard a movable week
+        # and the tile started reporting today's number under April's label.
+        #
+        # `research_ready_at` rather than the predicate itself, because the predicate only answers
+        # "is it ready now" — a venue researched in April that later lost its contact still counts
+        # toward April, and one researched in April is not re-counted in May.
         return _scalar(
             conn,
             "SELECT COUNT(*) FROM organizations o "
-            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND " + _RESEARCH_READY,
-            (user_id,),
+            "WHERE o.user_id = %s AND o.deleted_at IS NULL "
+            "AND o.research_ready_at >= %s AND o.research_ready_at < %s",
+            (user_id, start, end),
         )
     if target_type in ("pitches", "bookings"):
         status = "pitched" if target_type == "pitches" else "booked"
@@ -269,7 +266,9 @@ def needs_attention(conn: Connection, user_id: int, now_local: datetime) -> list
             "UNION ALL "
             "SELECT o.id, o.name AS title, o.name, 'research_incomplete', NULL, NULL "
             "FROM organizations o "
-            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND NOT (" + _RESEARCH_READY + ") "
+            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND NOT ("
+            + research_ready_sql("o")
+            + ") "
             # An open thread whose last message went OUT and has gone unanswered. All three
             # conditions are load-bearing: a closed thread raises nothing (acceptance #9), and a
             # thread whose last message came IN is Donna's turn rather than the venue's.
@@ -360,11 +359,37 @@ def upcoming_events(conn: Connection, user_id: int, now_local: datetime) -> list
         return list(cur.fetchall())
 
 
-def build_dashboard(conn: Connection, user_id: int) -> dict:
-    """Assemble the full dashboard payload, using the DB's session ``NOW()`` for period windows."""
+def build_dashboard(conn: Connection, user_id: int, week_of: date | None = None) -> dict:
+    """Assemble the full dashboard payload.
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        Open connection; the session timezone is already the user's.
+    user_id : int
+        The authenticated user.
+    week_of : datetime.date, optional
+        Any day in the week the target tiles should report on. Defaults to today, which reproduces
+        the pre-slice-10 payload exactly.
+
+    Returns
+    -------
+    dict
+        The composite payload. ``week`` is the resolved ``[start, end)`` of the anchored week.
+
+    Notes
+    -----
+    **Only the tiles are anchored.** ``needs_attention``, ``coming_up`` and ``follow_ups`` keep the
+    real ``now_local``: they answer "what is overdue" and "what is next", which are questions about
+    now and not about the week being looked at. Anchoring them would make a slid dashboard claim a
+    past week's overdue list is current (DEV-PLAN slice 10 acceptance #4).
+    """
     now_local = db_now_local(conn)
+    anchor = datetime.combine(week_of, time.min) if week_of else now_local
+    week_start, week_end = period_bounds(WEEKLY, anchor)
     return {
-        "targets": target_actuals(conn, user_id, now_local),
+        "week": {"start": week_start.date(), "end": week_end.date()},
+        "targets": target_actuals(conn, user_id, anchor),
         "funnel": funnel_counts(conn, user_id),
         "money": money_rollup(conn, user_id),
         "needs_attention": needs_attention(conn, user_id, now_local),

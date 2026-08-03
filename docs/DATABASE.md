@@ -12,16 +12,15 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: implemented through migration `0011` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
+> **Status: implemented through migration `0013` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
 > (UX reconciliation, a catalog label update with no schema change), `0008_email` (slice 6a),
-> `0009_external_message_id` (slice 6b), `0010_followups` and `0011_reminder_failures` (slice 7).**
-> This document is the schema contract; everything through `0011` satisfies it, while
-> `0012_materials` remains target schema. `0010` is deployed to sandbox; `0011` is written and
-> applied in test and awaits the next sandbox deploy. **Materials moved from `0011` to `0012`** —
-> it is unwritten, `0011_reminder_failures` was being written, and the runner applies unapplied
-> files in version order, so leaving a hole would have `0011` applying *after* `0012`. Same
-> resolution slice 7's own migration got when 6b spent `0009`. Derived from `DESIGN.md` §4/§5 and
-> supersedes any older sketch.
+> `0009_external_message_id` (slice 6b), `0010_followups` and `0011_reminder_failures` (slice 7),
+> `0012_talks_materials` (slice 9) and `0013_research_ready_at` (slice 10).** This document is the
+> schema contract and everything through `0013` satisfies it. **Materials moved from `0011` to
+> `0012`** — it was unwritten, `0011_reminder_failures` was being written, and the runner applies
+> unapplied files in version order, so leaving a hole would have `0011` applying *after* `0012`.
+> Same resolution slice 7's own migration got when 6b spent `0009`. Derived from `DESIGN.md` §4/§5
+> and supersedes any older sketch.
 
 **Conventions** (inherited from the sibling apps, see `CODING-GUIDELINES.md` §2):
 
@@ -100,6 +99,7 @@ erDiagram
         text why_it_fits "Kindling"
         text how_to_approach "Kindling"
         text notes
+        timestamp research_ready_at "first crossing; never re-stamped"
         timestamp deleted_at
     }
     contacts {
@@ -312,6 +312,16 @@ the `X-User-Timezone` header still governs per-request `SET time_zone` (Kauaʻi 
 Venues, orgs, podcasts, expos. Holds the three **Kindling** research columns from `DESIGN.md` §5
 (`what_it_is`, `why_it_fits`, `how_to_approach`) as structured columns, *not* a notes blob —
 research-readiness (§4) is computed from them.
+
+`research_ready_at` records **when** a venue first met that bar (all three Kindling fields filled
+AND ≥1 live affiliated contact). Readiness itself stays derived — the predicate has one definition,
+`core.research.is_research_ready` plus its SQL mirror `research_ready_sql`, and this column does not
+duplicate it. What the column adds is a *date*, which a derived predicate cannot supply: the "new
+venues researched" target is a monthly **flow**, and counting rows that satisfy the predicate today
+answered the same number for every past month. Stamped on the first crossing only, from the two
+writes that can cause one (`update_organization`, `add_affiliation`), and **never cleared** — a
+venue that loses its last contact and regains one was not researched twice, and re-stamping would
+move it into a later month and retroactively change a number already read.
 
 `email_domain` exists for the drop-folder import: when an unknown sender is imported, the sender's
 domain is matched here to suggest an existing organization before offering to create one.
@@ -708,7 +718,8 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 | `0009_external_message_id.sql` | `email_messages.external_message_id` + its index — SES replaces the `Message-ID` we mint, so the header chain needs the id the recipient actually sees | 6b |
 | `0010_followups.sql` | `follow_ups` | 7 |
 | `0011_reminder_failures.sql` | `follow_ups.reminder_failed_at` — so a reminder that never arrived is visible in the app, not only in CloudWatch | 7 |
-| `0012_materials.sql` | `materials` (`talks` shipped early in `0003`) | 6a / Talks |
+| `0012_talks_materials.sql` | `materials`, and `talks.length_minutes` (INT) → `duration` (VARCHAR, free text) | 9 |
+| `0013_research_ready_at.sql` | `organizations.research_ready_at` — "new venues researched" was a running total wearing a monthly goal; a flow needs a date | 10 |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The

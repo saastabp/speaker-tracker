@@ -615,6 +615,27 @@ payload and builds its link from them, so a slid tile links to the slid list by 
 the page that visibly changes nothing below the tile row misdescribes what it does — the same honesty
 problem as today's subtitle, inverted.
 
+### The metric the picker exposed
+
+Moving the week immediately showed that **"new venues researched" was not a periodic metric at all**
+— it counted every venue research-ready *right now*, so it reported the same number for April as for
+today, and its monthly goal could never reset. A target named "new" with a monthly cadence is a
+flow; this was a stock.
+
+Readiness was computed on read and nowhere recorded, so there was no date to window by.
+`0013_research_ready_at` adds one, stamped on the first crossing from the two writes that can cause
+it and never cleared. See `DATABASE.md` §`organizations`.
+
+Two things fell out of it, both worth keeping:
+
+- The **SQL mirror of the readiness predicate moved into `core/research.py`** beside the Python
+  rule, as `research_ready_sql()`. A second repository needed it, and a second copy is how the two
+  spellings drift.
+- **`useFilterParams` gained `setMany`.** Clearing this tile's drill-down means clearing two keys at
+  once, and repeated `set` calls each rebuild from the same render's `searchParams` — so they
+  clobber one another and only the last survives. That had already shipped as a live bug in
+  Pipeline's "entered" pill, which cleared one of its three keys and appeared to do nothing.
+
 **Acceptance**
 1. The week can be moved backward and forward, and the week being shown is visible.
 2. Each target tile's number recomputes for the shown week, over its own cadence; its drill-down link
@@ -622,6 +643,8 @@ problem as today's subtitle, inverted.
 3. The chosen week survives a reload and is shareable — it lives in the URL (`?week_of=YYYY-MM-DD`)
    via `useFilterParams`, like every list filter.
 4. Money, funnel, Needs attention and Coming up are unchanged by the picker.
+5. "New venues researched" reports the venues that became research-ready **in the shown period**,
+   and its link opens exactly those.
 
 ---
 

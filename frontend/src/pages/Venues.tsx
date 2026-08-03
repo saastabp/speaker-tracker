@@ -11,10 +11,26 @@ import {
 import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { VenueFormModal } from '../components/VenueFormModal';
+import { windowLabel } from '../dates';
 import { useFilterParams } from '../urlFilters';
 import { orgTypeColor } from '../venueChips';
 
 const READY = '__ready';
+/** Sentinel for the pill that displays (and clears) the link-driven researched-window filter. */
+const READY_WINDOW = '__ready_window';
+
+/** Whether a venue became research-ready inside `[from, to)`. No window means no constraint.
+ *
+ *  Compares the ISO date prefix rather than parsing: `research_ready_at` already arrives in the
+ *  user's zone, and string compare on `YYYY-MM-DD` is both correct and immune to the UTC-parse
+ *  trap. A venue that never crossed the bar is excluded, not included — a window asking "what was
+ *  researched in April" must not answer with things that were never researched at all. */
+function inReadyWindow(readyAt: string | null, from: string, to: string): boolean {
+  if (!from && !to) return true;
+  if (!readyAt) return false;
+  const day = readyAt.slice(0, 10);
+  return (!from || day >= from) && (!to || day < to);
+}
 
 function firstLine(text: string | null): string {
   return text ? text.split('\n')[0] : '';
@@ -51,6 +67,9 @@ export function Venues() {
   const search = params.get('q');
   const typeFilter = params.get('type', 'all');
   const readyOnly = params.has('ready', '1');
+  // Arrives from the Dashboard's "new venues researched" tile, never set on this page.
+  const readyFrom = params.get('ready_from');
+  const readyTo = params.get('ready_to');
 
   const typeLabel = (shortName: string) =>
     catalogLabel(catalogs.data?.organization_types, shortName);
@@ -71,9 +90,23 @@ export function Venues() {
     { value: 'all', label: 'All types', active: typeFilter === 'all' },
     ...orderedTypes.map((t) => ({ value: t, label: typeLabel(t), active: typeFilter === t })),
     { value: READY, label: 'Ready only', active: readyOnly },
+    // No permanent control — it arrives from a Dashboard link. It still has to be *visible*: a
+    // filter that silently hides most of the list leaves the reader unable to tell why, or to
+    // undo it. Shown only while on, and clicking clears it (same rule as Pipeline's link pills).
+    ...(readyFrom || readyTo
+      ? [
+          {
+            value: READY_WINDOW,
+            label: `Researched ${windowLabel(readyFrom, readyTo)}`,
+            active: true,
+            removable: true,
+          },
+        ]
+      : []),
   ];
   function handlePill(value: string) {
     if (value === READY) params.toggle('ready', '1');
+    else if (value === READY_WINDOW) params.setMany({ ready_from: '', ready_to: '' });
     else params.set('type', value, 'all');
   }
 
@@ -82,6 +115,7 @@ export function Venues() {
     (v) =>
       (typeFilter === 'all' || v.organization_type === typeFilter) &&
       (!readyOnly || v.research_ready) &&
+      inReadyWindow(v.research_ready_at, readyFrom, readyTo) &&
       (!term || v.name.toLowerCase().includes(term)),
   );
 

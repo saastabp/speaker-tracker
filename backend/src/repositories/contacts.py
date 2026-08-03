@@ -21,6 +21,7 @@ from pymysql.err import IntegrityError
 from common import errors
 from models.contacts import AffiliationInput, AffiliationUpdate, ContactInput
 from repositories import catalogs as catalogs_repo
+from repositories import organizations as organizations_repo
 
 #: UNIQUE violation — affiliation already exists.
 _ER_DUP_ENTRY = 1062
@@ -360,6 +361,10 @@ def add_affiliation(
             raise errors.NotFound("contact or organization not found")
         if data.is_primary:
             _demote_other_primaries(cur, data.organization_id, contact_id)
+    # Attaching a contact is the other way a venue crosses the research-ready bar — the Kindling
+    # fields may have been complete for weeks, waiting on exactly this. Deliberately outside the
+    # cursor block above so the stamp's own query sees the row just inserted.
+    organizations_repo.stamp_research_ready(conn, user_id, data.organization_id)
 
 
 def update_affiliation(

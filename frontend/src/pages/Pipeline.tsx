@@ -42,7 +42,7 @@ import { CloseOpportunityModal, type CloseTarget } from '../components/CloseOppo
 import { FilterBar, type FilterPill } from '../components/FilterBar';
 import { LogOutreachModal } from '../components/LogOutreachModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
-import { parseDateLocal, shortDate } from '../dates';
+import { parseDateLocal, shortDate, windowLabel } from '../dates';
 import { formatMoney } from '../format';
 import { STAGE_DOT, paymentColor } from '../opportunityChips';
 import { BRAND_LINE, BRAND_PANEL } from '../theme';
@@ -65,14 +65,6 @@ const PAY_FILTERS: Record<string, string> = {
  *  short_names, so they cannot collide with a real one. */
 const STATUS_PILL = '__status__';
 const ENTERED_PILL = '__entered__';
-
-/** "Jul 26 – Aug 1" for a half-open `[from, to)` window, so the pill shows the last day actually
- *  included rather than the exclusive bound, which reads as a day too many. */
-function windowLabel(from: string, to: string): string {
-  const lastDay = parseDateLocal(to);
-  lastDay.setDate(lastDay.getDate() - 1);
-  return `${shortDate(parseDateLocal(from))} – ${shortDate(lastDay)}`;
-}
 
 interface CardLabels {
   paymentLabel: (shortName: string) => string;
@@ -440,6 +432,7 @@ export function Pipeline() {
             value: STATUS_PILL,
             label: `${statuses.map((s) => catalogLabel(catalogs.data?.opportunity_statuses, s)).join(' + ')} only`,
             active: true,
+            removable: true,
           },
         ]
       : []),
@@ -453,15 +446,14 @@ export function Pipeline() {
               enteredFrom && enteredTo ? ` · ${windowLabel(enteredFrom, enteredTo)}` : ''
             }`,
             active: true,
+            removable: true,
           },
         ]
       : []),
   ];
   function handlePill(value: string) {
     if (value === ENTERED_PILL) {
-      params.set('entered', '');
-      params.set('entered_from', '');
-      params.set('entered_to', '');
+      params.setMany({ entered: '', entered_from: '', entered_to: '' });
     } else if (value === STATUS_PILL) params.set('status', '');
     else if (value in PAY_FILTERS) params.toggle('pay', value);
     else params.toggle('comp', value);
@@ -535,7 +527,11 @@ export function Pipeline() {
         </Group>
       </Group>
 
-      {all.length > 0 && (
+      {/* Hidden on a genuinely empty board (nothing to filter yet), but never when a filter is
+          what emptied it: `entered` is applied server-side, so a link matching nothing returns
+          zero rows and would take the clearing pill down with the toolbar — stranding the reader
+          on a blank board with no way back but editing the URL. */}
+      {(all.length > 0 || isFiltered) && (
         <FilterBar
           search={search}
           onSearch={(value) => params.set('q', value)}

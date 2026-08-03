@@ -8,11 +8,15 @@ totals), and #6 (needs-attention rows).
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 
+from common.db import db_now_local
+from core.periods import WEEKLY, period_bounds
+from models.contacts import AffiliationInput
 from models.opportunities import OpportunityCreateInput
 from models.outreach import OutreachInput
 from models.targets import TargetInput
+from repositories import contacts as contacts_repo
 from repositories import dashboard
 from repositories import opportunities as opp
 from repositories import outreaches as out
@@ -141,21 +145,37 @@ def test_actuals_bucket_in_user_timezone(seeded_db) -> None:
     assert next(t for t in august if t["target_type"] == "outreaches")["actual"] == 0
 
 
-# --- #2: venues_researched actual is current research-ready count ---------------------------------
+# --- #2: venues_researched counts venues that crossed the bar inside the window -------------------
 
 
-def test_venues_researched_actual_is_current_ready_count(seeded_db) -> None:
+def test_venues_researched_counts_only_venues_that_crossed_the_bar_in_the_window(seeded_db) -> None:
+    """Slice 10 follow-up: a flow, not the all-time ready total.
+
+    Goes through the real ``add_affiliation`` rather than the raw ``_affiliate`` helper, because
+    stamping is part of that write path — inserting the row directly would leave the venue
+    research-ready with no date and quietly measure nothing.
+    """
     conn, user_id, _, _ = seeded_db
     ready = _org(conn, user_id, "Ready", kindling=True)
-    _affiliate(conn, _contact(conn, user_id, "A"), ready)
-    _org(conn, user_id, "NoKindling", kindling=False)  # missing Kindling → not ready
-    missing_contact = _org(conn, user_id, "NoContact", kindling=True)  # Kindling but no contact
-    assert missing_contact  # referenced for clarity
+    contacts_repo.add_affiliation(
+        conn, user_id, _contact(conn, user_id, "A"), AffiliationInput(organization_id=ready)
+    )
+    _org(conn, user_id, "NoKindling", kindling=False)  # missing Kindling → never stamped
+    _org(conn, user_id, "NoContact", kindling=True)  # Kindling but no contact → never stamped
     targets_repo.upsert_target(
         conn, user_id, TargetInput(target_type="venues_researched", cadence="weekly", goal_count=10)
     )
-    tiles = dashboard.target_actuals(conn, user_id, datetime(2026, 7, 22))
-    assert next(t for t in tiles if t["target_type"] == "venues_researched")["actual"] == 1
+    now = db_now_local(conn)
+
+    def actual(at: datetime) -> int:
+        tiles = dashboard.target_actuals(conn, user_id, at)
+        return next(t for t in tiles if t["target_type"] == "venues_researched")["actual"]
+
+    # The stamp is CURRENT_TIMESTAMP, so the crossing lands in this week.
+    assert actual(now) == 1
+    # And in no other week. This is the whole point of the change: the old query returned the
+    # all-time ready count, so it answered 1 for April as readily as for today.
+    assert actual(now - timedelta(days=35)) == 0
 
 
 # --- #3: funnel reached-or-beyond ----------------------------------------------------------------
@@ -469,6 +489,7 @@ def test_build_dashboard_returns_all_sections(seeded_db) -> None:
     conn, user_id, _, _ = seeded_db
     payload = dashboard.build_dashboard(conn, user_id)
     assert set(payload) == {
+        "week",
         "targets",
         "funnel",
         "money",
@@ -477,3 +498,113 @@ def test_build_dashboard_returns_all_sections(seeded_db) -> None:
         "follow_ups",
     }
     assert len(payload["funnel"]) == 5  # all five funnel stages always present
+
+
+# --- slice 10: the week the tiles report on ------------------------------------------------------
+
+
+def _weekly_outreach_target(conn, user_id: int) -> None:
+    targets_repo.upsert_target(
+        conn, user_id, TargetInput(target_type="outreaches", cadence="weekly", goal_count=5)
+    )
+
+
+def _two_touches_in_consecutive_weeks(conn, user_id: int) -> None:
+    """One counting touch in the week of Jul 12, one in the week of Jul 19."""
+    contact = _contact(conn, user_id)
+    out.create_outreach(  # inferred `initial` — counting
+        conn,
+        user_id,
+        OutreachInput(contact_id=contact, channel="dm", occurred_at=datetime(2026, 7, 14, 9)),
+    )
+    out.create_outreach(  # `follow_up` — also counting
+        conn,
+        user_id,
+        OutreachInput(
+            contact_id=contact, channel="dm", kind="follow_up", occurred_at=datetime(2026, 7, 21, 9)
+        ),
+    )
+
+
+def test_the_week_moves_the_tiles_to_that_week(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    _two_touches_in_consecutive_weeks(conn, user_id)
+    _weekly_outreach_target(conn, user_id)
+
+    payload = dashboard.build_dashboard(conn, user_id, week_of=date(2026, 7, 15))
+
+    assert payload["week"] == {"start": date(2026, 7, 12), "end": date(2026, 7, 19)}
+    tile = next(t for t in payload["targets"] if t["target_type"] == "outreaches")
+    # Only the Jul 14 touch is in the anchored week; Jul 21 belongs to the next one.
+    assert tile["actual"] == 1
+    # The tile's drill-down bounds follow the anchor too, or the link would open a different week
+    # from the number it sits under (acceptance #2).
+    assert (tile["period_start"], tile["period_end"]) == (date(2026, 7, 12), date(2026, 7, 19))
+
+
+def test_any_day_in_the_week_resolves_to_the_same_week(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    _two_touches_in_consecutive_weeks(conn, user_id)
+    _weekly_outreach_target(conn, user_id)
+
+    sunday = dashboard.build_dashboard(conn, user_id, week_of=date(2026, 7, 12))
+    saturday = dashboard.build_dashboard(conn, user_id, week_of=date(2026, 7, 18))
+
+    expected = {"start": date(2026, 7, 12), "end": date(2026, 7, 19)}
+    assert sunday["week"] == saturday["week"] == expected
+    assert sunday["targets"] == saturday["targets"]
+
+
+def test_a_monthly_tile_follows_the_anchor_into_its_own_month(seeded_db) -> None:
+    """A tile keeps its cadence and reports the period of that cadence containing the anchor."""
+    conn, user_id, _, _ = seeded_db
+    _two_touches_in_consecutive_weeks(conn, user_id)  # both in July
+    targets_repo.upsert_target(
+        conn, user_id, TargetInput(target_type="outreaches", cadence="monthly", goal_count=20)
+    )
+
+    payload = dashboard.build_dashboard(conn, user_id, week_of=date(2026, 7, 15))
+
+    tile = next(t for t in payload["targets"] if t["cadence"] == "monthly")
+    assert (tile["period_start"], tile["period_end"]) == (date(2026, 7, 1), date(2026, 8, 1))
+    assert tile["actual"] == 2  # the whole month, not the anchored week
+
+
+def test_only_the_tiles_move_with_the_week(seeded_db) -> None:
+    """Acceptance #4 — sliding the week must not restate what is overdue or coming up as of then.
+
+    Seeded so this genuinely discriminates: both rows below would change if the anchor were passed
+    to ``needs_attention`` or ``upcoming_events`` instead of the real clock.
+    """
+    conn, user_id, _, _ = seeded_db
+    now = db_now_local(conn)
+    org = _org(conn, user_id, "Anchor Venue")
+    # Already happened 3 days ago: not coming up now, but it would be under a two-week-old anchor.
+    _opp(conn, user_id, org, title="Recent gig", event_date=(now - timedelta(days=3)).date())
+    # Quiet for 16 days: stale against a now-14d cutoff, not against a now-28d one.
+    quiet = _opp(conn, user_id, org, title="Quiet gig")
+    _set_last_event(conn, quiet, now - timedelta(days=16))
+
+    live = dashboard.build_dashboard(conn, user_id)
+    slid = dashboard.build_dashboard(conn, user_id, week_of=(now - timedelta(days=14)).date())
+
+    assert slid["week"] != live["week"]  # the anchor really moved, so the rest is not vacuous
+    assert slid["coming_up"] == live["coming_up"]
+    assert slid["needs_attention"] == live["needs_attention"]
+    assert slid["follow_ups"] == live["follow_ups"]  # rides along; nothing seeded to discriminate
+    assert slid["money"] == live["money"]
+    assert slid["funnel"] == live["funnel"]
+
+    # The equalities above are only worth asserting if the seed could break them. Prove it does:
+    # fed the anchor directly, both sections return something different. If this ever stops being
+    # true the seed has rotted and the guard above has quietly become vacuous.
+    anchor = datetime.combine((now - timedelta(days=14)).date(), time.min)
+    assert dashboard.upcoming_events(conn, user_id, anchor) != live["coming_up"]
+    assert dashboard.needs_attention(conn, user_id, anchor) != live["needs_attention"]
+
+
+def test_without_a_week_the_dashboard_reports_on_the_current_week(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    start, end = period_bounds(WEEKLY, db_now_local(conn))
+    payload = dashboard.build_dashboard(conn, user_id)
+    assert payload["week"] == {"start": start.date(), "end": end.date()}
