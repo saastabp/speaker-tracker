@@ -135,3 +135,30 @@ def test_timeline_interleaves_and_deletes(api, seeded) -> None:
 def test_delete_missing_outreach_is_404(api, seeded) -> None:
     status, _ = api("DELETE", "/outreaches/999999")
     assert status == 404
+
+
+def test_patch_edits_the_touch_and_the_timeline_follows(api, seeded) -> None:
+    _, created = api(
+        "POST",
+        "/outreaches",
+        {"contact_id": seeded["contact"], "channel": "dm", "note": "Sent the one-pager"},
+    )
+    status, patched = api(
+        "PATCH",
+        f"/outreaches/{created['id']}",
+        {"channel": "call", "note": "Actually called her", "opportunity_id": seeded["opp"]},
+    )
+    assert status == 200
+    assert patched["channel"] == "call"
+    assert patched["note"] == "Actually called her"
+    assert patched["opportunity_id"] == seeded["opp"]
+    assert patched["kind"] == created["kind"]  # an edit never re-infers the kind
+
+    _, body = api("GET", f"/contacts/{seeded['contact']}/timeline")
+    touch = next(item for item in body["timeline"] if item["item_type"] == "outreach")
+    assert (touch["channel"], touch["text"]) == ("call", "Actually called her")
+
+
+def test_patch_missing_outreach_is_404(api, seeded) -> None:
+    status, _ = api("PATCH", "/outreaches/999999", {"note": "x"})
+    assert status == 404

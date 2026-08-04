@@ -52,9 +52,10 @@ export function FollowUpsCard({
     formHandlers.open();
   }
 
+  /** Close only — clearing `editing` here would flash the create form during the exit transition;
+   *  see the note in `pages/Appointments.tsx`. Both open paths set the target explicitly. */
   function closeForm() {
     formHandlers.close();
-    setEditing(null);
   }
 
   return (

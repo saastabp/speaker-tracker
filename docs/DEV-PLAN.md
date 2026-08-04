@@ -648,6 +648,78 @@ Two things fell out of it, both worth keeping:
 
 ---
 
+## Slice 11 — Appointments + editable outreach
+
+**Size: M.** Two unrelated deliverables shipped together because both are corrections to the same
+surface — the contact page — and both end at the Dashboard's "Coming up" card.
+
+### A. A logged touch can be corrected
+
+`outreaches` was append-plus-retract: you could log a touch and delete it, but not fix one. A touch
+logged against the wrong gig, with a typo in the note, or on the wrong day had to be deleted and
+re-entered — which also moved its `created_at` and, if it was the contact's first, silently changed
+what the *next* touch would infer. `PATCH /outreaches/{id}` closes that.
+
+Clicking an outreach entry in a contact's Activity timeline opens the same modal that logged it,
+now in edit mode, with Delete in its footer. Notes and status events stay inert: they belong to the
+opportunity that owns them and are corrected there.
+
+**Settled decisions**
+
+- **`contact_id` is not patchable.** Who a touch went to is what the row *is*; moving it would take
+  an entry out of one person's timeline and into another's, and re-open the kind inference that ran
+  at create. Delete and re-log instead.
+- **The kind is never re-inferred on an edit.** `resolve_outreach_kind` runs once, at create,
+  against the contact's history *at that moment*. Re-running it would let an unrelated change (a
+  typo fix) flip `initial` to `correspondence` — and with it, whether the touch counts toward the
+  week's prospecting target.
+- **The channel of an email touch is locked in the UI.** Those rows are written by the composer
+  against a message that was really sent, so relabelling one "Call" would make the journal lie. Its
+  note, date, kind and gig stay editable.
+- **Clear-versus-unchanged.** `opportunity_id` and `note` are nullable, so the patch reads
+  `model_fields_set`: an explicit `null` clears, an omitted key leaves alone. The NOT NULL fields
+  keep the simpler "`None` means unchanged" rule `FollowUpPatch` uses.
+
+### B. Appointments
+
+A **logging** feature, not calendaring — nothing syncs, invites or emails. An appointment is a
+title, a contact, a date-and-time, and free-text details.
+
+- New `appointments` table (`0014`), the one place in the schema using a **DATETIME** rather than a
+  TIMESTAMP: an appointment is a wall-clock commitment, and 2pm has to stay 2pm through any session
+  zone. See `DATABASE.md` §`appointments`.
+- Four flat routes under `/appointments`, with `?scope=upcoming|past|all`.
+- **The Dashboard's "Coming up" card becomes two sources in one chronological list** — active dated
+  gigs and upcoming appointments, discriminated by `item_type`. A gig qualifies from `event_date >=
+  today` and stays up all day; an appointment qualifies from `scheduled_at >= now`, because it
+  carries the hour it happens. Follow-up reminders stay their own card, as settled in slice 7.
+- Appointments are creatable from the Appointments page **and** from a contact's detail page, which
+  gains an `AppointmentsCard` panel beside `FollowUpsCard` (upcoming only, same scope rule).
+
+**Settled decisions**
+
+- **The contact *is* patchable here**, unlike a follow-up's links: there is one required link
+  rather than a constraint spanning two, so re-pointing it is one validated FK swap, and picking
+  the wrong person from a long list is an ordinary mistake.
+- **Only upcoming appointments reach the Dashboard, but the page holds everything.** An appointment
+  typed with the wrong year would otherwise be invisible the moment it was saved, and so impossible
+  to correct. The page defaults to Upcoming with a Show Past toggle.
+- **No status or completion column.** Past is `scheduled_at` against now, and nothing else.
+
+### Acceptance
+
+1. An outreach opened from a contact's Activity timeline can be edited and deleted; the timeline
+   and the week's outreach tile both reflect the change immediately.
+2. Editing a touch never changes its kind unless the kind itself was edited.
+3. An appointment can be created, edited and deleted from the Appointments page and from a contact.
+4. Only upcoming appointments appear on the Dashboard, merged into "Coming up" in date order and
+   showing title, contact and date-time.
+5. "Appointments" appears in the sidebar and its page groups by date **or** by contact, with the
+   contact name as a visible separator in the second mode.
+6. Past appointments are reachable on the page via the toggle, and nowhere else.
+
+---
+
 ## Sequencing and risk
 
 ```mermaid

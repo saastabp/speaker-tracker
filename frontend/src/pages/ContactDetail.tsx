@@ -30,14 +30,20 @@ import {
   useUpdateContact,
   type ContactInput,
 } from '../api/contacts';
-import { useContactTimeline, type TimelineItem } from '../api/outreaches';
+import {
+  useContactOutreaches,
+  useContactTimeline,
+  type Outreach,
+  type TimelineItem,
+} from '../api/outreaches';
 import { useOrganizations } from '../api/organizations';
 import { AffiliationRow } from '../components/AffiliationRow';
+import { AppointmentsCard } from '../components/AppointmentsCard';
 import { CardTitle, KV } from '../components/detailCards';
 import { ContactFormModal } from '../components/ContactFormModal';
 import { FollowUpsCard } from '../components/FollowUpsCard';
 import { EmailComposer } from '../components/EmailComposer';
-import { LogOutreachModal } from '../components/LogOutreachModal';
+import { OutreachFormModal } from '../components/OutreachFormModal';
 import { warmthColor } from '../contactChips';
 import { timestampDate, timestampDateTime } from '../dates';
 
@@ -48,6 +54,10 @@ export function ContactDetail() {
   const catalogs = useCatalogs();
   const venues = useOrganizations();
   const timeline = useContactTimeline(contactId);
+  // The timeline is a projection — it carries a touch's text and channel but not the whole row, so
+  // opening one for editing needs the outreach itself. Reusing the contact's own list rather than
+  // adding a by-id route keeps this to a cache hit the Log-outreach modal already warms.
+  const outreaches = useContactOutreaches(contactId);
   const update = useUpdateContact(contactId);
   const remove = useDeleteContact();
   const addAffiliation = useAddAffiliation(contactId);
@@ -57,6 +67,7 @@ export function ContactDetail() {
   const [editOpen, editHandlers] = useDisclosure(false);
   const [logOpen, logHandlers] = useDisclosure(false);
   const [composeOpen, composeHandlers] = useDisclosure(false);
+  const [editingOutreach, setEditingOutreach] = useState<Outreach | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newVenue, setNewVenue] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
@@ -93,6 +104,30 @@ export function ContactDetail() {
 
   async function handleUpdate(values: ContactInput) {
     await update.mutateAsync(values);
+  }
+
+  /** Open a timeline entry for editing. Outreach rows only — a gig note and a status event belong
+   *  to the opportunity that owns them, and are corrected there. */
+  function openOutreach(sourceId: number) {
+    const row = outreaches.data?.find((o) => o.id === sourceId);
+    if (row) {
+      setEditingOutreach(row);
+      logHandlers.open();
+    }
+  }
+
+  /** Open the modal to log a *new* touch. Clearing the target here rather than on close is what
+   *  keeps the header button honest while still letting a closing edit dialog fade out as itself. */
+  function openLogOutreach() {
+    setEditingOutreach(null);
+    logHandlers.open();
+  }
+
+  /** Close only — clearing `editingOutreach` here would re-render the still-visible dialog as a
+   *  create form mid-fade, flipping its title and popping the template picker in. Both open paths
+   *  set the target explicitly; see the note in `pages/Appointments.tsx`. */
+  function closeOutreachForm() {
+    logHandlers.close();
   }
 
   async function handleDelete() {
@@ -155,7 +190,7 @@ export function ContactDetail() {
           <Button
             variant="default"
             leftSection={<IconMessagePlus size={16} />}
-            onClick={logHandlers.open}
+            onClick={openLogOutreach}
           >
             Log outreach
           </Button>
@@ -274,7 +309,13 @@ export function ContactDetail() {
             </Card>
 
             <Card withBorder radius="md">
-              <CardTitle action={<Text size="xs" c="dimmed">every touch, across all orgs</Text>}>
+              <CardTitle
+                action={
+                  <Text size="xs" c="dimmed">
+                    every touch, across all orgs — click one to edit
+                  </Text>
+                }
+              >
                 Activity
               </CardTitle>
               {timeline.isPending ? (
@@ -288,7 +329,21 @@ export function ContactDetail() {
                   {(timeline.data ?? []).map((item) => (
                     <Timeline.Item
                       key={`${item.item_type}-${item.source_id}`}
-                      title={timelineTitle(item)}
+                      title={
+                        item.item_type === 'outreach' ? (
+                          <Anchor
+                            component="button"
+                            type="button"
+                            size="sm"
+                            fw={500}
+                            onClick={() => openOutreach(item.source_id)}
+                          >
+                            {timelineTitle(item)}
+                          </Anchor>
+                        ) : (
+                          timelineTitle(item)
+                        )
+                      }
                     >
                       {item.text && (
                         <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
@@ -324,6 +379,8 @@ export function ContactDetail() {
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Stack>
             <FollowUpsCard contactId={c.id} />
+
+            <AppointmentsCard contactId={c.id} />
 
             <Card withBorder radius="md">
               <CardTitle>Reach</CardTitle>
@@ -390,11 +447,12 @@ export function ContactDetail() {
         initialValues={c}
         onSubmit={handleUpdate}
       />
-      <LogOutreachModal
+      <OutreachFormModal
         opened={logOpen}
-        onClose={logHandlers.close}
+        onClose={closeOutreachForm}
         contactId={contactId}
         contactName={c.name}
+        outreach={editingOutreach}
       />
       <EmailComposer
         opened={composeOpen}

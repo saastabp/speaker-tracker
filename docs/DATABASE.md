@@ -12,11 +12,11 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: implemented through migration `0013` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
+> **Status: implemented through migration `0014` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
 > (UX reconciliation, a catalog label update with no schema change), `0008_email` (slice 6a),
 > `0009_external_message_id` (slice 6b), `0010_followups` and `0011_reminder_failures` (slice 7),
-> `0012_talks_materials` (slice 9) and `0013_research_ready_at` (slice 10).** This document is the
-> schema contract and everything through `0013` satisfies it. **Materials moved from `0011` to
+> `0012_talks_materials` (slice 9), `0013_research_ready_at` (slice 10) and `0014_appointments`
+> (slice 11).** This document is the schema contract and everything through `0014` satisfies it. **Materials moved from `0011` to
 > `0012`** — it was unwritten, `0011_reminder_failures` was being written, and the runner applies
 > unapplied files in version order, so leaving a hole would have `0011` applying *after* `0012`.
 > Same resolution slice 7's own migration got when 6b spent `0009`. Derived from `DESIGN.md` §4/§5
@@ -492,6 +492,33 @@ Unindexed on purpose: it is read as part of rows already selected, never filtere
 
 Indexes: `(user_id, due_date, completed_at)` — the Dashboard's due list.
 
+### `appointments`
+A scheduled meeting **with a person**, logged so it appears on the Dashboard's "Coming up" card.
+Deliberately **not calendaring**: nothing syncs, invites or emails. That is what separates it from
+the two tables it resembles — `follow_ups` is a reminder the app sends *to Donna*, and `outreaches`
+records a touch that already happened.
+
+`scheduled_at` is a **DATETIME, not a TIMESTAMP** — the one place in this schema that deviates.
+MySQL converts a TIMESTAMP to UTC on write and back on read using the session zone, which is right
+for "when did this happen" and wrong for a wall-clock commitment: 2pm Tuesday is 2pm Tuesday, and a
+DATETIME is stored and returned verbatim so no session-zone change can slide it. Same reasoning
+that made `follow_ups.due_date` a DATE. It also makes the upcoming/past split a plain SQL predicate
+against `CURRENT_TIMESTAMP` (which evaluates in the session zone, already the user's), so no layer
+reads the clock in Python.
+
+`contact_id` is **NOT NULL** — an appointment is with someone, and with one link rather than two
+the FK alone is the guarantee; there is no CHECK to write.
+
+`title` is required and `details` optional: the title is the label every surface renders (the
+Dashboard row, the list, the contact panel), so a row without one would show as a blank line.
+
+**No status or completion column.** Past-versus-upcoming is `scheduled_at` against now and nothing
+else — an appointment is never marked done, it simply stops being upcoming.
+
+Indexes: `(user_id, scheduled_at)` — the page's list and the Dashboard's branch, which ask the same
+question with a LIMIT; `(contact_id, scheduled_at)` for the contact panel (InnoDB requires an index
+on the referencing column and would auto-create an unnamed one anyway).
+
 ### `message_templates`
 `user_id NULL` = shared template, editable in place (admin-gated under multi-user); **Duplicate**
 writes a personal copy with `user_id` set. `body` holds merge fields (`[Name]`, …) resolved
@@ -720,6 +747,7 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 | `0011_reminder_failures.sql` | `follow_ups.reminder_failed_at` — so a reminder that never arrived is visible in the app, not only in CloudWatch | 7 |
 | `0012_talks_materials.sql` | `materials`, and `talks.length_minutes` (INT) → `duration` (VARCHAR, free text) | 9 |
 | `0013_research_ready_at.sql` | `organizations.research_ready_at` — "new venues researched" was a running total wearing a monthly goal; a flow needs a date | 10 |
+| `0014_appointments.sql` | `appointments` — logged meetings, the second source behind the Dashboard's "Coming up" card, and the one table using a `DATETIME` rather than a `TIMESTAMP` | 11 |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The

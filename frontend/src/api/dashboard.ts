@@ -57,12 +57,19 @@ export interface NeedsAttentionItem {
   since: string | null;
 }
 
+/** One dated thing on the near horizon. Two shapes in one list, discriminated by `item_type`: a gig
+ *  has `organization_name` and `current_status` but no time of day, while an appointment has
+ *  `contact_name` and an `event_time`. `id` is unique **per `item_type`**, not across the list, so
+ *  a React key has to combine the two. */
 export interface ComingUpEvent {
+  item_type: 'gig' | 'appointment';
   id: number;
   title: string;
-  organization_name: string;
+  organization_name: string | null;
+  contact_name: string | null;
   event_date: string; // ISO date (YYYY-MM-DD)
-  current_status: string;
+  event_time: string | null; // HH:mm:ss, appointments only
+  current_status: string | null;
 }
 
 export interface Week {

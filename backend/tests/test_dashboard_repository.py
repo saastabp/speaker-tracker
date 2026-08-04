@@ -12,10 +12,12 @@ from datetime import date, datetime, time, timedelta
 
 from common.db import db_now_local
 from core.periods import WEEKLY, period_bounds
+from models.appointments import AppointmentInput
 from models.contacts import AffiliationInput
 from models.opportunities import OpportunityCreateInput
 from models.outreach import OutreachInput
 from models.targets import TargetInput
+from repositories import appointments as appts_repo
 from repositories import contacts as contacts_repo
 from repositories import dashboard
 from repositories import opportunities as opp
@@ -46,6 +48,12 @@ def _contact(conn, user_id: int, name: str = "Contact") -> int:
     with conn.cursor() as cur:
         cur.execute("INSERT INTO contacts (user_id, name) VALUES (%s, %s)", (user_id, name))
         return cur.lastrowid
+
+
+def _appointment(conn, user_id: int, contact_id: int, when: datetime, title: str) -> int:
+    return appts_repo.create_appointment(
+        conn, user_id, AppointmentInput(contact_id=contact_id, title=title, scheduled_at=when)
+    )
 
 
 def _affiliate(conn, contact_id: int, org_id: int) -> None:
@@ -480,6 +488,48 @@ def test_upcoming_events_lists_future_dated_open_gigs_soonest_first(seeded_db) -
     opp.close(conn, user_id, closed, "lost", "cold")  # closed → excluded
     rows = dashboard.upcoming_events(conn, user_id, datetime(2026, 7, 20, 12, 0))
     assert [r["title"] for r in rows] == ["Soon", "Later"]  # soonest first, future/open only
+    assert {r["item_type"] for r in rows} == {"gig"}
+
+
+def test_upcoming_events_interleaves_appointments_with_gigs(seeded_db) -> None:
+    """One chronological list from two sources (slice 11), gigs first on a shared day."""
+    conn, user_id, _, _ = seeded_db
+    now = datetime(2026, 7, 20, 12, 0)
+    org = _org(conn, user_id, "Venue")
+    contact = _contact(conn, user_id, "Kalei")
+    _opp(conn, user_id, org, title="Gig on the 25th", event_date=date(2026, 7, 25))
+    _appointment(conn, user_id, contact, datetime(2026, 7, 22, 14, 0), "Coffee")
+    # Same day as the gig: a gig has no hour, so midnight is the honest reading and it sorts first.
+    _appointment(conn, user_id, contact, datetime(2026, 7, 25, 9, 0), "Same-day chat")
+
+    rows = dashboard.upcoming_events(conn, user_id, now)
+
+    assert [r["title"] for r in rows] == ["Coffee", "Gig on the 25th", "Same-day chat"]
+    appointment = rows[0]
+    assert appointment["item_type"] == "appointment"
+    assert appointment["contact_name"] == "Kalei"
+    assert appointment["organization_name"] is None
+    assert (appointment["event_date"], appointment["event_time"]) == (
+        date(2026, 7, 22),
+        time(14, 0),
+    )
+    assert rows[1]["item_type"] == "gig"
+    assert rows[1]["event_time"] is None and rows[1]["contact_name"] is None
+
+
+def test_an_appointment_already_over_today_drops_off_but_a_gig_today_does_not(seeded_db) -> None:
+    """The hour is what separates the two halves of this card — and the reason it is stored."""
+    conn, user_id, _, _ = seeded_db
+    now = datetime(2026, 7, 20, 12, 0)
+    org = _org(conn, user_id, "Venue")
+    contact = _contact(conn, user_id, "Kalei")
+    _opp(conn, user_id, org, title="Gig today", event_date=date(2026, 7, 20))
+    _appointment(conn, user_id, contact, datetime(2026, 7, 20, 9, 0), "This morning")
+    _appointment(conn, user_id, contact, datetime(2026, 7, 20, 15, 0), "This afternoon")
+
+    rows = dashboard.upcoming_events(conn, user_id, now)
+
+    assert [r["title"] for r in rows] == ["Gig today", "This afternoon"]
 
 
 # --- composite -----------------------------------------------------------------------------------

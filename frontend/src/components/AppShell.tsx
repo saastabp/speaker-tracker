@@ -12,6 +12,7 @@ import {
 import {
   IconBellRinging,
   IconBuilding,
+  IconCalendarEvent,
   IconColumns,
   IconHistory,
   IconLayoutDashboard,
@@ -69,6 +70,10 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Emails', to: '/emails', icon: IconMail },
       { label: 'Templates', to: '/templates', icon: IconTemplate },
       { label: 'Follow-ups', to: '/follow-ups', icon: IconBellRinging },
+      // Grouped with Follow-ups rather than under Relationships: both are dated things owed to
+      // someone, and both feed the Dashboard. An appointment is a logged commitment, not a
+      // calendar — nothing here syncs or invites.
+      { label: 'Appointments', to: '/appointments', icon: IconCalendarEvent },
     ],
   },
   {

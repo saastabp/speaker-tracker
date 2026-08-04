@@ -10,6 +10,7 @@ import { AuthProvider } from './auth/AuthProvider';
 import { DeepLinkRestorer } from './auth/DeepLinkRestorer';
 import { loadRuntimeConfig, type RuntimeConfig } from './auth/runtimeConfig';
 import { AppShell } from './components/AppShell';
+import { Appointments } from './pages/Appointments';
 import { ContactDetail } from './pages/ContactDetail';
 import { Contacts } from './pages/Contacts';
 import { Dashboard } from './pages/Dashboard';
@@ -50,6 +51,7 @@ function App({ runtimeConfig }: { runtimeConfig: RuntimeConfig | null }) {
                   <Route path="contacts" element={<Contacts />} />
                   <Route path="contacts/:id" element={<ContactDetail />} />
                   <Route path="follow-ups" element={<FollowUps />} />
+                  <Route path="appointments" element={<Appointments />} />
                   <Route path="templates" element={<Templates />} />
                   <Route path="targets" element={<Targets />} />
                   <Route path="emails" element={<Emails />} />

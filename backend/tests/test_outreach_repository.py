@@ -13,7 +13,7 @@ from datetime import datetime
 import pytest
 
 from common import errors
-from models.outreach import OutreachInput
+from models.outreach import OutreachInput, OutreachPatch
 from repositories import outreaches as out
 
 
@@ -225,6 +225,105 @@ def test_unknown_template_rejected(outreach_db) -> None:
             user_id,
             OutreachInput(contact_id=ids["jane"], channel="dm", message_template_id=999999),
         )
+
+
+# --- editing a logged touch (slice 11) -----------------------------------------------------------
+
+
+def test_patch_updates_only_the_fields_that_were_set(outreach_db) -> None:
+    conn, user_id, ids = outreach_db
+    touch = out.create_outreach(
+        conn,
+        user_id,
+        OutreachInput(
+            contact_id=ids["jane"],
+            channel="dm",
+            note="Sent the one-pager",
+            occurred_at=datetime(2026, 7, 20, 9, 0),
+        ),
+    )
+    assert out.patch_outreach(
+        conn,
+        user_id,
+        touch,
+        OutreachPatch(
+            channel="call", note="Actually called her", occurred_at=datetime(2026, 7, 21, 15, 30)
+        ),
+    )
+    row = out.get_outreach(conn, user_id, touch)
+    assert row["channel"] == "call"
+    assert row["note"] == "Actually called her"
+    assert row["occurred_at"] == datetime(2026, 7, 21, 15, 30)
+    assert row["contact_id"] == ids["jane"]  # the contact is not patchable
+
+
+def test_patch_can_attribute_and_then_unattribute_a_gig(outreach_db) -> None:
+    """``opportunity_id`` is nullable, so an explicit null has to mean *clear* — not *unchanged*."""
+    conn, user_id, ids = outreach_db
+    touch = out.create_outreach(conn, user_id, OutreachInput(contact_id=ids["jane"], channel="dm"))
+
+    out.patch_outreach(conn, user_id, touch, OutreachPatch(opportunity_id=ids["opp"]))
+    assert out.get_outreach(conn, user_id, touch)["opportunity_id"] == ids["opp"]
+
+    # Omitting the key leaves the attribution alone...
+    out.patch_outreach(conn, user_id, touch, OutreachPatch(note="unrelated edit"))
+    assert out.get_outreach(conn, user_id, touch)["opportunity_id"] == ids["opp"]
+
+    # ...while sending it explicitly null removes it.
+    out.patch_outreach(conn, user_id, touch, OutreachPatch.model_validate({"opportunity_id": None}))
+    assert out.get_outreach(conn, user_id, touch)["opportunity_id"] is None
+
+
+def test_patch_never_reinfers_the_kind(outreach_db) -> None:
+    """An unrelated edit must not silently move a touch between target-counting kinds.
+
+    The first touch is ``initial``. By the time it is edited a second touch exists, so re-running
+    inference would resolve ``correspondence`` — a different answer for the same row, produced by
+    an edit that said nothing about the kind.
+    """
+    conn, user_id, ids = outreach_db
+    first = out.create_outreach(conn, user_id, OutreachInput(contact_id=ids["jane"], channel="dm"))
+    out.create_outreach(conn, user_id, OutreachInput(contact_id=ids["jane"], channel="dm"))
+    assert out.get_outreach(conn, user_id, first)["kind"] == "initial"
+
+    out.patch_outreach(conn, user_id, first, OutreachPatch(note="fixed a typo"))
+    assert out.get_outreach(conn, user_id, first)["kind"] == "initial"
+
+    # An explicit kind, on the other hand, is honoured.
+    out.patch_outreach(conn, user_id, first, OutreachPatch(kind="follow_up"))
+    assert out.get_outreach(conn, user_id, first)["kind"] == "follow_up"
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        OutreachPatch(channel="carrier_pigeon"),
+        OutreachPatch(kind="vibes"),
+        OutreachPatch(opportunity_id=999999),
+    ],
+)
+def test_patch_validates_its_references_exactly_as_create_does(outreach_db, patch) -> None:
+    conn, user_id, ids = outreach_db
+    touch = out.create_outreach(conn, user_id, OutreachInput(contact_id=ids["jane"], channel="dm"))
+    with pytest.raises(errors.InvalidInput):
+        out.patch_outreach(conn, user_id, touch, patch)
+
+
+def test_empty_patch_matches_without_changing_anything(outreach_db) -> None:
+    conn, user_id, ids = outreach_db
+    touch = out.create_outreach(conn, user_id, OutreachInput(contact_id=ids["jane"], channel="dm"))
+    before = out.get_outreach(conn, user_id, touch)
+    assert out.patch_outreach(conn, user_id, touch, OutreachPatch())
+    assert out.get_outreach(conn, user_id, touch) == before
+
+
+def test_patching_a_missing_deleted_or_foreign_touch_reports_no_match(outreach_db) -> None:
+    conn, user_id, ids = outreach_db
+    touch = out.create_outreach(conn, user_id, OutreachInput(contact_id=ids["jane"], channel="dm"))
+    assert out.patch_outreach(conn, user_id, 9999, OutreachPatch(note="x")) is False
+    assert out.patch_outreach(conn, user_id + 999, touch, OutreachPatch(note="x")) is False
+    out.soft_delete_outreach(conn, user_id, touch)
+    assert out.patch_outreach(conn, user_id, touch, OutreachPatch(note="x")) is False
 
 
 # --- soft delete ---------------------------------------------------------------------------------

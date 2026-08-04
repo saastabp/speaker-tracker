@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useApi } from './client';
+import { dashboardKeys } from './dashboard';
 
 // Mirrors backend models/outreach.py and models/timeline.py. Entities are referenced by id and
 // catalogs by short_name (Option A); timestamps are ISO strings over the wire.
@@ -23,6 +24,18 @@ export interface OutreachInput {
   note?: string | null;
   occurred_at?: string | null;
   follow_up?: FollowUpRiderInput | null;
+}
+
+/** A partial edit to a logged touch. Omitting a key leaves it unchanged; sending `opportunity_id`
+ *  or `note` as null **clears** it. The contact is deliberately absent — a touch cannot be moved to
+ *  another person (the server does not accept it), because that would re-open the kind inference
+ *  that ran when it was logged. */
+export interface OutreachPatch {
+  channel?: string;
+  kind?: string;
+  opportunity_id?: number | null;
+  note?: string | null;
+  occurred_at?: string;
 }
 
 export interface Outreach {
@@ -84,30 +97,55 @@ export function useContactTimeline(contactId: number): UseQueryResult<TimelineIt
   });
 }
 
+/** Refresh everything a touch is visible in: the contact's outreach list, their timeline, and the
+ *  dashboard.
+ *
+ *  The dashboard was missing here until slice 11. A touch counts toward the week's outreach target,
+ *  so logging one from a contact page left the tile reading one too low until something else
+ *  happened to refetch it — while the same write through the email composer *did* refresh it
+ *  (`api/emails.ts`), which is what kept the gap out of sight. */
+function useOutreachInvalidation() {
+  const queryClient = useQueryClient();
+  return (contactId: number) => {
+    queryClient.invalidateQueries({ queryKey: outreachKeys.forContact(contactId) });
+    queryClient.invalidateQueries({ queryKey: timelineKeys.forContact(contactId) });
+    queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+  };
+}
+
 /** Log an outbound touch. Both the contact's outreach list and its timeline refresh on success. */
 export function useCreateOutreach() {
   const api = useApi();
-  const queryClient = useQueryClient();
+  const invalidate = useOutreachInvalidation();
   return useMutation({
     mutationFn: (data: OutreachInput) =>
       api<Outreach>('/outreaches', { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: (created) => {
-      queryClient.invalidateQueries({ queryKey: outreachKeys.forContact(created.contact_id) });
-      queryClient.invalidateQueries({ queryKey: timelineKeys.forContact(created.contact_id) });
-    },
+    onSuccess: (created) => invalidate(created.contact_id),
+  });
+}
+
+/** Correct a mis-logged touch. `contactId` scopes which contact's caches to refresh. */
+export function usePatchOutreach() {
+  const api = useApi();
+  const invalidate = useOutreachInvalidation();
+  return useMutation({
+    mutationFn: ({
+      id,
+      contactId: _contactId,
+      ...patch
+    }: OutreachPatch & { id: number; contactId: number }) =>
+      api<Outreach>(`/outreaches/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+    onSuccess: (_result, { contactId }) => invalidate(contactId),
   });
 }
 
 /** Retract a mis-logged touch. `contactId` scopes which contact's caches to refresh. */
 export function useDeleteOutreach() {
   const api = useApi();
-  const queryClient = useQueryClient();
+  const invalidate = useOutreachInvalidation();
   return useMutation({
     mutationFn: ({ id }: { id: number; contactId: number }) =>
       api<{ deleted: boolean }>(`/outreaches/${id}`, { method: 'DELETE' }),
-    onSuccess: (_result, { contactId }) => {
-      queryClient.invalidateQueries({ queryKey: outreachKeys.forContact(contactId) });
-      queryClient.invalidateQueries({ queryKey: timelineKeys.forContact(contactId) });
-    },
+    onSuccess: (_result, { contactId }) => invalidate(contactId),
   });
 }

@@ -18,7 +18,7 @@ from __future__ import annotations
 from pymysql.connections import Connection
 
 from core.outreach import resolve_outreach_kind
-from models.outreach import OutreachInput
+from models.outreach import OutreachInput, OutreachPatch
 from repositories import catalogs as catalogs_repo
 from repositories._ownership import (
     has_prior_outbound_touch,
@@ -134,6 +134,79 @@ def list_outreaches_for_contact(conn: Connection, user_id: int, contact_id: int)
             (user_id, contact_id),
         )
         return list(cur.fetchall())
+
+
+def patch_outreach(conn: Connection, user_id: int, outreach_id: int, data: OutreachPatch) -> bool:
+    """Apply a partial edit to a logged touch; return whether a live owned row was matched.
+
+    Validates and resolves whatever the caller sent: an unknown ``channel`` / ``kind`` short_name or
+    a foreign ``opportunity_id`` is rejected before the UPDATE, exactly as on create. ``None`` means
+    unchanged for the NOT NULL columns; ``opportunity_id`` and ``note`` read ``model_fields_set``,
+    so an explicit ``null`` clears them (``models.outreach.OutreachPatch``).
+
+    **The kind is taken as given, never re-inferred.** ``resolve_outreach_kind`` runs once, at
+    create, against the contact's touch history at that moment. Re-running it on an edit would make
+    an unrelated change able to flip ``initial`` to ``correspondence`` — and with it, whether the
+    touch counts toward the week's prospecting target.
+
+    Editing a touch never writes a ``status_events`` row, for the same reason logging one does not:
+    the journal is decoupled from pipeline stage (DEV-PLAN slice 4 acceptance #6).
+
+    Parameters
+    ----------
+    conn : pymysql.connections.Connection
+        A live connection (inside a transaction).
+    user_id : int
+        The owning user.
+    outreach_id : int
+        The touch to edit.
+    data : models.outreach.OutreachPatch
+        The fields to change.
+
+    Returns
+    -------
+    bool
+        ``True`` when a live, owned row matched — **not** whether any column changed, since MySQL
+        reports ``rowcount`` 0 for an UPDATE that writes a column's existing value. A patch that
+        sets nothing is a no-op returning ``True``, so a redundant request is not read as a 404.
+
+    Raises
+    ------
+    common.errors.InvalidInput
+        When the opportunity is not the caller's, or a ``channel`` / ``kind`` short_name is unknown.
+    """
+    if get_outreach(conn, user_id, outreach_id) is None:
+        return False
+    validate_opportunity(conn, user_id, data.opportunity_id)
+
+    assignments: list[str] = []
+    params: list[object] = []
+    if data.channel is not None:
+        assignments.append("outreach_channel_id = %s")
+        params.append(_resolve_channel_id(conn, data.channel))
+    if data.kind is not None:
+        assignments.append("outreach_kind_id = %s")
+        params.append(_resolve_kind_id(conn, data.kind))
+    if data.occurred_at is not None:
+        assignments.append("occurred_at = %s")
+        params.append(data.occurred_at)
+    if "opportunity_id" in data.model_fields_set:
+        assignments.append("opportunity_id = %s")
+        params.append(data.opportunity_id)
+    if "note" in data.model_fields_set:
+        assignments.append("note = %s")
+        params.append(data.note)
+    if not assignments:
+        return True
+
+    params.extend([outreach_id, user_id])
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE outreaches SET " + ", ".join(assignments) + " "
+            "WHERE id = %s AND user_id = %s AND deleted_at IS NULL",
+            params,
+        )
+    return True
 
 
 def soft_delete_outreach(conn: Connection, user_id: int, outreach_id: int) -> bool:

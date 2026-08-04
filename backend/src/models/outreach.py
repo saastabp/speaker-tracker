@@ -64,6 +64,51 @@ class OutreachInput(BaseModel):
     follow_up: FollowUpRider | None = None
 
 
+class OutreachPatch(BaseModel):
+    """A partial edit to a logged touch.
+
+    Every field is optional, with the same split :class:`models.appointments.AppointmentPatch` uses:
+    ``channel``, ``kind`` and ``occurred_at`` back NOT NULL columns, so ``None`` can only mean
+    "unchanged"; ``opportunity_id`` and ``note`` are nullable, so the repository reads
+    ``model_fields_set`` and an explicitly sent ``null`` **clears** them. Without that, a touch
+    attributed to the wrong gig could never be un-attributed.
+
+    Three fields are deliberately absent:
+
+    - **``contact_id``.** Who a touch went to is what the row *is*; re-homing it would move an entry
+      between two contacts' timelines and re-open the kind inference that ran at create. Fix a
+      wrong-contact touch by deleting it and logging it again.
+    - **``message_template_id``.** It records which template was used to compose, which is a fact
+      about the moment of sending and not an editable property of the touch.
+    - **``follow_up``.** The rider creates a *separate* reminder alongside a new touch; editing the
+      touch later has nothing to schedule. Reminders are edited on their own resource.
+
+    ``kind`` here is always an explicit value — **an edit never re-runs inference.** Re-deriving it
+    would let an unrelated change (fixing a typo in the note) silently flip ``initial`` to
+    ``correspondence`` and move a weekly target count, which is exactly the kind of quiet metric
+    drift the resolved-kind response contract exists to prevent.
+
+    Parameters
+    ----------
+    channel : str or None
+        New ``outreach_channels`` short_name.
+    kind : str or None
+        New ``outreach_kinds`` short_name. Explicit; never inferred on an edit.
+    opportunity_id : int or None
+        Re-attribute the touch to a gig. Explicit ``null`` clears the attribution.
+    note : str or None
+        New free-text note. Explicit ``null`` clears it.
+    occurred_at : datetime or None
+        New timestamp for when the touch happened.
+    """
+
+    channel: str | None = Field(default=None, min_length=1)
+    kind: str | None = Field(default=None, min_length=1)
+    opportunity_id: int | None = None
+    note: str | None = None
+    occurred_at: datetime | None = None
+
+
 class OutreachSummary(BaseModel):
     """A logged outbound touch, for responses (list and create result).
 

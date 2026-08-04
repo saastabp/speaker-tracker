@@ -14,8 +14,9 @@ more thing to keep in step for no gain.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -121,17 +122,30 @@ class NeedsAttentionItem(BaseModel):
 
 
 class ComingUpEvent(BaseModel):
-    """An active gig with a today-or-future event date (the "Coming up" card).
+    """One dated thing on the near horizon — an active gig, or a logged appointment.
 
-    Gigs only. Follow-up reminders get their own card (``follow_ups``) rather than being merged in
-    here — this panel is future-facing and an overdue reminder needs to be louder than that.
+    Two shapes in one list, discriminated by ``item_type``, because "what is next" is a single
+    question and answering it from two stacked lists would make the reader merge them by eye.
+    Follow-up reminders stay their own card (``follow_ups``): this panel is future-facing, and an
+    overdue reminder has to get *louder* rather than scroll off the top of a chronological list.
+
+    Only one of ``organization_name`` / ``contact_name`` is set — a gig happens at a venue, an
+    appointment is with a person — and ``current_status`` belongs to a gig alone. ``event_time`` is
+    null for a gig, whose ``event_date`` carries no hour; an appointment always has one, which is
+    also why an appointment drops off this list the moment it passes while a gig stays up all day.
+
+    ``id`` is unique **per ``item_type``**, not across the list: a gig and an appointment may both
+    be id 3, so a client keying rows has to combine the two fields.
     """
 
+    item_type: Literal["gig", "appointment"]
     id: int
     title: str
-    organization_name: str
+    organization_name: str | None
+    contact_name: str | None
     event_date: date
-    current_status: str
+    event_time: time | None
+    current_status: str | None
 
 
 class Dashboard(BaseModel):

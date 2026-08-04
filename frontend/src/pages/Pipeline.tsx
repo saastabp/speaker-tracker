@@ -40,7 +40,7 @@ import {
 } from '../api/opportunities';
 import { CloseOpportunityModal, type CloseTarget } from '../components/CloseOpportunityModal';
 import { FilterBar, type FilterPill } from '../components/FilterBar';
-import { LogOutreachModal } from '../components/LogOutreachModal';
+import { OutreachFormModal } from '../components/OutreachFormModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
 import { parseDateLocal, shortDate, windowLabel } from '../dates';
 import { formatMoney } from '../format';
@@ -628,7 +628,7 @@ export function Pipeline() {
         onClose={() => setCloseTarget(null)}
         opportunity={closeTarget}
       />
-      <LogOutreachModal opened={logOpen} onClose={logHandlers.close} />
+      <OutreachFormModal opened={logOpen} onClose={logHandlers.close} />
     </Stack>
   );
 }

@@ -35,6 +35,7 @@ import { usePatchFollowUp, type FollowUp as FollowUpItem } from '../api/followUp
 import { useAuthSession } from '../auth/session';
 import {
   addDays,
+  clockTime,
   daysSince,
   isOverdue,
   isoDate,
@@ -301,9 +302,25 @@ function MoneyStat({
   );
 }
 
+/** One row of "Coming up" — a gig or an appointment, told apart by `item_type`.
+ *
+ * A gig links to its own detail page. An appointment has none, so it links to the Appointments
+ * page, which is where it can be edited — a link that lands somewhere you can act is worth more
+ * than no link at all.
+ */
 function ComingUpRow({ event, style }: { event: ComingUpEvent; style?: React.CSSProperties }) {
   const d = parseDateLocal(event.event_date);
   const month = d.toLocaleDateString(undefined, { month: 'short' });
+  const appointment = event.item_type === 'appointment';
+  const to = appointment ? '/appointments' : `/pipeline/${event.id}`;
+  // Who it is with (or where it is), then the time when there is one. A gig's event_date carries
+  // no hour, so the second half is simply absent for gigs.
+  const subtitle = [
+    appointment ? event.contact_name : event.organization_name,
+    event.event_time ? clockTime(event.event_time) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <Group gap="sm" wrap="nowrap" align="center" py="xs" style={style}>
       <Card withBorder radius="sm" padding={4} w={44} ta="center" style={{ flexShrink: 0 }}>
@@ -315,11 +332,11 @@ function ComingUpRow({ event, style }: { event: ComingUpEvent; style?: React.CSS
         </Text>
       </Card>
       <div style={{ minWidth: 0 }}>
-        <Anchor component={Link} to={`/pipeline/${event.id}`} size="sm" lineClamp={1}>
+        <Anchor component={Link} to={to} size="sm" lineClamp={1}>
           {event.title}
         </Anchor>
         <Text size="xs" c="dimmed" lineClamp={1}>
-          {event.organization_name}
+          {subtitle}
         </Text>
       </div>
     </Group>
@@ -651,12 +668,14 @@ export function Dashboard() {
             <DashCard title="Coming up">
               {d.coming_up.length === 0 ? (
                 <Text c="dimmed" size="sm">
-                  Nothing scheduled — no gigs with an upcoming date.
+                  Nothing scheduled — no upcoming gigs or appointments.
                 </Text>
               ) : (
                 <Stack gap={0}>
+                  {/* Keyed on both fields: ids are unique per type, so a gig and an appointment
+                      can share one. */}
                   {d.coming_up.map((e, i) => (
-                    <ComingUpRow key={e.id} event={e} style={rowDivider(i)} />
+                    <ComingUpRow key={`${e.item_type}-${e.id}`} event={e} style={rowDivider(i)} />
                   ))}
                 </Stack>
               )}

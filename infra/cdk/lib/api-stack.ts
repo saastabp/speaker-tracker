@@ -110,6 +110,7 @@ const ROUTES: RouteDef[] = [
 
   // Slice 4 — outreach journal + contact timeline (handlers/outreaches.py).
   { method: apigwv2.HttpMethod.POST, path: '/outreaches', authRequired: true },
+  { method: apigwv2.HttpMethod.PATCH, path: '/outreaches/{id}', authRequired: true },
   { method: apigwv2.HttpMethod.DELETE, path: '/outreaches/{id}', authRequired: true },
   { method: apigwv2.HttpMethod.GET, path: '/contacts/{id}/outreaches', authRequired: true },
   { method: apigwv2.HttpMethod.GET, path: '/contacts/{id}/timeline', authRequired: true },
@@ -164,6 +165,14 @@ const ROUTES: RouteDef[] = [
   { method: apigwv2.HttpMethod.POST, path: '/follow-ups', authRequired: true },
   { method: apigwv2.HttpMethod.PATCH, path: '/follow-ups/{id}', authRequired: true },
   { method: apigwv2.HttpMethod.DELETE, path: '/follow-ups/{id}', authRequired: true },
+
+  // Slice 11 — appointments (handlers/appointments.py). Flat, with the contact link as a query
+  // filter rather than a nested path, so one route serves the Appointments page and the contact
+  // panel. A logging feature only: nothing here schedules or emails.
+  { method: apigwv2.HttpMethod.GET, path: '/appointments', authRequired: true },
+  { method: apigwv2.HttpMethod.POST, path: '/appointments', authRequired: true },
+  { method: apigwv2.HttpMethod.PATCH, path: '/appointments/{id}', authRequired: true },
+  { method: apigwv2.HttpMethod.DELETE, path: '/appointments/{id}', authRequired: true },
 ];
 
 export interface ApiStackProps extends StackProps {

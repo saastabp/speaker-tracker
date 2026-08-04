@@ -73,3 +73,42 @@ def query_date(value: str | None, name: str) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         raise errors.InvalidInput(f"invalid {name}; expected YYYY-MM-DD") from None
+
+
+def query_choice(value: str | None, name: str, allowed: tuple[str, ...], default: str) -> str:
+    """Parse an optional query parameter constrained to a fixed vocabulary.
+
+    Parameters
+    ----------
+    value : str or None
+        The raw query-string value; ``None`` or empty means the filter was not supplied.
+    name : str
+        Field name used in the error message.
+    allowed : tuple of str
+        The accepted values.
+    default : str
+        Returned when the parameter is absent.
+
+    Returns
+    -------
+    str
+        The supplied value, or ``default`` when absent.
+
+    Raises
+    ------
+    common.errors.InvalidInput
+        When present but not in ``allowed`` — 400 rather than silently falling back to the default,
+        which would answer a question the caller did not ask and look like a working filter.
+
+    Examples
+    --------
+    >>> query_choice("past", "scope", ("upcoming", "past", "all"), "all")
+    'past'
+    >>> query_choice(None, "scope", ("upcoming", "past", "all"), "all")
+    'all'
+    """
+    if not value:
+        return default
+    if value not in allowed:
+        raise errors.InvalidInput(f"invalid {name}; expected one of {', '.join(allowed)}")
+    return value

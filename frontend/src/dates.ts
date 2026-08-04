@@ -88,6 +88,21 @@ export function dateTime(d: Date): string {
   return d.toLocaleString();
 }
 
+/**
+ * "2:00 PM" from a bare `HH:MM[:SS]` wall-clock time.
+ *
+ * The value carries no date, so this pins it to an arbitrary fixed day purely to reach `Intl` —
+ * never to *today*, which would let a DST transition shift a time that has nothing to do with any
+ * particular day.
+ */
+export function clockTime(value: string): string {
+  const [hour, minute] = value.split(':').map(Number);
+  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 // The `timestamp*` wrappers below take an ISO **timestamp** string and fall back to showing the
 // raw value when it will not parse — a malformed value should look wrong rather than vanish. The
 // name carries the safety property: reach for one of these only when the field is an instant. A

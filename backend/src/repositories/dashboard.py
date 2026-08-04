@@ -16,6 +16,8 @@ Everything the home screen shows, computed on the fly (DATABASE.md §4) and owne
   still-pre-Booked, research incomplete, an unanswered outbound thread, and **stale** (no status
   change or outreach in the stale window). Stale was its own card until 2026-07-30; see
   :func:`needs_attention` for why it was folded in.
+- **coming-up** — the next few dated things, gigs **and** logged appointments merged into one
+  chronological list (slice 11); the appointment half comes from :mod:`repositories.appointments`.
 - **follow-ups** — pending reminders due today or earlier (slice 7), from
   :mod:`repositories.follow_ups`.
 
@@ -33,10 +35,28 @@ from pymysql.connections import Connection
 from common.db import db_now_local
 from core.periods import WEEKLY, awaiting_reply_cutoff, period_bounds, stale_cutoff
 from core.research import research_ready_sql
+from repositories.appointments import list_appointments
 from repositories.follow_ups import list_due
 
 #: Money totals assume a single currency (the app default); Donna's gigs are all USD.
 _CURRENCY = "USD"
+
+#: How many rows the "Coming up" card shows, whatever the mix of gigs and appointments.
+_COMING_UP_LIMIT = 6
+
+#: Active gigs with a today-or-future event date. Each source is capped at the card's own limit
+#: before the merge, which is safe: the overall soonest N is always a subset of (soonest N of A) ∪
+#: (soonest N of B).
+_UPCOMING_GIGS_SQL = (
+    "SELECT o.id, o.title, org.name AS organization_name, o.event_date, "
+    "       st.short_name AS current_status "
+    "FROM opportunities o "
+    "JOIN organizations org ON org.id = o.organization_id "
+    "JOIN opportunity_statuses st ON st.id = o.current_status_id "
+    "WHERE o.user_id = %s AND o.deleted_at IS NULL AND o.closed_at IS NULL "
+    "  AND o.event_date IS NOT NULL AND o.event_date >= %s "
+    "ORDER BY o.event_date ASC LIMIT %s"
+)
 
 #: The funnel ratio stages in order (DATABASE.md §"funnel ratio stages"), plus `delivered` which the
 #: dashboard funnel card shows as its final row (the approved mockup renders 5 rows).
@@ -336,27 +356,60 @@ def due_follow_ups(conn: Connection, user_id: int, now_local: datetime) -> list[
 
 
 def upcoming_events(conn: Connection, user_id: int, now_local: datetime) -> list[dict]:
-    """Return active gigs with a today-or-future event date, soonest first (the "Coming up" card).
+    """Return the next few dated things — active gigs and logged appointments — soonest first.
 
-    Gigs only. Follow-up reminders get their **own** card via :func:`due_follow_ups` rather than
-    being merged in here (settled with Brian 2026-07-30, revising the earlier note that promised
-    this panel would absorb them): "Coming up" is future-facing, and an overdue reminder is the
-    opposite — it has to get louder, not scroll off the top. Ad-hoc calendar items remain out of
-    scope, having no data model at all.
+    Two sources, one chronological list (slice 11). A gig qualifies from ``event_date >= today``, so
+    it stays up for the whole of its day; an appointment qualifies from ``scheduled_at >=
+    now_local``, because it carries the hour it happens and a 9am meeting is over by 10.
+
+    Follow-up reminders are **not** merged in — they get their own card via :func:`due_follow_ups`
+    (settled with Brian 2026-07-30, revising the earlier note that promised this panel would absorb
+    them): "Coming up" is future-facing, and an overdue reminder is the opposite, so it has to get
+    louder rather than scroll off the top.
+
+    Gigs sort before appointments on a shared date, since a gig has no hour and midnight is the
+    honest reading of that; ``item_type`` and ``id`` break the remaining ties so the order is stable
+    across calls.
     """
     with conn.cursor() as cur:
-        cur.execute(
-            "SELECT o.id, o.title, org.name AS organization_name, o.event_date, "
-            "       st.short_name AS current_status "
-            "FROM opportunities o "
-            "JOIN organizations org ON org.id = o.organization_id "
-            "JOIN opportunity_statuses st ON st.id = o.current_status_id "
-            "WHERE o.user_id = %s AND o.deleted_at IS NULL AND o.closed_at IS NULL "
-            "  AND o.event_date IS NOT NULL AND o.event_date >= %s "
-            "ORDER BY o.event_date ASC LIMIT 6",
-            (user_id, now_local.date()),
+        cur.execute(_UPCOMING_GIGS_SQL, (user_id, now_local.date(), _COMING_UP_LIMIT))
+        items = [
+            {
+                "item_type": "gig",
+                "id": row["id"],
+                "title": row["title"],
+                "organization_name": row["organization_name"],
+                "contact_name": None,
+                "event_date": row["event_date"],
+                "event_time": None,
+                "current_status": row["current_status"],
+            }
+            for row in cur.fetchall()
+        ]
+    items += [
+        {
+            "item_type": "appointment",
+            "id": row["id"],
+            "title": row["title"],
+            "organization_name": None,
+            "contact_name": row["contact_name"],
+            "event_date": row["scheduled_at"].date(),
+            "event_time": row["scheduled_at"].time(),
+            "current_status": None,
+        }
+        for row in list_appointments(
+            conn, user_id, scope="upcoming", as_of=now_local, limit=_COMING_UP_LIMIT
         )
-        return list(cur.fetchall())
+    ]
+    items.sort(
+        key=lambda item: (
+            item["event_date"],
+            item["event_time"] or time.min,
+            item["item_type"],
+            item["id"],
+        )
+    )
+    return items[:_COMING_UP_LIMIT]
 
 
 def build_dashboard(conn: Connection, user_id: int, week_of: date | None = None) -> dict:

@@ -15,7 +15,7 @@ import { useOpportunities } from '../api/opportunities';
 import { AffiliationRow } from '../components/AffiliationRow';
 import { CardTitle, KV } from '../components/detailCards';
 import { FollowUpsCard } from '../components/FollowUpsCard';
-import { LogOutreachModal } from '../components/LogOutreachModal';
+import { OutreachFormModal } from '../components/OutreachFormModal';
 import { VenueFormModal } from '../components/VenueFormModal';
 import { timestampDate } from '../dates';
 import { stageColor } from '../opportunityChips';
@@ -236,7 +236,7 @@ export function VenueDetail() {
         initialValues={v}
         onSubmit={handleUpdate}
       />
-      <LogOutreachModal opened={logOpen} onClose={logHandlers.close} />
+      <OutreachFormModal opened={logOpen} onClose={logHandlers.close} />
     </Stack>
   );
 }

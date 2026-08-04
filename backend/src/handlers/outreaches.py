@@ -18,7 +18,7 @@ from common.logger import logger
 from handlers.context import authenticate
 from handlers.follow_ups import create_rider_follow_up, schedule_new_follow_up
 from handlers.params import path_int
-from models.outreach import OutreachInput, OutreachSummary
+from models.outreach import OutreachInput, OutreachPatch, OutreachSummary
 from models.timeline import TimelineItem
 from repositories import outreaches as outreaches_repo
 from repositories import timeline as timeline_repo
@@ -80,6 +80,31 @@ def get_contact_timeline(contact_id: str) -> dict:
         request.connection, request.user_id, path_int(contact_id, "contact_id")
     )
     return {"timeline": [TimelineItem(**row).model_dump(mode="json") for row in rows]}
+
+
+@router.patch("/outreaches/<outreach_id>")
+def patch_outreach(outreach_id: str) -> dict:
+    """Edit a logged touch — channel, kind, gig attribution, note or date.
+
+    Not the contact: who a touch went to is what the row is, and moving it between timelines would
+    re-open the kind inference that ran at create (``models.outreach.OutreachPatch``). No follow-up
+    rider either — the rider belongs to the moment a touch is logged, not to a later correction.
+    """
+    request = authenticate(router.current_event.raw_event)
+    outreach_id_int = path_int(outreach_id, "outreach_id")
+    data = OutreachPatch.model_validate(router.current_event.json_body or {})
+    with transaction(request.connection) as conn:
+        matched = outreaches_repo.patch_outreach(conn, request.user_id, outreach_id_int, data)
+    if not matched:
+        raise errors.NotFound("outreach not found")
+    logger.info(
+        "Patched outreach id=%s fields=%s user_id=%s",
+        outreach_id_int,
+        sorted(data.model_fields_set),
+        request.user_id,
+    )
+    row = outreaches_repo.get_outreach(request.connection, request.user_id, outreach_id_int)
+    return OutreachSummary(**row).model_dump(mode="json")
 
 
 @router.delete("/outreaches/<outreach_id>")

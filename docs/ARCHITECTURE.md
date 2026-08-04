@@ -278,9 +278,10 @@ table.
 | `opportunities.py` | GET/POST `/opportunities`, GET/PUT/DELETE `/opportunities/{id}`, PATCH `/opportunities/{id}/status`, PATCH `/opportunities/{id}/payment`, POST `/opportunities/{id}/close`, GET `/funnel` |
 | `opportunity_contacts.py` | POST `/opportunities/{id}/contacts`, PUT/DELETE `/opportunities/{id}/contacts/{contactId}` |
 | `opportunity_notes.py` | POST `/opportunities/{id}/notes`, DELETE `/opportunities/{id}/notes/{noteId}` *(notes are read with the opportunity detail; add + soft-delete only)* |
-| `outreaches.py` | POST `/outreaches`, DELETE `/outreaches/{id}`, GET `/contacts/{id}/outreaches`, GET `/contacts/{id}/timeline` |
+| `outreaches.py` | POST `/outreaches`, PATCH/DELETE `/outreaches/{id}`, GET `/contacts/{id}/outreaches`, GET `/contacts/{id}/timeline` *(the patch takes no `contact_id` — moving a touch between timelines would re-open its kind inference)* |
 | `message_templates.py` | GET/POST `/templates`, GET/PUT/DELETE `/templates/{id}`, POST `/templates/{id}/duplicate` |
-| `follow_ups.py` | GET/POST `/follow-ups`, PUT/DELETE `/follow-ups/{id}`, POST `/follow-ups/{id}/complete` |
+| `follow_ups.py` | GET/POST `/follow-ups`, PATCH/DELETE `/follow-ups/{id}` — marking done is `{"completed": true}` on the patch, **not** a route of its own, so one code path reconciles the EventBridge schedule for every kind of change |
+| `appointments.py` | GET/POST `/appointments`, PATCH/DELETE `/appointments/{id}` — `?scope=upcoming\|past\|all` (default `all`), `?contact_id=`. A logging feature: nothing here schedules, invites or emails |
 | `targets.py` | GET/PUT `/targets`, DELETE `/targets/{targetType}/{cadence}` |
 | `dashboard.py` | GET `/dashboard` — `?week_of=YYYY-MM-DD` anchors the **target tiles only**; every other section reports on now whichever week is asked for |
 | `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, PATCH `/emails/threads/{id}` (read / close), POST `/emails/send`, POST `/emails/threads/{id}/reply` |

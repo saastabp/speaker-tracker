@@ -20,6 +20,7 @@ from aws_lambda_powertools.event_handler import APIGatewayHttpResolver, Response
 
 from common.http import response_for_exception
 from handlers import (
+    appointments,
     catalogs,
     contact_organizations,
     contacts,
@@ -41,6 +42,7 @@ from handlers import (
 )
 
 app = APIGatewayHttpResolver()
+app.include_router(appointments.router)
 app.include_router(catalogs.router)
 app.include_router(contacts.router)
 app.include_router(contact_organizations.router)

@@ -9,7 +9,7 @@ import {
   type OrganizationInput,
 } from '../api/organizations';
 import { FilterBar, type FilterPill } from '../components/FilterBar';
-import { LogOutreachModal } from '../components/LogOutreachModal';
+import { OutreachFormModal } from '../components/OutreachFormModal';
 import { VenueFormModal } from '../components/VenueFormModal';
 import { windowLabel } from '../dates';
 import { useFilterParams } from '../urlFilters';
@@ -233,7 +233,7 @@ export function Venues() {
         submitLabel="Add venue"
         onSubmit={handleCreate}
       />
-      <LogOutreachModal opened={logOpen} onClose={logHandlers.close} />
+      <OutreachFormModal opened={logOpen} onClose={logHandlers.close} />
     </Stack>
   );
 }

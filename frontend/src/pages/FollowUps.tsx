@@ -91,9 +91,11 @@ export function FollowUps() {
     formHandlers.open();
   }
 
+  /** Close only — clearing `editing` here would re-render the still-visible dialog as a blank
+   *  "Schedule follow-up" form for the length of its exit transition. Both open paths set the
+   *  target explicitly; see the note in `pages/Appointments.tsx`. */
   function closeForm() {
     formHandlers.close();
-    setEditing(null);
   }
 
   return (

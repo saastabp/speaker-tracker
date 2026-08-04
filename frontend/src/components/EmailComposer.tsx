@@ -50,7 +50,7 @@ interface EmailComposerProps {
   opened: boolean;
   onClose: () => void;
   /** Preselected recipient, when composing from a contact or opportunity. Omit to let the user
-   *  pick one (opened from the Emails inbox) — the same pattern as `LogOutreachModal`. */
+   *  pick one (opened from the Emails inbox) — the same pattern as `OutreachFormModal`. */
   contactId?: number | null;
   contactName?: string;
   contactEmail?: string | null;

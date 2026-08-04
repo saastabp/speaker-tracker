@@ -86,6 +86,14 @@ legacy-tracker, not tracked here.
     closed cards; a delivered-but-unpaid gig stays on the board until settled so it isn't lost
     before you collect.
 
+**Scheduling**
+14. **Appointments** — a logged meeting with a contact: title, date **and time**, free-text
+    details. Deliberately **not calendaring** — nothing syncs, invites or emails, and there is no
+    completion state; an appointment simply stops being upcoming. Upcoming ones merge into the
+    Dashboard's "Coming up" card alongside dated gigs; the Appointments page holds the whole
+    record, with a Show Upcoming / Show Past toggle and a group-by-date-or-contact switch (a
+    mistyped date has to stay reachable, or it can never be corrected).
+
 Styling: straight business app, "not ugly," **no gamification** (no confetti/streaks — that's
 legacy-tracker's look). **Light theme by default** (Donna dislikes dark themes). Branded with the
 360 Balanced Living palette — see the Branding section.
@@ -375,6 +383,8 @@ the opportunity card, seeded from `how_to_approach`.
 5. Targets + dashboard
 6. Email: SES composer + attachments, IMAP Sent-append + reply-threading poller
 7. Follow-up reminders
+8. Dashboard drill-down · 9. Talks & materials · 10. Dashboard week picker
+11. Appointments + editable outreach
 
 ## 7. Decisions
 
