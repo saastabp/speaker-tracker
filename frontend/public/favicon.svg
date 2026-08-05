@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Speaker Tracker">
+  <!-- Filled navy tile, not a bare glyph: an unfilled mark disappears against dark browser
+       chrome, and this is the one place the app has no control over the background. -->
+  <rect width="32" height="32" rx="7" fill="#1F3B4D"/>
+  <!-- Horn, gold. Drawn as a solid mass rather than an outline — at 16px a 1px outline greys
+       into mush, while a filled shape keeps its silhouette. -->
+  <rect x="5" y="12.6" width="6" height="6.8" rx="1.7" fill="#D9A02C"/>
+  <path d="M10 12.2 20.6 6.2v19.6L10 19.8Z" fill="#D9A02C"/>
+  <!-- Two sound arcs, cream. The second is faded so that when the pair blurs together at small
+       sizes it reads as one softening gesture rather than a smudge. -->
+  <path d="M22.6 12.4a5.6 5.6 0 0 1 0 7.2" fill="none" stroke="#FBF8F2"
+        stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M25.8 9.2a10 10 0 0 1 0 13.6" fill="none" stroke="#FBF8F2"
+        stroke-width="2.4" stroke-linecap="round" opacity=".6"/>
+</svg>
