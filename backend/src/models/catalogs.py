@@ -54,3 +54,4 @@ class Catalogs(BaseModel):
     outreach_channels: list[CatalogItem]
     message_template_kinds: list[CatalogItem]
     target_types: list[CatalogItem]
+    opportunity_response_types: list[CatalogItem]

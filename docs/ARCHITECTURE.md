@@ -278,6 +278,7 @@ table.
 | `opportunities.py` | GET/POST `/opportunities`, GET/PUT/DELETE `/opportunities/{id}`, PATCH `/opportunities/{id}/status`, PATCH `/opportunities/{id}/payment`, POST `/opportunities/{id}/close`, GET `/funnel` |
 | `opportunity_contacts.py` | POST `/opportunities/{id}/contacts`, PUT/DELETE `/opportunities/{id}/contacts/{contactId}` |
 | `opportunity_notes.py` | POST `/opportunities/{id}/notes`, DELETE `/opportunities/{id}/notes/{noteId}` *(notes are read with the opportunity detail; add + soft-delete only)* |
+| `opportunity_responses.py` | PUT `/opportunities/{id}/responses/{responseType}` — sets one counter to a value, so a repeated `+` is idempotent. **No DELETE**: zero is the removal. Counters are read with the opportunity detail. Not to be confused with `responses.py` below, which composes detail responses |
 | `outreaches.py` | POST `/outreaches`, PATCH/DELETE `/outreaches/{id}`, GET `/contacts/{id}/outreaches`, GET `/contacts/{id}/timeline` *(the patch takes no `contact_id` — moving a touch between timelines would re-open its kind inference)* |
 | `message_templates.py` | GET/POST `/templates`, GET/PUT/DELETE `/templates/{id}`, POST `/templates/{id}/duplicate` |
 | `follow_ups.py` | GET/POST `/follow-ups`, PATCH/DELETE `/follow-ups/{id}` — marking done is `{"completed": true}` on the patch, **not** a route of its own, so one code path reconciles the EventBridge schedule for every kind of change |

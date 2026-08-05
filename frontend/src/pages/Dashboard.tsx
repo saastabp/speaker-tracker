@@ -461,6 +461,11 @@ export function Dashboard() {
 
   const d = dash.data;
   const funnelMax = Math.max(1, ...d.funnel.map((f) => f.count));
+  // The responses row converts from the last funnel stage, the same way every other row converts
+  // from the one above it.
+  const lastStageCount = d.funnel.at(-1)?.count ?? 0;
+  const responsesPct =
+    lastStageCount > 0 ? Math.round((d.responses_reached / lastStageCount) * 100) : null;
   const money = d.money;
 
   return (
@@ -568,6 +573,58 @@ export function Dashboard() {
                     </Anchor>
                   );
                 })}
+
+                {/* The one row that is not a status: gigs that went on to produce a response
+                    (slice 12). Rendered outside the map because it is not a `FunnelCount` — it has
+                    no "now" count, since a response is something a gig *produced* rather than
+                    somewhere a gig sits. Its percentage is against Delivered, like every other row.
+                    `closed=all` is load-bearing: a gig that generated responses has usually been
+                    delivered and is therefore closed, so the default board would hide most of the
+                    very rows this number counts. */}
+                <Anchor
+                  component={Link}
+                  to="/pipeline?has_responses=true&closed=all"
+                  underline="never"
+                  c="inherit"
+                >
+                  <Group gap="sm" wrap="nowrap">
+                    <Text size="sm" w={140} style={{ flexShrink: 0 }}>
+                      Responses
+                    </Text>
+                    <div
+                      style={{
+                        flex: 1,
+                        height: 20,
+                        background: 'var(--mantine-color-gray-1)',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${(d.responses_reached / funnelMax) * 100}%`,
+                          minWidth: d.responses_reached > 0 ? 4 : 0,
+                          height: '100%',
+                          background: 'var(--mantine-color-terracotta-6)',
+                          opacity: 0.28,
+                          borderRadius: 8,
+                        }}
+                      />
+                    </div>
+                    <Text size="sm" w={116} ta="right" style={{ flexShrink: 0 }}>
+                      <Text span fw={600}>
+                        {d.responses_reached}
+                      </Text>
+                      <Text span size="xs" c="dimmed" fw={400}>
+                        {' reached'}
+                        {responsesPct !== null && ` · ${responsesPct}%`}
+                      </Text>
+                    </Text>
+                    {/* An em dash keeps the "now" column aligned without implying a zero. */}
+                    <Text size="sm" c="dimmed" w={52} ta="right" style={{ flexShrink: 0 }}>
+                      —
+                    </Text>
+                  </Group>
+                </Anchor>
               </Stack>
             </DashCard>
 

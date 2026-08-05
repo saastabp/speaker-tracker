@@ -9,7 +9,8 @@ Everything the home screen shows, computed on the fly (DATABASE.md §4) and owne
   **current-state** count of research-ready orgs (readiness is a state, not a dated event);
   ``pitches`` / ``bookings`` count distinct gigs reaching that stage in the window.
 - **funnel** — reached-or-beyond distinct-gig counts for outreach_sent → in_conversation → pitched →
-  booked (#3), mirroring ``core.funnel.reached_or_beyond`` in SQL.
+  booked (#3), mirroring ``core.funnel.reached_or_beyond`` in SQL, plus ``responses_reached``: the
+  gigs that went on to produce a response, which is the one row that is not a status (slice 12).
 - **money** — Booked / Received / Outstanding over paid gigs; pro bono is excluded from the currency
   totals and reported as a separate count (#5).
 - **needs-attention** — the single "what needs me?" panel: awaiting payment, past-event
@@ -173,6 +174,27 @@ def funnel_counts(conn: Connection, user_id: int) -> list[dict]:
             {"status": r["status"], "count": int(r["count"]), "current": int(r["current"])}
             for r in cur.fetchall()
         ]
+
+
+def gigs_with_responses(conn: Connection, user_id: int) -> int:
+    """Return how many gigs produced at least one response — the funnel's final row (slice 12).
+
+    Counts *gigs*, not responses, so every row of the funnel card stays in the same unit and the
+    stage-to-stage percentages remain meaningful (settled with Brian 2026-08-04). A counter sitting
+    at zero does not qualify: it means the response was entered and then taken back.
+
+    All-time, like the rest of the funnel — slice 10 deliberately left the funnel and the money
+    rollup unwindowed while the target tiles move with the week picker.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(DISTINCT r.opportunity_id) AS n "
+            "FROM opportunity_responses r "
+            "JOIN opportunities o ON o.id = r.opportunity_id AND o.deleted_at IS NULL "
+            "WHERE r.user_id = %s AND r.response_count > 0",
+            (user_id,),
+        )
+        return int(cur.fetchone()["n"])
 
 
 def money_rollup(conn: Connection, user_id: int) -> dict:
@@ -444,6 +466,7 @@ def build_dashboard(conn: Connection, user_id: int, week_of: date | None = None)
         "week": {"start": week_start.date(), "end": week_end.date()},
         "targets": target_actuals(conn, user_id, anchor),
         "funnel": funnel_counts(conn, user_id),
+        "responses_reached": gigs_with_responses(conn, user_id),
         "money": money_rollup(conn, user_id),
         "needs_attention": needs_attention(conn, user_id, now_local),
         "coming_up": upcoming_events(conn, user_id, now_local),

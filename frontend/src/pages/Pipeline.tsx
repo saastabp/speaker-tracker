@@ -65,6 +65,7 @@ const PAY_FILTERS: Record<string, string> = {
  *  short_names, so they cannot collide with a real one. */
 const STATUS_PILL = '__status__';
 const ENTERED_PILL = '__entered__';
+const RESPONSES_PILL = '__responses__';
 
 interface CardLabels {
   paymentLabel: (shortName: string) => string;
@@ -338,11 +339,14 @@ export function Pipeline() {
   const entered = params.get('entered');
   const enteredFrom = params.get('entered_from');
   const enteredTo = params.get('entered_to');
+  // Arrives from the Dashboard funnel's Responses row. Filtered server-side like `entered`.
+  const hasResponses = params.get('has_responses') === 'true';
   const opps = useOpportunities({
     closed: showClosed ? undefined : false,
     entered: entered || undefined,
     enteredFrom: enteredFrom || undefined,
     enteredTo: enteredTo || undefined,
+    hasResponses: hasResponses || undefined,
   });
   const patchStatus = usePatchStatus();
   const createOpp = useCreateOpportunity();
@@ -450,11 +454,23 @@ export function Pipeline() {
           },
         ]
       : []),
+    // Also server-side, and also arriving from a Dashboard link — same reasoning again.
+    ...(hasResponses
+      ? [
+          {
+            value: RESPONSES_PILL,
+            label: 'Generated responses',
+            active: true,
+            removable: true,
+          },
+        ]
+      : []),
   ];
   function handlePill(value: string) {
     if (value === ENTERED_PILL) {
       params.setMany({ entered: '', entered_from: '', entered_to: '' });
-    } else if (value === STATUS_PILL) params.set('status', '');
+    } else if (value === RESPONSES_PILL) params.set('has_responses', '');
+    else if (value === STATUS_PILL) params.set('status', '');
     else if (value in PAY_FILTERS) params.toggle('pay', value);
     else params.toggle('comp', value);
   }

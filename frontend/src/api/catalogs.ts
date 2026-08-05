@@ -31,6 +31,9 @@ export interface Catalogs {
   outreach_channels: CatalogItem[];
   message_template_kinds: CatalogItem[];
   target_types: CatalogItem[];
+  /** The call-to-action vocabulary behind a gig's response counters (slice 12). The grid renders
+   *  from this rather than from the stored counters, so a type nobody has used yet still shows. */
+  opportunity_response_types: CatalogItem[];
 }
 
 /** Any catalog, narrowed to what a label lookup needs. Widened from `CatalogItem[]` so the lists

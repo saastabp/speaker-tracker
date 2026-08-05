@@ -12,11 +12,12 @@ filename order by `handlers/migrate.py`, tracked in `schema_migrations`. IAM DB 
 > is deliberately kept in **S3**, not the database. Keep it that way; a `MEDIUMTEXT` of raw MIME per
 > message would exhaust 20 GB far faster than any other table here.
 
-> **Status: implemented through migration `0014` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
+> **Status: implemented through migration `0015` — slices 1–5 (`0001`–`0006`), `0007_target_labels`
 > (UX reconciliation, a catalog label update with no schema change), `0008_email` (slice 6a),
 > `0009_external_message_id` (slice 6b), `0010_followups` and `0011_reminder_failures` (slice 7),
-> `0012_talks_materials` (slice 9), `0013_research_ready_at` (slice 10) and `0014_appointments`
-> (slice 11).** This document is the schema contract and everything through `0014` satisfies it. **Materials moved from `0011` to
+> `0012_talks_materials` (slice 9), `0013_research_ready_at` (slice 10), `0014_appointments`
+> (slice 11) and `0015_opportunity_responses` (slice 12).** This document is the schema contract and
+> everything through `0015` satisfies it. **Materials moved from `0011` to
 > `0012`** — it was unwritten, `0011_reminder_failures` was being written, and the runner applies
 > unapplied files in version order, so leaving a hole would have `0011` applying *after* `0012`.
 > Same resolution slice 7's own migration got when 6b spent `0009`. Derived from `DESIGN.md` §4/§5
@@ -519,6 +520,39 @@ Indexes: `(user_id, scheduled_at)` — the page's list and the Dashboard's branc
 question with a LIMIT; `(contact_id, scheduled_at)` for the contact panel (InnoDB requires an index
 on the referencing column and would auto-create an unnamed one anyway).
 
+### `opportunity_responses`
+What a delivered gig generated: an audience member acting on a call to action — a Legacy Spark Chat,
+a Discovery call, or the Booklet. The last thing a gig produces, which is why it is the funnel's
+bottom row.
+
+**A counter, not a journal.** One row per `(opportunity_id, opportunity_response_type_id)` carrying
+`response_count`, enforced by `uq_opportunity_responses_opp_type`. That unique key is what makes the
+write an upsert, so leaning on the `+` control cannot fan out into duplicate counters. Responses are
+only ever counted here — *when* each arrived and *who* it was live in legacy-tracker and GHL, which
+own that detail.
+
+**No `occurred_at`.** Nothing windows these into a week or a month, because responses are **not a
+target** — they measure audience growth in aggregate. This is the reason the feature has no
+dashboard tile and does not appear in `target_types`.
+
+**No `deleted_at`** — the only table here without it. Soft delete exists so a retracted row can be
+hidden from reads while history survives; a counter has no such history. Correcting a mistake is
+pressing `-`, and `response_count = 0` is exactly the empty state. A soft-deleted counter row and a
+zeroed one would mean the same thing, which is one state too many.
+
+`CHECK (response_count >= 0)` — the database refuses a negative rather than trusting the SPA to stop
+at zero. `response_count`, not `count`: `COUNT` is a function and the bare word needs backticks
+forever.
+
+Indexes: `(opportunity_id, opportunity_response_type_id)` unique (the natural key and the upsert
+target); `(user_id)` for the dashboard's funnel row.
+
+### `opportunity_response_types`
+The call-to-action vocabulary: `legacy_spark_chat`, `discovery`, `booklet`. Standard catalog shape,
+prefixed like `opportunity_statuses` and `opportunity_formats` — the prefix names what the
+vocabulary describes. A catalog rather than three count columns on the table above (§5): a fourth
+call to action should be a seed row, not an ALTER plus a migration plus a frontend change.
+
 ### `message_templates`
 `user_id NULL` = shared template, editable in place (admin-gated under multi-user); **Duplicate**
 writes a personal copy with `user_id` set. `body` holds merge fields (`[Name]`, …) resolved
@@ -748,6 +782,7 @@ Forward-only, one file per vertical slice from `DESIGN.md` §6, so a slice is de
 | `0012_talks_materials.sql` | `materials`, and `talks.length_minutes` (INT) → `duration` (VARCHAR, free text) | 9 |
 | `0013_research_ready_at.sql` | `organizations.research_ready_at` — "new venues researched" was a running total wearing a monthly goal; a flow needs a date | 10 |
 | `0014_appointments.sql` | `appointments` — logged meetings, the second source behind the Dashboard's "Coming up" card, and the one table using a `DATETIME` rather than a `TIMESTAMP` | 11 |
+| `0015_opportunity_responses.sql` | `opportunity_responses` (a per-type **counter**, the one table with no `deleted_at`) + the `opportunity_response_types` catalog | 12 |
 
 Catalog seed rows ship in `0001` even for tables whose entity arrives later — seeding is idempotent
 (`INSERT … ON DUPLICATE KEY UPDATE` on `short_name`) and keeps vocabulary changes in one place. The

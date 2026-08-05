@@ -101,6 +101,7 @@ def test_dashboard_returns_all_sections(api) -> None:
         "needs_attention",
         "coming_up",
         "follow_ups",
+        "responses_reached",
     }
     assert len(body["funnel"]) == 5  # all five funnel stages always present
     assert body["money"]["currency"] == "USD"

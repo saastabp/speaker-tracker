@@ -20,6 +20,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from models.follow_ups import FollowUpRider
+from models.opportunity_responses import OpportunityResponseCount
 
 
 class OpportunityInput(BaseModel):
@@ -262,3 +263,8 @@ class Opportunity(OpportunityInput):
     contacts: list[OpportunityContact] = Field(default_factory=list)
     notes: list[OpportunityNote] = Field(default_factory=list)
     status_events: list[StatusEvent] = Field(default_factory=list)
+    #: What this gig generated, as one counter per response type (slice 12). Embedded like ``notes``
+    #: because a counter is only ever read through the gig that owns it — which is what lets the
+    #: detail page render its grid and its total without a second request. Types with no stored row
+    #: are absent and mean zero; the SPA fills the grid from the catalog.
+    responses: list[OpportunityResponseCount] = Field(default_factory=list)

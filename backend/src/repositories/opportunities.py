@@ -192,6 +192,7 @@ def list_opportunities(
     entered: str | None = None,
     entered_from: date | None = None,
     entered_to: date | None = None,
+    has_responses: bool = False,
 ) -> list[dict]:
     """Return the caller's opportunities as flat board / History rows.
 
@@ -219,6 +220,12 @@ def list_opportunities(
         a target tile open the records behind it: ``repositories.dashboard._actual_for`` counts
         distinct gigs with such an event in the period, and this filter is that query's ``WHERE``,
         so the list and the tile agree by construction rather than by coincidence.
+    has_responses : bool
+        Keep only gigs that produced at least one response (slice 12). ``response_count > 0`` is
+        part of the predicate rather than mere row existence: a counter raised and then zeroed
+        leaves its row behind, and such a gig did not produce a response. It is the same predicate
+        :func:`repositories.dashboard.gigs_with_responses` counts, so the funnel's Responses row and
+        the list it opens agree by construction.
 
     Returns
     -------
@@ -248,6 +255,11 @@ def list_opportunities(
             sql += "AND e.occurred_at < %s "
             params.append(entered_to)
         sql += ") "
+    if has_responses:
+        sql += (
+            "AND EXISTS (SELECT 1 FROM opportunity_responses r "
+            "  WHERE r.opportunity_id = o.id AND r.response_count > 0) "
+        )
     sql += "ORDER BY (o.event_date IS NULL), o.event_date, o.created_at"
     with conn.cursor() as cur:
         cur.execute(sql, tuple(params))

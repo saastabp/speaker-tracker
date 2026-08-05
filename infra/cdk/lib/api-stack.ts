@@ -108,6 +108,14 @@ const ROUTES: RouteDef[] = [
     authRequired: true,
   },
 
+  // Slice 12 — audience-growth response counters (handlers/opportunity_responses.py). PUT on a
+  // named counter, not POST: the body carries the resulting count, so a repeated `+` is harmless.
+  {
+    method: apigwv2.HttpMethod.PUT,
+    path: '/opportunities/{id}/responses/{responseType}',
+    authRequired: true,
+  },
+
   // Slice 4 — outreach journal + contact timeline (handlers/outreaches.py).
   { method: apigwv2.HttpMethod.POST, path: '/outreaches', authRequired: true },
   { method: apigwv2.HttpMethod.PATCH, path: '/outreaches/{id}', authRequired: true },

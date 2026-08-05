@@ -720,6 +720,54 @@ title, a contact, a date-and-time, and free-text details.
 
 ---
 
+## Slice 12 — Response counters
+
+**Size: S.** What a delivered gig generated: Legacy Spark Chats, Discovery calls, Booklet requests.
+
+### The shape
+
+A `+`/`-` grid on the opportunity detail, one row per response type, with a total; and a final row
+on the Dashboard's funnel card. That is the whole feature.
+
+### Settled decisions
+
+- **A counter, not a journal.** One row per (opportunity, type) carrying a count, not one row per
+  response. Responses are only *counted* here — when each arrived and who it was live in
+  legacy-tracker and GHL. Storing rows we would never read individually would be a journal nobody
+  reads, and it would blur which system owns the detail.
+- **Not a target** (revised 2026-08-04, replacing the original framing). There is no goal to set, no
+  `target_types` row and no dashboard tile. This is why the table has **no `occurred_at`**: nothing
+  buckets these into a week or a month.
+- **The write is a set, not a delta.** `PUT /opportunities/{id}/responses/{responseType}` carries
+  the resulting count, so a double-fired `+` lands on the same number rather than counting twice.
+- **Zero is the empty state, so there is no delete.** Removing an erroneous entry is pressing `-`.
+  The table is the only one in this schema with **no `deleted_at`** — a soft-deleted counter row and
+  a zeroed one would mean the same thing.
+- **The funnel row counts gigs, not responses.** Every other row of that card counts opportunities,
+  so counting responses there would break the unit and let a row exceed the one above it. The row
+  shows gigs that produced at least one response, as a percentage of Delivered; a counter sitting at
+  zero does not qualify. It carries no "now" and no link — a response is something a gig *produced*,
+  not somewhere a gig sits, so it is a bare `responses_reached` int rather than a sixth
+  `FunnelCount`.
+- **Everything is named `opportunity_responses`** — table, catalog, model, repository, router. It
+  matches `opportunity_notes` / `opportunity_contacts`, and it keeps the entity clear of
+  `handlers/responses.py`, which composes detail responses and is unrelated. Two unrelated meanings
+  of "responses" one directory apart would be a trap.
+- **The grid renders from the catalog, not from the stored counters**, so a type nobody has used yet
+  reads zero instead of being missing.
+
+### Acceptance
+
+1. Each of the three types can be raised and lowered on an opportunity, and the total updates.
+2. `-` stops at zero; the database refuses a negative regardless.
+3. Repeating the same write changes nothing (idempotent), and cannot create a second counter.
+4. Counters survive a reload and are scoped to their own gig.
+5. The Dashboard funnel shows a Responses row counting gigs with at least one response, as a
+   percentage of Delivered, and it refreshes when a counter changes.
+6. A gig whose only counter was raised and then zeroed does not count toward that row.
+
+---
+
 ## Sequencing and risk
 
 ```mermaid

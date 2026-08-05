@@ -88,6 +88,11 @@ export interface Dashboard {
   funnel: FunnelCount[];
   money: MoneyRollup;
   needs_attention: NeedsAttentionItem[];
+  /** How many gigs produced at least one response — the funnel card's final row (slice 12). A bare
+   *  count rather than a sixth `FunnelCount`: "responses" is not an opportunity status, and there
+   *  is no "how many sit here now" for something a gig produces rather than occupies. All-time,
+   *  like the rest of the funnel. */
+  responses_reached: number;
   coming_up: ComingUpEvent[];
   /** Pending reminders due today **or earlier** — overdue ones must get louder, not scroll off a
    *  future-facing list, which is why they are their own card rather than part of `coming_up`. */

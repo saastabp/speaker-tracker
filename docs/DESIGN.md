@@ -86,6 +86,14 @@ legacy-tracker, not tracked here.
     closed cards; a delivered-but-unpaid gig stays on the board until settled so it isn't lost
     before you collect.
 
+**Audience growth**
+15. **Response counters** — what a delivered gig generated: how many **Legacy Spark Chats**,
+    **Discovery** calls and **Booklet** requests came out of it. A per-type counter on the
+    opportunity with a `+`/`-` grid and a total, and the bottom row of the Dashboard funnel (gigs
+    that produced at least one — the funnel's unit is gigs throughout). Deliberately **counts, not
+    records**: no dates and no per-response rows, because when each response arrived and who it was
+    live in legacy-tracker and GHL. **Not a target** — there is no goal to set and no tile.
+
 **Scheduling**
 14. **Appointments** — a logged meeting with a contact: title, date **and time**, free-text
     details. Deliberately **not calendaring** — nothing syncs, invites or emails, and there is no
@@ -385,6 +393,7 @@ the opportunity card, seeded from `how_to_approach`.
 7. Follow-up reminders
 8. Dashboard drill-down · 9. Talks & materials · 10. Dashboard week picker
 11. Appointments + editable outreach
+12. Response counters
 
 ## 7. Decisions
 

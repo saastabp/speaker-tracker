@@ -41,6 +41,7 @@ import {
 } from '../api/opportunities';
 import { useOrganization } from '../api/organizations';
 import { CardTitle, KV, initials } from '../components/detailCards';
+import { ResponsesCard } from '../components/ResponsesCard';
 import { FollowUpsCard } from '../components/FollowUpsCard';
 import { CloseOpportunityModal } from '../components/CloseOpportunityModal';
 import { OpportunityFormModal } from '../components/OpportunityFormModal';
@@ -424,6 +425,10 @@ export function OpportunityDetail() {
                 ))}
               </Stack>
             </Card>
+
+            {/* After the notes and before Lifecycle: responses are an outcome of the gig, and
+                Lifecycle stays last as the history rail. */}
+            <ResponsesCard opportunity={o} />
 
             <Card withBorder radius="md">
               <CardTitle action={<Text size="xs" c="dimmed">stage history</Text>}>Lifecycle</CardTitle>

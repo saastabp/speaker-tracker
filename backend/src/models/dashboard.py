@@ -158,6 +158,12 @@ class Dashboard(BaseModel):
     week: Week
     targets: list[TargetTile]
     funnel: list[FunnelCount]
+    #: How many gigs produced at least one response — the funnel card's final row (slice 12). A
+    #: plain count rather than a sixth :class:`FunnelCount`, because that model's ``status`` is an
+    #: ``opportunity_statuses`` short_name and "responses" is not a status; and because its
+    #: ``current`` ("how many sit here now") has no meaning for something a gig *produces* rather
+    #: than occupies, so there is nothing for the card to link to either.
+    responses_reached: int
     money: MoneyRollup
     needs_attention: list[NeedsAttentionItem]
     coming_up: list[ComingUpEvent]

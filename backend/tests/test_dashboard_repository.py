@@ -21,6 +21,7 @@ from repositories import appointments as appts_repo
 from repositories import contacts as contacts_repo
 from repositories import dashboard
 from repositories import opportunities as opp
+from repositories import opportunity_responses as responses_repo
 from repositories import outreaches as out
 from repositories import targets as targets_repo
 
@@ -546,8 +547,55 @@ def test_build_dashboard_returns_all_sections(seeded_db) -> None:
         "needs_attention",
         "coming_up",
         "follow_ups",
+        "responses_reached",
     }
     assert len(payload["funnel"]) == 5  # all five funnel stages always present
+
+
+# --- responses (slice 12) ------------------------------------------------------------------------
+
+
+def _set_response(conn, user_id: int, opp_id: int, short_name: str, count: int) -> None:
+    responses_repo.set_response_count(conn, user_id, opp_id, short_name, count)
+
+
+def test_gigs_with_responses_counts_gigs_not_responses(seeded_db) -> None:
+    """The funnel's unit is gigs, so several responses on one gig is still one row's worth."""
+    conn, user_id, _, _ = seeded_db
+    org = _org(conn, user_id, "Venue")
+    loud = _opp(conn, user_id, org, title="Loud gig")
+    quiet = _opp(conn, user_id, org, title="Quiet gig")
+    _opp(conn, user_id, org, title="No responses")
+
+    _set_response(conn, user_id, loud, "legacy_spark_chat", 5)
+    _set_response(conn, user_id, loud, "booklet", 3)
+    _set_response(conn, user_id, quiet, "discovery", 1)
+
+    # Two gigs produced something; the nine responses between them are not the unit.
+    assert dashboard.gigs_with_responses(conn, user_id) == 2
+
+
+def test_a_zeroed_counter_does_not_count_as_a_response(seeded_db) -> None:
+    """Entered and taken back is not the same as happened — the row survives, the gig does not."""
+    conn, user_id, _, _ = seeded_db
+    org = _org(conn, user_id, "Venue")
+    opp = _opp(conn, user_id, org, title="Retracted")
+    _set_response(conn, user_id, opp, "legacy_spark_chat", 2)
+    assert dashboard.gigs_with_responses(conn, user_id) == 1
+
+    _set_response(conn, user_id, opp, "legacy_spark_chat", 0)
+    assert dashboard.gigs_with_responses(conn, user_id) == 0
+
+
+def test_responses_on_another_users_gig_are_never_counted(seeded_db) -> None:
+    conn, user_id, _, _ = seeded_db
+    org = _org(conn, user_id, "Venue")
+    opp = _opp(conn, user_id, org, title="Mine")
+    _set_response(conn, user_id, opp, "discovery", 1)
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO users (cognito_sub, email) VALUES ('other', 'o@x.com')")
+        other_id = cur.lastrowid
+    assert dashboard.gigs_with_responses(conn, other_id) == 0
 
 
 # --- slice 10: the week the tiles report on ------------------------------------------------------

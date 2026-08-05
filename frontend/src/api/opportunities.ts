@@ -6,6 +6,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { useApi } from './client';
+import { dashboardKeys } from './dashboard';
 import type { FollowUpRiderInput } from './outreaches';
 
 // Mirrors backend models/opportunities.py. Entities travel as ids (organization_id, talk_id),
@@ -97,6 +98,18 @@ export interface Opportunity extends OpportunityInput {
   contacts: OpportunityContact[];
   notes: OpportunityNote[];
   status_events: StatusEvent[];
+  responses: OpportunityResponseCount[];
+}
+
+/** One response counter on a gig — how many of that call to action it generated.
+ *
+ * Types with no stored row are **absent and mean zero**: the grid is rendered from the
+ * `opportunity_response_types` catalog, not from this list, so a type nobody has used yet still
+ * shows. Counters are not dated and are not a target — they track audience growth in aggregate,
+ * and the per-response detail lives in legacy-tracker and GHL. */
+export interface OpportunityResponseCount {
+  response_type: string;
+  count: number;
 }
 
 export interface OpportunityContactInput {
@@ -129,6 +142,9 @@ export interface OpportunityFilters {
   entered?: string;
   enteredFrom?: string;
   enteredTo?: string;
+  /** Only gigs that produced at least one response — what the funnel's Responses row opens. A
+   *  counter raised and then zeroed does not qualify, matching the number on that row. */
+  hasResponses?: boolean;
 }
 
 const opportunityKeys = {
@@ -146,7 +162,7 @@ export function useOpportunities(
   filters: OpportunityFilters = {},
 ): UseQueryResult<OpportunitySummary[]> {
   const api = useApi();
-  const { closed, status, entered, enteredFrom, enteredTo } = filters;
+  const { closed, status, entered, enteredFrom, enteredTo, hasResponses } = filters;
   return useQuery({
     queryKey: opportunityKeys.list(filters),
     queryFn: async () => {
@@ -159,6 +175,7 @@ export function useOpportunities(
         if (enteredFrom) params.set('entered_from', enteredFrom);
         if (enteredTo) params.set('entered_to', enteredTo);
       }
+      if (hasResponses) params.set('has_responses', 'true');
       const qs = params.toString();
       return (
         await api<{ opportunities: OpportunitySummary[] }>(`/opportunities${qs ? `?${qs}` : ''}`)
@@ -298,14 +315,25 @@ export function useCloseOpportunity() {
 
 // The linked-contact and note mutations return the updated opportunity detail and change only its
 // nested data (not the board card), so they refresh the detail cache without invalidating lists.
+//
+// `invalidatesDashboard` is for the ones that are *not* purely local. A response counter feeds the
+// funnel card's final row, so leaving the dashboard cache alone would show a stale count until
+// something else happened to refetch it — the same gap that let the outreach tile read low before
+// slice 11.
 function useOpportunityDetailMutation<TVariables>(
   request: (api: ReturnType<typeof useApi>, variables: TVariables) => Promise<Opportunity>,
+  options: { invalidatesDashboard?: boolean } = {},
 ) {
   const api = useApi();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: TVariables) => request(api, variables),
-    onSuccess: (updated) => queryClient.setQueryData(opportunityKeys.detail(updated.id), updated),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(opportunityKeys.detail(updated.id), updated);
+      if (options.invalidatesDashboard) {
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+      }
+    },
   });
 }
 
@@ -352,5 +380,21 @@ export function useAddOpportunityNote() {
 export function useDeleteOpportunityNote() {
   return useOpportunityDetailMutation<{ oppId: number; noteId: number }>((api, { oppId, noteId }) =>
     api<Opportunity>(`/opportunities/${oppId}/notes/${noteId}`, { method: 'DELETE' }),
+  );
+}
+
+/** Set one response counter to a value.
+ *
+ * Not a delta: a double-fired `+` lands on the same number rather than counting twice, which is
+ * what makes the control safe to lean on — and why there is no separate delete, since lowering a
+ * counter to zero is the removal. */
+export function useSetResponseCount() {
+  return useOpportunityDetailMutation<{ oppId: number; responseType: string; count: number }>(
+    (api, { oppId, responseType, count }) =>
+      api<Opportunity>(`/opportunities/${oppId}/responses/${responseType}`, {
+        method: 'PUT',
+        body: JSON.stringify({ count }),
+      }),
+    { invalidatesDashboard: true },
   );
 }

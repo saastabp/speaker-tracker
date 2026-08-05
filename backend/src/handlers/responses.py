@@ -18,10 +18,12 @@ from models.opportunities import (
     OpportunityNote,
     StatusEvent,
 )
+from models.opportunity_responses import OpportunityResponseCount
 from models.organizations import AffiliatedContact, Organization
 from models.talks import Talk
 from repositories import contacts as contacts_repo
 from repositories import opportunities as opps_repo
+from repositories import opportunity_responses as opp_responses_repo
 from repositories import organizations as orgs_repo
 from repositories import talks as talks_repo
 
@@ -128,8 +130,8 @@ def talk_response(conn: Connection, user_id: int, talk_id: int) -> dict:
 def opportunity_response(conn: Connection, user_id: int, opp_id: int) -> dict:
     """Build an opportunity's full detail response, or raise NotFound.
 
-    Composes the base row with its linked contacts, dated notes, and status journal — the read-time
-    aggregate the frontend refreshes from after every write.
+    Composes the base row with its linked contacts, dated notes, status journal, and response
+    counters — the read-time aggregate the frontend refreshes from after every write.
 
     Parameters
     ----------
@@ -156,10 +158,12 @@ def opportunity_response(conn: Connection, user_id: int, opp_id: int) -> dict:
     contacts = opps_repo.get_opportunity_contacts(conn, user_id, opp_id)
     notes = opps_repo.get_opportunity_notes(conn, user_id, opp_id)
     events = opps_repo.get_status_events(conn, user_id, opp_id)
+    responses = opp_responses_repo.get_response_counts(conn, user_id, opp_id)
     opportunity = Opportunity(
         **row,
         contacts=[OpportunityContact(**c) for c in contacts],
         notes=[OpportunityNote(**n) for n in notes],
         status_events=[StatusEvent(**e) for e in events],
+        responses=[OpportunityResponseCount(**r) for r in responses],
     )
     return opportunity.model_dump(mode="json")

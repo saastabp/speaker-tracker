@@ -79,6 +79,10 @@ def list_opportunities() -> dict:
     the same predicate, so the list is the same size as the number that was clicked. A malformed
     date is rejected rather than dropped — silently widening the window would show a list that
     disagrees with the tile and give no clue why.
+
+    ``?has_responses=true`` keeps gigs that produced at least one response — what the Dashboard
+    funnel's Responses row opens. It pairs with ``closed=all``: a gig that generated responses has
+    usually been delivered and is therefore closed, so the default board would hide most of them.
     """
     request = authenticate(router.current_event.raw_event)
     params = router.current_event.query_string_parameters or {}
@@ -88,6 +92,7 @@ def list_opportunities() -> dict:
     entered = params.get("entered")
     entered_from = query_date(params.get("entered_from"), "entered_from")
     entered_to = query_date(params.get("entered_to"), "entered_to")
+    has_responses = str(params.get("has_responses", "")).lower() in _TRUTHY
     rows = opps_repo.list_opportunities(
         request.connection,
         request.user_id,
@@ -96,6 +101,7 @@ def list_opportunities() -> dict:
         entered=entered,
         entered_from=entered_from,
         entered_to=entered_to,
+        has_responses=has_responses,
     )
     summaries = [OpportunitySummary(**row) for row in rows]
     return {"opportunities": [s.model_dump(mode="json") for s in summaries]}
