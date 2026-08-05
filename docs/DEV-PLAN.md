@@ -4,7 +4,10 @@ Execution plan for building the app described in `DESIGN.md`, on the schema in `
 the structure in `ARCHITECTURE.md`. Slice numbering follows `DESIGN.md` §6 — **do not renumber**,
 other docs reference these numbers.
 
-> **Status: slices 1–5 shipped (backend + frontend); slices 6–8 remain.** Migrations `0001`–`0006` applied.
+> **Status: slices 1–12 shipped (backend + frontend) and LIVE IN PRODUCTION.** Migrations
+> `0001`–`0015` applied. Donna has been signed in at `https://speaker-tracker.360balancedliving.com`
+> since 2026-08-03. Slice 12 (response counters) is merged and deployed. The slice sections below
+> are kept as the record of what was decided and why — they are history, not a to-do list.
 
 ---
 

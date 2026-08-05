@@ -2,7 +2,8 @@
 
 > Working design doc for a bespoke, behind-auth CRM that funnels **live speaking and
 > podcast-guest gigs** for Donna King (360 Balanced Living). Not for public consumption.
-> Status: **implemented through slice 5** — slices 1–5 shipped (backend + frontend); slices 6–8 remain designed-not-built.
+> Status: **fully implemented and live in production** — slices 1–12 shipped (backend + frontend),
+> schema through migration `0015`. Everything described below is built unless a line says otherwise.
 
 ## 1. Purpose & scope
 
@@ -86,14 +87,6 @@ legacy-tracker, not tracked here.
     closed cards; a delivered-but-unpaid gig stays on the board until settled so it isn't lost
     before you collect.
 
-**Audience growth**
-15. **Response counters** — what a delivered gig generated: how many **Legacy Spark Chats**,
-    **Discovery** calls and **Booklet** requests came out of it. A per-type counter on the
-    opportunity with a `+`/`-` grid and a total, and the bottom row of the Dashboard funnel (gigs
-    that produced at least one — the funnel's unit is gigs throughout). Deliberately **counts, not
-    records**: no dates and no per-response rows, because when each response arrived and who it was
-    live in legacy-tracker and GHL. **Not a target** — there is no goal to set and no tile.
-
 **Scheduling**
 14. **Appointments** — a logged meeting with a contact: title, date **and time**, free-text
     details. Deliberately **not calendaring** — nothing syncs, invites or emails, and there is no
@@ -101,6 +94,14 @@ legacy-tracker, not tracked here.
     Dashboard's "Coming up" card alongside dated gigs; the Appointments page holds the whole
     record, with a Show Upcoming / Show Past toggle and a group-by-date-or-contact switch (a
     mistyped date has to stay reachable, or it can never be corrected).
+
+**Audience growth**
+15. **Response counters** — what a delivered gig generated: how many **Legacy Spark Chats**,
+    **Discovery** calls and **Booklet** requests came out of it. A per-type counter on the
+    opportunity with a `+`/`-` grid and a total, and the bottom row of the Dashboard funnel (gigs
+    that produced at least one — the funnel's unit is gigs throughout). Deliberately **counts, not
+    records**: no dates and no per-response rows, because when each response arrived and who it was
+    live in legacy-tracker and GHL. **Not a target** — there is no goal to set and no tile.
 
 Styling: straight business app, "not ugly," **no gamification** (no confetti/streaks — that's
 legacy-tracker's look). **Light theme by default** (Donna dislikes dark themes). Branded with the

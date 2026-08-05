@@ -605,6 +605,7 @@ Per-folder poll watermark, `UNIQUE(user_id, folder_name)`. Each poll fetches onl
 | `outreach_channels` | email, dm, call, in_person, text | — |
 | `message_template_kinds` | *purpose vocabulary — values defined in slice 4 (§5); seeded in `0005`, not `0001`* | — |
 | `target_types` | venues_researched, outreaches, pitches, bookings | — |
+| `opportunity_response_types` | legacy_spark_chat, discovery, booklet *(seeded in `0015`, not `0001`)* | — |
 
 ### `opportunity_statuses` — `sort_order` drives the funnel
 

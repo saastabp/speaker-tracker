@@ -4,10 +4,10 @@ Authoritative map of how the pieces fit: the React SPA, one CloudFront distribut
 SPA and API, the Python Lambda handlers, the layered backend, the WorkMail/SES/IMAP email
 subsystem, and the CDK stacks that deploy them.
 
-> **Status: implemented through slice 5.** The request path, layers, and CDK stacks here are built
-> and satisfied by slices 1–5; the slices 6–8 endpoint rows below remain target. Derived from `DESIGN.md` §3 and
-> `CODING-GUIDELINES.md` §1. Where this doc and a sibling repo disagree, the disagreement is
-> deliberate and called out inline.
+> **Status: fully implemented and live in production** (slices 1–12). The request path, layers, CDK
+> stacks and every endpoint row below are built and deployed to both environments. Derived from
+> `DESIGN.md` §3 and `CODING-GUIDELINES.md` §1. Where this doc and a sibling repo disagree, the
+> disagreement is deliberate and called out inline.
 
 ---
 
@@ -285,12 +285,14 @@ table.
 | `appointments.py` | GET/POST `/appointments`, PATCH/DELETE `/appointments/{id}` — `?scope=upcoming\|past\|all` (default `all`), `?contact_id=`. A logging feature: nothing here schedules, invites or emails |
 | `targets.py` | GET/PUT `/targets`, DELETE `/targets/{targetType}/{cadence}` |
 | `dashboard.py` | GET `/dashboard` — `?week_of=YYYY-MM-DD` anchors the **target tiles only**; every other section reports on now whichever week is asked for |
-| `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, PATCH `/emails/threads/{id}` (read / close), POST `/emails/send`, POST `/emails/threads/{id}/reply` |
+| `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, POST `/emails/send`, POST `/emails/attachments` (presigned PUT for composer attachments), POST `/emails/threads/{id}/replies`, and the three thread verbs POST `/emails/threads/{id}/read` \| `/close` \| `/reopen`. **Verbs, not a PATCH:** each is a distinct state transition with its own rules — `/close` on an already-closed thread is a 404, which a property-setting PATCH could not express |
 | `email_imports.py` | GET `/emails/imports`, PUT `/emails/threads/{id}/contact`, PUT `/emails/threads/{id}/opportunity` — **PUT, not POST**: these set a property, so re-sending the same value succeeds, unlike the `/close` verb whose second call is a 404 |
-| `talks.py` | GET/POST `/talks`, PUT/DELETE `/talks/{id}` |
+| `talks.py` | GET/POST `/talks`, GET/PUT/DELETE `/talks/{id}` |
 | `materials.py` | GET/POST `/materials`, POST `/materials/upload-url`, PUT/DELETE `/materials/{id}`, PUT `/materials/{id}/file` (replace the bytes, keeping id/name/talk), GET `/materials/{id}/url` (presigned GET; `?disposition=attachment` to download) |
+| `signatures.py` | GET/POST `/signatures`, PUT/DELETE `/signatures/{id}`, GET `/signatures/default` — the composer's default block, resolved server-side so the SPA never picks one |
 | `imap_poll.py` | *(separate function — EventBridge, 1-minute)* |
 | `followup_notify.py` | *(separate function — EventBridge Scheduler target)* |
+| `followup_failed.py` | *(separate function — the reminder DLQ consumer; the only part of the reminder path holding database access, which is what lets `followup_notify` run outside the VPC)* |
 
 **History has no handler of its own.** It is closed opportunities:
 `GET /opportunities?closed=true` for the table, `GET /opportunities/{id}` for the detail. Adding a
@@ -614,6 +616,20 @@ Acyclic by construction: no SPA↔API URL cycle (same-origin), no auth↔api cyc
 `Auth`'s pool + client, never the reverse), and `Messaging` depends on nothing of `Api`'s and
 exports nothing to it.
 
+**The stack ids are `speaker-tracker-<env>-<Role>`** — lowercase app, lowercase env, capitalised
+role, from `APP_NAME` in `lib/config.ts`. The diagram's `<env>-Api` is shorthand; the deployable
+name is `speaker-tracker-prod-Api`. Sandbox has three (`-Messaging`, `-Api`, `-Frontend`); prod has
+five (those plus `-Auth` and `-Cert`).
+
+```bash
+cd infra/cdk
+npx cdk deploy 'speaker-tracker-sandbox-*' --profile brian-admin --region us-west-2 --require-approval never
+npx cdk deploy 'speaker-tracker-prod-*'    --profile brian-admin --region us-west-2 --require-approval never
+```
+
+Quote the wildcard, and **never `--all`**. `Api` and `Frontend` must deploy together — §6.1 explains
+why the Frontend's `/api/*` origin goes stale otherwise.
+
 **`imap_poll` lives in `<env>-Api`, not `<env>-Messaging`** — a
 deliberate reversal of the original plan (slice 6b decision 1). The poller needs the
 **ContentBucket** for raw inbound MIME, and `Messaging` was built to import and export nothing,
@@ -725,20 +741,27 @@ used only by `imap_poll`. Sending needs no credential at all — SES is IAM-auth
 ```
 frontend/src/
   pages/        one per route
-  components/   shared UI — AppShell, PipelineBoard, ThreadView, composer
+  components/   shared UI — AppShell, the *FormModal family, EmailComposer, the detail cards
   api/          client.ts (useApi) + one hook module per resource
-  auth/         config.ts, devAuth.tsx
+  auth/         session.ts (the seam), AuthProvider + DevSession / OidcSession (the two
+                implementations), runtimeConfig.ts (/config.json in prod), DeepLinkRestorer.tsx
+  urlFilters.ts useFilterParams — every list page keeps its filter state in the query string
+  dates.ts      parse/format split; format.ts money; *Chips.ts per-entity badge helpers
 ```
+
+Every route below is real and served by `main.tsx`; unmatched paths fall through to `Placeholder`.
 
 | Path | Page |
 |---|---|
-| `/` | Dashboard — targets vs actuals, funnel, money rollup, Needs attention |
+| `/` | Dashboard — targets vs actuals, funnel, money rollup, Needs attention, Coming up, Follow-ups due |
 | `/pipeline` | Kanban board (dnd-kit), full browser width |
+| `/pipeline/{id}` | Opportunity detail — fields, linked contacts, dated notes, lifecycle, response counters. **Not `/opportunities/{id}`**: a gig is reached through the board it lives on |
 | `/venues`, `/venues/{id}` | Organizations list + detail with the Kindling research panel |
-| `/contacts`, `/contacts/{id}` | Contacts list + detail with multi-org affiliations (timeline deferred to slices 3–4) |
-| `/opportunities/{id}` | Opportunity detail — fields, linked contacts, dated notes, lifecycle |
+| `/contacts`, `/contacts/{id}` | Contacts list + detail with multi-org affiliations and the unified activity timeline |
 | `/emails`, `/emails/{threadId}` | Thread list + thread view with inline reply |
-| `/history`, `/history/{id}` | Closed gigs table + detail |
+| `/history` | Closed gigs table. **No detail route** — a closed gig opens at `/pipeline/{id}` like any other |
+| `/follow-ups` | Reminders, including completed history (the Dashboard card shows only what is due) |
+| `/appointments` | Logged meetings; Upcoming/Past toggle, group by date or contact |
 | `/templates`, `/targets`, `/talks` | Templates, Targets, Talks & materials |
 
 **TanStack Query** owns server state — this is the piece both siblings lack, and the optimistic

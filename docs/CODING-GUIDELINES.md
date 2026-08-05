@@ -24,7 +24,7 @@ inward, never outward. Nothing bleeds across.
 
 ```
 backend/src/
-  handlers/       # presentation — one module per route-group (routeKey dispatch)
+  handlers/       # presentation — one Powertools `Router` module per route-group
   core/           # business logic — pure, no I/O
   repositories/   # data access — raw SQL, one module per aggregate
   models/         # pydantic models (api requests/responses + typed rows)

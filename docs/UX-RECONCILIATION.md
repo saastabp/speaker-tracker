@@ -1,7 +1,10 @@
 # Speaker Tracker — UX Reconciliation
 
-> **Status: essentially complete — all pages reconciled (branch `ux-reconciliation`, 2026-07-23 →
-> 07-25).** §1 Dashboard, §2 Pipeline (board + modals), §2b Opportunity detail, §3 Venues, §4
+> **Status: COMPLETE and merged (branch `ux-reconciliation`, 2026-07-23 → 07-25). This document is
+> history, not a work list.** ⚠ The DEFER/PARTIAL tags below were written when slices 6–12 were
+> still unbuilt, and most named a backend the app now has (the email composer, `follow_ups`, the
+> summary fields the API lacked). **Do not read a DEFER tag as outstanding work** — check the
+> running app first; the slice it was waiting on has almost certainly shipped. §1 Dashboard, §2 Pipeline (board + modals), §2b Opportunity detail, §3 Venues, §4
 > Contacts, §5 History, §6 Templates, §7 Targets — all shipped & browser-verified; §8 Nav was
 > reconciled early via `AppShell`. Per-section banners record what shipped, what was deferred (mostly
 > backend-dependent: `follow_ups`/0009, slice-6a email composer, summary fields the API lacks), and
