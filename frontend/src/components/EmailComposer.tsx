@@ -1,27 +1,22 @@
 import {
-  ActionIcon,
   Alert,
   Button,
-  FileButton,
   Group,
   Loader,
-  Menu,
   Modal,
   Select,
   Stack,
   Text,
   TextInput,
 } from '@mantine/core';
-import { IconFolder, IconPaperclip, IconX } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../api/client';
 import { useContacts } from '../api/contacts';
-import { useSendEmail, useUploadAttachment, type EmailAttachmentInput } from '../api/emails';
-import { useMaterials, type Material } from '../api/materials';
+import { useSendEmail, type EmailAttachmentInput } from '../api/emails';
 import { useSignatures } from '../api/signatures';
 import { useTemplates } from '../api/templates';
+import { AttachmentPicker } from './AttachmentPicker';
 import { FieldLabel } from './FieldLabel';
-import { formatBytes } from '../format';
 import { FollowUpRiderFields, type FollowUpRiderValue } from './FollowUpRiderFields';
 import { RichTextField } from './RichTextEditor';
 import { fillMerge } from './TemplatePicker';
@@ -73,9 +68,9 @@ interface EmailComposerProps {
  * body when the composer opens, so Donna can edit or delete it before sending. The server never
  * appends one — doing it here is what keeps "what you see is what is sent" true.
  *
- * Not offered, deliberately: **Save draft** (no drafts table exists) and **Schedule follow-up**
- * (`follow_ups` arrives in a later migration). Both appear in the mockup; wiring a control to
- * neither storage nor behaviour would be worse than omitting it.
+ * Not offered, deliberately: **Save draft** — no drafts table exists, and a control wired to
+ * neither storage nor behaviour would be worse than omitting it. (The mockup's **Schedule
+ * follow-up** *is* offered now, as the rider below: `follow_ups` landed in slice 7.)
  */
 export function EmailComposer({
   opened,
@@ -89,10 +84,6 @@ export function EmailComposer({
   const templates = useTemplates();
   const signatures = useSignatures();
   const send = useSendEmail();
-  const upload = useUploadAttachment();
-  // The reusable library. Attaching from here sends the *existing* object's key rather than
-  // uploading the file again — which is the point of keeping a library at all.
-  const materials = useMaterials();
   // Only fetched when the caller did not name a contact, so opening from a contact page costs
   // nothing extra.
   const contacts = useContacts(undefined, opened && !contactId);
@@ -104,6 +95,9 @@ export function EmailComposer({
   const [bodyHtml, setBodyHtml] = useState('');
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<EmailAttachmentInput[]>([]);
+  // Raised by the picker while bytes are in flight: sending now would reference a key with
+  // nothing behind it yet.
+  const [uploading, setUploading] = useState(false);
   const [riderOn, setRiderOn] = useState(false);
   const [rider, setRider] = useState<FollowUpRiderValue>({ due_date: '', note: '' });
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +124,7 @@ export function EmailComposer({
     setSubject('');
     setTemplateId(null);
     setAttachments([]);
+    setUploading(false);
     setError(null);
     // Off on every open. Acceptance #6 is that sending never silently schedules anything, so a
     // rider left on from a previous compose would be exactly the wrong carry-over.
@@ -160,48 +155,13 @@ export function EmailComposer({
     );
   }
 
-  async function handleAttach(file: File | null) {
-    if (!file) return;
-    setError(null);
-    try {
-      const attached = await upload.mutateAsync(file);
-      setAttachments((current) => [...current, attached]);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not attach ${file.name}.`);
-    }
-  }
-
-  /**
-   * Attach a material by reference — no upload, no copy.
-   *
-   * The library object already sits in S3 under a key this user owns, so the send path can read it
-   * directly. The bytes are copied into the message at send time, which is why replacing the
-   * material later never alters a mail that has already gone out.
-   */
-  function attachMaterial(material: Material) {
-    setError(null);
-    setAttachments((current) =>
-      current.some((a) => a.s3_key === material.s3_key)
-        ? current
-        : [
-            ...current,
-            {
-              s3_key: material.s3_key,
-              filename: material.name,
-              content_type: material.content_type,
-              size_bytes: material.size_bytes,
-            },
-          ],
-    );
-  }
-
   const recipients = splitAddresses(to);
   const canSend =
     effectiveContactId !== null &&
     recipients.length > 0 &&
     subject.trim().length > 0 &&
     !send.isPending &&
-    !upload.isPending;
+    !uploading;
 
   // Why Send is disabled, in the order the fields appear. A dead button with no explanation reads
   // as a broken app: filling in the recipient is the obvious move, and it alone is not enough.
@@ -209,7 +169,7 @@ export function EmailComposer({
     if (effectiveContactId === null) return 'Choose a contact to send.';
     if (recipients.length === 0) return 'Add a recipient to send.';
     if (subject.trim().length === 0) return 'Add a subject to send.';
-    if (upload.isPending) return 'Waiting for the attachment to finish uploading…';
+    if (uploading) return 'Waiting for the attachment to finish uploading…';
     return null;
   };
   const blocker = blockedBecause();
@@ -308,71 +268,12 @@ export function EmailComposer({
           )}
         </div>
 
-        <Group gap="xs" wrap="wrap">
-          {attachments.map((a) => (
-            <Group key={a.s3_key} gap={6} px={8} py={4} bg="gray.1" style={{ borderRadius: 6 }}>
-              <Text size="xs">{a.filename}</Text>
-              <Text size="xs" c="dimmed">
-                {formatBytes(a.size_bytes)}
-              </Text>
-              <ActionIcon
-                size="xs"
-                variant="subtle"
-                aria-label={`Remove ${a.filename}`}
-                onClick={() =>
-                  setAttachments((current) => current.filter((x) => x.s3_key !== a.s3_key))
-                }
-              >
-                <IconX size={12} />
-              </ActionIcon>
-            </Group>
-          ))}
-          <FileButton onChange={handleAttach}>
-            {(props) => (
-              <Button
-                {...props}
-                size="xs"
-                variant="light"
-                leftSection={<IconPaperclip size={14} />}
-                loading={upload.isPending}
-              >
-                Attach
-              </Button>
-            )}
-          </FileButton>
-
-          {/* Only offered when there is a library to offer. An empty menu is worse than no menu,
-              and a first-time user has no materials yet. */}
-          {(materials.data?.length ?? 0) > 0 && (
-            <Menu position="bottom-start" withinPortal>
-              <Menu.Target>
-                <Button size="xs" variant="light" leftSection={<IconFolder size={14} />}>
-                  From materials
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Label>Attach a saved file</Menu.Label>
-                {materials.data?.map((material) => {
-                  const already = attachments.some((a) => a.s3_key === material.s3_key);
-                  return (
-                    <Menu.Item
-                      key={material.id}
-                      disabled={already}
-                      onClick={() => attachMaterial(material)}
-                      rightSection={
-                        <Text size="xs" c="dimmed">
-                          {already ? 'attached' : formatBytes(material.size_bytes)}
-                        </Text>
-                      }
-                    >
-                      {material.name}
-                    </Menu.Item>
-                  );
-                })}
-              </Menu.Dropdown>
-            </Menu>
-          )}
-        </Group>
+        <AttachmentPicker
+          value={attachments}
+          onChange={setAttachments}
+          onError={setError}
+          onUploadingChange={setUploading}
+        />
 
         {error && (
           <Alert color="red" variant="light">

@@ -20,13 +20,16 @@ import {
   useEmailThread,
   useMarkThreadRead,
   useReplyToThread,
+  type EmailAttachmentInput,
   type EmailMessageDetail,
 } from '../api/emails';
 import { useLinkThreadOpportunity } from '../api/emailImports';
 import { useOpportunities } from '../api/opportunities';
 import { useSignatures } from '../api/signatures';
+import { AttachmentPicker } from '../components/AttachmentPicker';
 import { CardTitle } from '../components/detailCards';
 import { FieldLabel } from '../components/FieldLabel';
+import { FollowUpRiderFields, type FollowUpRiderValue } from '../components/FollowUpRiderFields';
 import { RichTextField } from '../components/RichTextEditor';
 import { SafeHtml } from '../components/SafeHtml';
 import { formatBytes } from '../format';
@@ -251,14 +254,22 @@ function MessageCard({ message }: { message: EmailMessageDetail }) {
  * Inline reply.
  *
  * Recipients, subject and the threading headers are all derived server-side from the parent
- * message (`In-Reply-To` / `References`), so this posts only a body — there is nothing here that
- * could produce a reply that threads nowhere.
+ * message (`In-Reply-To` / `References`), so this posts a body and nothing that could produce a
+ * reply threading nowhere. Everything else a reply may carry — attachments and a follow-up rider —
+ * is offered here exactly as the composer offers it: a reply is a send, and answering a venue that
+ * asked for the one-sheet is at least as common as attaching one to the first email.
  */
 function ReplyBox({ threadId, contactName }: { threadId: number; contactName: string | null }) {
   const reply = useReplyToThread(threadId);
   const signatures = useSignatures();
   const defaultSignature = (signatures.data ?? []).find((s) => s.is_default) ?? null;
   const [bodyHtml, setBodyHtml] = useState('');
+  const [attachments, setAttachments] = useState<EmailAttachmentInput[]>([]);
+  const [uploading, setUploading] = useState(false);
+  // Off for every reply, never carried over from the last one: sending must not silently schedule
+  // anything (slice 7 acceptance #6).
+  const [riderOn, setRiderOn] = useState(false);
+  const [rider, setRider] = useState<FollowUpRiderValue>({ due_date: '', note: '' });
   // Stable across retries of this reply, rotated once it actually sends — so pressing Send twice
   // after a timeout is recognised as one message, not two.
   const [replyKey, setReplyKey] = useState(() => crypto.randomUUID());
@@ -275,11 +286,25 @@ function ReplyBox({ threadId, contactName }: { threadId: number; contactName: st
 
   async function handleSend() {
     setError(null);
+    if (riderOn && !rider.due_date) {
+      setError('Pick a date for the follow-up, or switch it off.');
+      return;
+    }
     try {
-      await reply.mutateAsync({ idempotency_key: replyKey, body_html: bodyHtml });
-      // A sent reply means the next one is a new message, so the retry key rotates with the draft.
+      await reply.mutateAsync({
+        idempotency_key: replyKey,
+        body_html: bodyHtml,
+        attachments,
+        follow_up: riderOn ? { due_date: rider.due_date, note: rider.note.trim() || null } : null,
+      });
+      // A sent reply means the next one is a new message, so the retry key rotates with the draft
+      // — and the draft's attachments and rider clear with it, or the next reply would silently
+      // re-send the same files.
       setReplyKey(crypto.randomUUID());
       setBodyHtml(defaultSignature ? `<p></p>${defaultSignature.body_html}` : '');
+      setAttachments([]);
+      setRiderOn(false);
+      setRider({ due_date: '', note: '' });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not send the reply.');
     }
@@ -303,12 +328,30 @@ function ReplyBox({ threadId, contactName }: { threadId: number; contactName: st
           <FieldLabel>Message</FieldLabel>
           <RichTextField value={bodyHtml} onChange={setBodyHtml} />
         </div>
+
+        <AttachmentPicker
+          value={attachments}
+          onChange={setAttachments}
+          onError={setError}
+          onUploadingChange={setUploading}
+        />
+
+        <FollowUpRiderFields
+          enabled={riderOn}
+          onEnabledChange={setRiderOn}
+          value={rider}
+          onChange={setRider}
+          description="Pick a date to be reminded to chase this reply."
+        />
+
         <Group>
-          <Button onClick={handleSend} loading={reply.isPending} disabled={isEmpty}>
+          <Button onClick={handleSend} loading={reply.isPending} disabled={isEmpty || uploading}>
             Send reply
           </Button>
-          <Text size="xs" c="dimmed">
-            Keeps the thread and logs a touch.
+          <Text size="xs" c={uploading ? 'orange.7' : 'dimmed'}>
+            {uploading
+              ? 'Waiting for the attachment to finish uploading…'
+              : 'Keeps the thread and logs a touch.'}
           </Text>
         </Group>
       </Stack>
