@@ -53,14 +53,15 @@ legacy-tracker, not tracked here.
    Replies are threaded back to the opportunity (see §3 Email — WorkMail / SES / IMAP, not Gmail).
    **Email history is readable:** an **Emails inbox** (thread list surfacing open threads awaiting
    a reply and unread inbound mail) and a **thread view** (full conversation + attachments) with an
-   **inline reply** box; threads also surface on the contact and its linked opportunity. A thread
+   **inline reply** box carrying the same attachments and follow-up rider as the composer — a reply
+   is a send; threads also surface on the contact and its linked opportunity. A thread
    is **explicitly closed** ("no reply needed") — nothing infers that a sent message is owed an
    answer, so terminal mail never nags.
 7. **Follow-ups** — schedule a **calendar-dated** follow-up with a **free-form note** on a contact
    or opportunity, standalone or as a rider when logging outreach / composing email; due reminders
    surface on the Dashboard and by email, and can be marked done. (Not a relative "in N days"
-   selector — an explicit date.) The composer/outreach rider is **opt-in, default off** — sending
-   an email never silently schedules a follow-up, or the Dashboard fills with noise.
+   selector — an explicit date.) The composer/reply/outreach rider is **opt-in, default off** —
+   sending an email never silently schedules a follow-up, or the Dashboard fills with noise.
 
 **Goals & measurement** (the strategy doc's weakest-scored gap — the point of the app)
 8. **Targets** — per-cadence goals: new venues researched/month (doc says 3–5), outreaches/week,

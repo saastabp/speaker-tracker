@@ -285,7 +285,7 @@ table.
 | `appointments.py` | GET/POST `/appointments`, PATCH/DELETE `/appointments/{id}` — `?scope=upcoming\|past\|all` (default `all`), `?contact_id=`. A logging feature: nothing here schedules, invites or emails |
 | `targets.py` | GET/PUT `/targets`, DELETE `/targets/{targetType}/{cadence}` |
 | `dashboard.py` | GET `/dashboard` — `?week_of=YYYY-MM-DD` anchors the **target tiles only**; every other section reports on now whichever week is asked for |
-| `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, POST `/emails/send`, POST `/emails/attachments` (presigned PUT for composer attachments), POST `/emails/threads/{id}/replies`, and the three thread verbs POST `/emails/threads/{id}/read` \| `/close` \| `/reopen`. **Verbs, not a PATCH:** each is a distinct state transition with its own rules — `/close` on an already-closed thread is a 404, which a property-setting PATCH could not express |
+| `emails.py` | GET `/emails/threads`, GET `/emails/threads/{id}`, POST `/emails/send`, POST `/emails/attachments` (presigned PUT for composer and reply attachments), POST `/emails/threads/{id}/replies`, and the three thread verbs POST `/emails/threads/{id}/read` \| `/close` \| `/reopen`. **Verbs, not a PATCH:** each is a distinct state transition with its own rules — `/close` on an already-closed thread is a 404, which a property-setting PATCH could not express |
 | `email_imports.py` | GET `/emails/imports`, PUT `/emails/threads/{id}/contact`, PUT `/emails/threads/{id}/opportunity` — **PUT, not POST**: these set a property, so re-sending the same value succeeds, unlike the `/close` verb whose second call is a 404 |
 | `talks.py` | GET/POST `/talks`, GET/PUT/DELETE `/talks/{id}` |
 | `materials.py` | GET/POST `/materials`, POST `/materials/upload-url`, PUT/DELETE `/materials/{id}`, PUT `/materials/{id}/file` (replace the bytes, keeping id/name/talk), GET `/materials/{id}/url` (presigned GET; `?disposition=attachment` to download) |
@@ -741,7 +741,9 @@ used only by `imap_poll`. Sending needs no credential at all — SES is IAM-auth
 ```
 frontend/src/
   pages/        one per route
-  components/   shared UI — AppShell, the *FormModal family, EmailComposer, the detail cards
+  components/   shared UI — AppShell, the *FormModal family, EmailComposer, AttachmentPicker
+                (attach + from-materials, shared by the composer and the inline reply), the
+                detail cards
   api/          client.ts (useApi) + one hook module per resource
   auth/         session.ts (the seam), AuthProvider + DevSession / OidcSession (the two
                 implementations), runtimeConfig.ts (/config.json in prod), DeepLinkRestorer.tsx
