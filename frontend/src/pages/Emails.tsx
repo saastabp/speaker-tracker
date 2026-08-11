@@ -6,6 +6,7 @@ import {
   Collapse,
   Group,
   Loader,
+  Select,
   Stack,
   Table,
   Text,
@@ -38,6 +39,17 @@ const FILTERS: { value: DirectionFilter; label: string }[] = [
   { value: 'received', label: 'Received' },
 ];
 
+/** The `contact` filter value standing for threads with no contact linked yet — inbound mail from
+ *  an address matching nobody. A sentinel rather than an empty string, which the URL cannot tell
+ *  from "no filter at all". */
+const UNLINKED = 'none';
+
+function matchesContact(thread: EmailThread, contact: string): boolean {
+  if (!contact) return true;
+  if (contact === UNLINKED) return thread.contact_id === null;
+  return String(thread.contact_id) === contact;
+}
+
 function matchesSearch(thread: EmailThread, search: string): boolean {
   if (!search) return true;
   const needle = search.toLowerCase();
@@ -54,6 +66,7 @@ export function Emails() {
   const params = useFilterParams();
   const search = params.get('q');
   const filter = params.get('filter', 'all') as DirectionFilter;
+  const contact = params.get('contact');
   const [composerOpen, { open: openComposer, close: closeComposer }] = useDisclosure(false);
   const [signatureOpen, { toggle: toggleSignature }] = useDisclosure(false);
 
@@ -61,6 +74,7 @@ export function Emails() {
   const visible = all.filter(
     (t) =>
       matchesSearch(t, search) &&
+      matchesContact(t, contact) &&
       (filter === 'all' ||
         (filter === 'sent' && t.last_direction === 'out') ||
         (filter === 'received' && t.last_direction === 'in')),
@@ -71,6 +85,32 @@ export function Emails() {
     label: f.label,
     active: filter === f.value,
   }));
+
+  // Options come from the threads on hand, so every entry names at least one real thread and the
+  // page costs no second request. Unlinked sits last: it is a bucket, not a person.
+  const contactOptions = [
+    ...new Map(
+      all
+        .filter((t) => t.contact_id !== null)
+        .map((t) => [String(t.contact_id), t.contact_name ?? `Contact #${t.contact_id}`]),
+    ),
+  ]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  if (all.some((t) => t.contact_id === null)) {
+    contactOptions.push({ value: UNLINKED, label: 'Unlinked' });
+  }
+
+  // An active filter always keeps its own option, even once nothing matches it — importing the last
+  // unlinked thread empties the list, and a Select that quietly fell back to reading "All contacts"
+  // over zero rows would look broken rather than filtered.
+  if (contact && !contactOptions.some((o) => o.value === contact)) {
+    contactOptions.push({
+      value: contact,
+      label: contact === UNLINKED ? 'Unlinked' : `Contact #${contact}`,
+    });
+  }
 
   const unreadCount = all.filter(isUnread).length;
 
@@ -99,6 +139,19 @@ export function Emails() {
         searchPlaceholder="Search email…"
         pills={pills}
         onPillClick={(value) => params.set('filter', value, 'all')}
+        leading={
+          <Select
+            size="xs"
+            w={210}
+            clearable
+            searchable
+            placeholder="All contacts"
+            aria-label="Filter by contact"
+            value={contact || null}
+            onChange={(value) => params.set('contact', value ?? '')}
+            data={contactOptions}
+          />
+        }
       />
 
       <Card withBorder radius="md" p={0}>

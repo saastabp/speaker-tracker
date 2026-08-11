@@ -23,6 +23,10 @@ interface FilterBarProps {
    *  Select uses it: one control standing for six ordered choices, where six more pills would
    *  restate the board's own columns and crowd the row. */
   extra?: ReactNode;
+  /** The same, but rendered *before* the search box. For a control that narrows the whole list to
+   *  one entity — Emails' contact Select — where "these threads, then search within them" is the
+   *  order the reader is already thinking in. */
+  leading?: ReactNode;
 }
 
 /** Reusable list toolbar: a search box plus pill filters (mockup `.toolbar`). Purely
@@ -34,9 +38,11 @@ export function FilterBar({
   pills,
   onPillClick,
   extra,
+  leading,
 }: FilterBarProps) {
   return (
     <Group gap="sm" wrap="wrap">
+      {leading}
       <TextInput
         leftSection={<IconSearch size={16} />}
         placeholder={searchPlaceholder}
