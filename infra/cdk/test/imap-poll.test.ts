@@ -146,6 +146,34 @@ describe('the failure alarm (acceptance #11)', () => {
     expect(alarm.Properties.AlarmActions).toHaveLength(1);
   });
 
+  // The stack has deliberately had ONE alarm topic since slice 7 put the follow-up DLQ alarm on it
+  // too: a confirmed email subscription is the only thing between an alarm and a human, and each
+  // extra topic is another link somebody must click before it carries anything. That is also why
+  // the topic is no longer called `-imap-poll-alarm` (renamed 2026-08-12) — the old name sent
+  // anyone debugging a follow-up failure to the wrong resource.
+  describe('the shared ops-alert topic', () => {
+    test('carries a name that does not claim a single subsystem', () => {
+      templateFor().hasResourceProperties('AWS::SNS::Topic', {
+        TopicName: 'speaker-tracker-sandbox-ops-alerts',
+      });
+    });
+
+    test('every alarm in the stack publishes to it, and there is only one of it', () => {
+      const template = templateFor();
+      template.resourceCountIs('AWS::SNS::Topic', 1);
+
+      const topicIds = Object.keys(template.findResources('AWS::SNS::Topic'));
+      const alarms = Object.values(template.findResources('AWS::CloudWatch::Alarm'));
+
+      // Both the IMAP-poll alarm and the follow-up DLQ alarm — a regression here means one of them
+      // is pointing somewhere else, or at nothing, which no other assertion in this file notices.
+      expect(alarms.length).toBeGreaterThanOrEqual(2);
+      for (const alarm of alarms) {
+        expect(alarm.Properties.AlarmActions).toEqual([{ Ref: topicIds[0] }]);
+      }
+    });
+  });
+
   test('says what to do about it, since it fires at most once a year', () => {
     const alarm = Object.values(
       templateFor().findResources('AWS::CloudWatch::Alarm'),

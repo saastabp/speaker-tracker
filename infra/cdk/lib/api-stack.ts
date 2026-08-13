@@ -458,12 +458,18 @@ export class ApiStack extends Stack {
     // failures are caught in the handler and never reach this metric.
     //
     // treatMissingData: NOT_BREACHING because a minute with no invocation is not a failure.
-    const alarmTopic = new sns.Topic(this, 'ImapPollAlarmTopic', {
-      topicName: `${props.appName}-${props.envType}-imap-poll-alarm`,
-      displayName: 'Speaker Tracker IMAP poll failures',
+    // One operational topic for the whole stack, not one per alarm — this poller's failure alarm
+    // and slice 7's follow-up DLQ alarm both publish here. The name is deliberately generic: it was
+    // `-imap-poll-alarm` until 2026-08-12, by which point it had outlived that scope by one alarm
+    // and sent anyone debugging a follow-up failure looking at the wrong resource.
+    const alarmTopic = new sns.Topic(this, 'OpsAlertTopic', {
+      topicName: `${props.appName}-${props.envType}-ops-alerts`,
+      displayName: 'Speaker Tracker alerts',
     });
     // Email subscriptions require a one-time confirmation click; until it is confirmed the
-    // subscription is PendingConfirmation and the alarm is silent.
+    // subscription is PendingConfirmation and every alarm routed here is silent. Topic names are
+    // immutable, so renaming this REPLACES the topic and the confirmation must be done again —
+    // budget for that before changing the name, not after.
     alarmTopic.addSubscription(new snsSubscriptions.EmailSubscription(props.alarmEmail));
 
     const pollAlarm = new cloudwatch.Alarm(this, 'ImapPollFailureAlarm', {
@@ -641,10 +647,11 @@ export class ApiStack extends Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
-    // Reuses the existing alarm topic rather than minting a second one: its email subscription is
-    // already confirmed, and a new topic would sit unconfirmed — silently swallowing alarms — until
-    // someone clicked the link. The topic's name still says imap-poll; that is worth renaming, but
-    // not at the cost of a window where both alarms are mute.
+    // Reuses the shared ops topic rather than minting a second one: a confirmed subscription is the
+    // only thing standing between an alarm and a human, and every additional topic is another link
+    // someone has to remember to click before it carries anything at all. The topic was renamed off
+    // `-imap-poll-alarm` on 2026-08-12 so that this reuse reads as the design it is, rather than as
+    // an alarm filed under the wrong subsystem.
     dlqAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
 
     // Added after the fact rather than in the function's `environment` above, so construct

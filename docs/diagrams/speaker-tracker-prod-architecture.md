@@ -68,9 +68,11 @@ and a CloudWatch alarm fires on that consumer being invoked at all (`Invocations
 (reserved concurrency 1) which reads credentials from **Secrets Manager**, fetches from the WorkMail
 mailbox over IMAP, and writes threads and messages to RDS. An alarm fires on `Errors ≥ 1`.
 
-Both alarms publish to the **same SNS topic**, `speaker-tracker-prod-imap-poll-alarm`, which emails
-`saastabp@gmail.com`. The topic name predates the follow-up alarm being added to it — the name is
-narrower than what it now carries.
+Both alarms publish to the **same SNS topic**, `speaker-tracker-prod-ops-alerts`, which emails
+`saastabp@gmail.com`. One topic on purpose: a confirmed email subscription is the only thing between
+an alarm and a human, and every extra topic is another confirmation link someone has to remember to
+click before it carries anything. The topic was called `speaker-tracker-prod-imap-poll-alarm` until
+2026-08-12, a name it outgrew when the follow-up DLQ alarm joined it.
 
 ## Email
 
