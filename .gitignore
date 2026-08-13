@@ -40,6 +40,9 @@ cdk.out/
 infra/**/cdk.out/
 infra/**/*.js
 infra/**/*.d.ts
+# ...but the CloudFront Function sources are hand-authored, not tsc output. `frontend-stack.ts`
+# loads them with `FunctionCode.fromFile()`, so a clone missing them fails synth with ENOENT.
+!infra/cdk/lib/cloudfront-functions/*.js
 
 # ── IDE / editor ──
 .idea/

@@ -8,24 +8,15 @@ import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as path from 'path';
 import { Construct } from 'constructs';
 import { frontendBundle } from './frontend-bundle';
 
-/** Rewrite extension-less paths to /index.html so the SPA router owns them. Default behavior only. */
-const SPA_FALLBACK_FN = `function handler(event) {
-  var request = event.request;
-  if (request.uri.includes('.')) { return request; }
-  request.uri = '/index.html';
-  return request;
-}`;
-
-/** Strip the /api prefix before the request reaches the HTTP API ($default stage, no stage prefix). */
-const API_STRIP_FN = `function handler(event) {
-  var request = event.request;
-  request.uri = request.uri.replace(/^\\/api/, '');
-  if (request.uri === '') { request.uri = '/'; }
-  return request;
-}`;
+/** Viewer-request function sources, kept as real `.js` files rather than inline strings so they are
+ *  lintable, diffable, and unit-testable — `test/cloudfront-functions.test.ts` evaluates these exact
+ *  files. They are deliberately not modules: CloudFront Functions require a bare global `handler`. */
+const FUNCTION_SRC = (name: string): string =>
+  path.join(__dirname, 'cloudfront-functions', `${name}.js`);
 
 export interface FrontendStackProps extends StackProps {
   readonly envType: 'sandbox' | 'prod';
@@ -64,11 +55,11 @@ export class FrontendStack extends Stack {
     });
 
     const spaFallback = new cloudfront.Function(this, 'SpaFallbackFn', {
-      code: cloudfront.FunctionCode.fromInline(SPA_FALLBACK_FN),
+      code: cloudfront.FunctionCode.fromFile({ filePath: FUNCTION_SRC('spa-fallback') }),
       runtime: cloudfront.FunctionRuntime.JS_2_0,
     });
     const apiStrip = new cloudfront.Function(this, 'ApiStripFn', {
-      code: cloudfront.FunctionCode.fromInline(API_STRIP_FN),
+      code: cloudfront.FunctionCode.fromFile({ filePath: FUNCTION_SRC('api-strip') }),
       runtime: cloudfront.FunctionRuntime.JS_2_0,
     });
 
